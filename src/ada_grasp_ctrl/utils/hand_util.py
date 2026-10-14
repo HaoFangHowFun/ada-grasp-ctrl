@@ -105,8 +105,10 @@ class MjHO:
         debug_render=False,
         debug_viewer=False,
         debug_viewer_session=None,
+        hand_contact_prefixes=None,
     ):
         self.hand_mocap = hand_mocap
+        self.hand_contact_prefixes = tuple(hand_contact_prefixes or ())
         self.spec = mujoco.MjSpec()
         self.spec.meshdir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         self.spec.option.timestep = 0.004
@@ -322,10 +324,10 @@ class MjHO:
         ho_contact = []
         hh_contact = []
         for contact in self.data.contact:
-            body1_id = self.model.geom(contact.geom1).bodyid
-            body2_id = self.model.geom(contact.geom2).bodyid
-            body1_name = self.model.body(self.model.geom(contact.geom1).bodyid).name
-            body2_name = self.model.body(self.model.geom(contact.geom2).bodyid).name
+            body1_id = int(self.model.geom_bodyid[contact.geom1])
+            body2_id = int(self.model.geom_bodyid[contact.geom2])
+            body1_name = self.model.body(body1_id).name
+            body2_name = self.model.body(body2_id).name
             # hand and object
             if (body1_id > world_id and body1_id <= hand_id and body2_id == object_id) or (
                 body2_id > world_id and body2_id <= hand_id and body1_id == object_id
@@ -344,6 +346,8 @@ class MjHO:
                 else:
                     hand_body_name = body2_name.removeprefix(self.hand_prefix)
                     obj_body_name = body1_name
+                if self.hand_contact_prefixes and not hand_body_name.startswith(self.hand_contact_prefixes):
+                    continue
                 ho_contact.append(
                     {
                         "contact_dist": contact.dist,
@@ -379,10 +383,10 @@ class MjHO:
         # Processing all contact information
         ho_contact = []
         for contact_id, contact in enumerate(self.data.contact):
-            body1_id = self.model.geom(contact.geom1).bodyid
-            body2_id = self.model.geom(contact.geom2).bodyid
-            body1_name = self.model.body(self.model.geom(contact.geom1).bodyid).name
-            body2_name = self.model.body(self.model.geom(contact.geom2).bodyid).name
+            body1_id = int(self.model.geom_bodyid[contact.geom1])
+            body2_id = int(self.model.geom_bodyid[contact.geom2])
+            body1_name = self.model.body(body1_id).name
+            body2_name = self.model.body(body2_id).name
             # hand and object
             if (body1_id > world_id and body1_id <= hand_id and body2_id == object_id) or (
                 body2_id > world_id and body2_id <= hand_id and body1_id == object_id
@@ -401,6 +405,8 @@ class MjHO:
                     hand_body_name = body2_name.removeprefix(self.hand_prefix)
                     hand_body_id = body2_id
                     obj_body_name = body1_name
+                if self.hand_contact_prefixes and not hand_body_name.startswith(self.hand_contact_prefixes):
+                    continue
                 contact_frame, contact_force = canonicalize_contact_frame_wrench(
                     contact.frame,
                     contact_force,

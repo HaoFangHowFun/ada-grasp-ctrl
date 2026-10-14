@@ -55,7 +55,7 @@ class BaseEval:
         self.input_npy_path = input_npy_path
         self.configs = configs
         robot_name = self.configs.hand_name
-        robot_prefix = "rh_" if "allegro" not in robot_name else ""
+        robot_prefix = self.configs.hand.get("robot_prefix", "rh_" if "allegro" not in robot_name else "")
         self.robot = RobotFactory.create_robot(robot_type=robot_name, prefix=robot_prefix)
         self.grasp_data = validate_grasp_record(
             load_npy_record(input_npy_path),
@@ -92,6 +92,7 @@ class BaseEval:
             debug_render=configs.task.debug_render,
             debug_viewer=configs.task.debug_viewer,
             debug_viewer_session=debug_viewer_session,
+            hand_contact_prefixes=configs.hand.get("contact_body_prefixes", None),
         )
 
         if self.configs.task.debug_viewer or self.configs.task.debug_render:
@@ -115,9 +116,10 @@ class BaseEval:
         from ada_grasp_ctrl.utils.pin_helper import PinocchioHelper
         from ada_grasp_ctrl.utils.robot_adaptor import RobotAdaptor
 
+        kinematics_file_type = self.configs.hand.get("kinematics_file_type", "mjcf")
         self.robot_model = PinocchioHelper(
-            robot_file_path=self.robot.get_file_path("mjcf"),
-            robot_file_type="mjcf",
+            robot_file_path=self.robot.get_file_path(kinematics_file_type),
+            robot_file_type=kinematics_file_type,
         )
         self.robot_adaptor = RobotAdaptor(
             robot_model=self.robot_model,
@@ -142,6 +144,20 @@ class BaseEval:
             Reordered qpos copy.
         """
         return qpos[..., self.dof_data2user_indices].copy()
+
+    def _lift_target_qpos(self, current_qpos_a: np.ndarray, lift_height: float) -> np.ndarray:
+        """Return the historical dummy-arm vertical lift target.
+
+        Args:
+            current_qpos_a: Current actuator position vector.
+            lift_height: Requested vertical travel in metres.
+
+        Returns:
+            Dummy-arm actuator target with its Z slide raised.
+        """
+        target = current_qpos_a.copy()
+        target[2] += lift_height
+        return target
 
     def _simulate_under_extforce_details(self, pre_obj_qpos):
         """Execute method-specific approach and squeeze control.
@@ -239,8 +255,7 @@ class BaseEval:
             if not episode_aborted:
                 # Lift the object
                 curr_qpos_a = self.mj_ho.get_qpos_a()
-                lift_qpos_a = curr_qpos_a.copy()
-                lift_qpos_a[2] += lift_height  # lift, by IK
+                lift_qpos_a = self._lift_target_qpos(curr_qpos_a, lift_height)
                 path = self.grasp_ctrl.interplote_qpos(curr_qpos_a, lift_qpos_a, step=2 * self.ctrl_freq)
                 for q_a in path:
                     curr_qpos_a = self.mj_ho.get_qpos_a()

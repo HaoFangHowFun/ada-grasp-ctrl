@@ -44,9 +44,19 @@ PYTHONPATH=src python script/run_crx_sharpa_phase1.py
 
 預計按下面順序改，維持既有 Shadow／Allegro／LEAP 的控制設定和結果：
 
-1. **控制模型與關節映射。**由 CRX＋Sharpa 資產準備可供 MuJoCo 和 Pinocchio 讀取的控制用 MJCF，給 `left_J1`～`left_J6` 和左手 22 關節各一個位置 actuator。新增 CRX arm、Sharpa hand 與兩者組合的 robot metadata，以及對應的 Hydra hand 設定。固定 28 維順序為 `[CRX J1…J6, Sharpa 22 軸]`，明確列出 `dof_names`、`doa_names`、速度／關節限制、手掌 frame `left_hand_C_MC`、手指碰撞 body 和 fingertip body。先以一軸對一個 actuator 的映射接入 `RobotAdaptor`，逐項核對 MuJoCo、Pinocchio 與 ROS 的名稱和順序；不從 XML 出現順序猜測。
-2. **沿用抓取資料接口。**Phase 1 產生的 `pregrasp_qpos`、`grasp_qpos`、`squeeze_qpos` 改存成三組 28 維關節目標，並附 `joint_names`、`obj_path`、`obj_scale`、`obj_pose`。CRX 六軸由手掌目標位姿做 IK；Sharpa 22 軸沿用固定開／合手勢，暫不加入 fingertip IK 或訓練模型。這些資料交給既有 `control_eval` 讀取，為 CRX＋Sharpa 加入明確的實驗性設定與方法註冊。
+1. **控制模型與關節映射。**由 CRX＋Sharpa 資產產生給 MuJoCo 使用的控制 MJCF，給 `left_J1`～`left_J6` 和左手 22 關節各一個位置 actuator；Pinocchio 使用原始 URDF，避免 MJCF 匯入時遺失第一軸。新增 CRX arm、Sharpa hand 與兩者組合的 robot metadata，以及對應的 Hydra hand 設定。固定 28 維順序為 `[CRX J1…J6, Sharpa 22 軸]`，明確列出 `dof_names`、`doa_names`、速度／關節限制與手掌 frame `left_hand_C_MC`。先以一軸對一個 actuator 的映射接入 `RobotAdaptor`，逐項核對 MuJoCo、Pinocchio 與 ROS 的名稱和順序；不從 XML 出現順序猜測。
+2. **沿用抓取資料接口。**Phase 1 產生的 `pregrasp_qpos`、`grasp_qpos`、`squeeze_qpos` 是三組 28 維關節目標，並附 `joint_names`、`obj_path`、`obj_scale`、`obj_pose`。CRX 六軸由手掌目標位姿做 IK；Sharpa 22 軸沿用固定開／合手勢，暫不加入 fingertip IK 或訓練模型。實驗腳本直接使用既有 `BaseEval` 與 `ours` 共用執行器讀取資料；公開 `control_eval` CLI 的支援清單仍維持原樣。
 3. **接上接觸回饋與 `ours`。**調整 MuJoCo 場景載入與命名，使手指／手掌對物體的接觸能回傳現有控制器需要的接觸點、座標 frame 與六維接觸力。現有 `MjHO` 以 body 編號範圍判斷「手部接觸」，新模型需改為依明確的手部 body 集合過濾，避免把 CRX 手臂碰撞當成手指接觸。保留 `ours` 的 Stage 1／Stage 2、wrench balance、最佳化目標與求解失敗紀錄；只增加機器人適配，不用改控制器的論文參數。
-4. **移除 dummy arm 專屬動作假設。**目前抓取後的 lift 用 `lift_qpos_a[2] += 0.2`，那個索引對 dummy arm 是 Z 平移，對 CRX 卻是 J3 角度。CRX 範例要改成「手掌在世界座標上移 → CRX IK → 關節插值」的 lift 路徑，並保留物體抬升的既有判定方式。Phase 1 的進場姿勢也要確認不被現有 `arm_pregrasp_is_grasp` 設定覆蓋；CRX 使用自己的範例設定。
+4. **移除 dummy arm 專屬動作假設。**原本抓取後的 lift 用 `lift_qpos_a[2] += 0.2`，那個索引對 dummy arm 是 Z 平移，對 CRX 卻是 J3 角度。CRX 範例改成「手掌在世界座標上移 → CRX IK → 關節插值」的 lift 路徑，既有 dummy arm lift 邏輯保留。現有 `ours` 的 Stage 1 不追蹤手掌世界 X／Y 位移，所以此範例的 Phase 2 從抓取位、開手姿勢開始自適應閉手；Phase 1 仍保留獨立的接近動作。
 
 **如何確認真的用了自適應控制：**同一筆 28 維 grasp 紀錄，先跑 Phase 1 的固定位置命令，再跑 Phase 2 的 `ours`。檢查輸出的每步目標關節位置、接觸／接觸力、Stage、最佳化結果與 solver 狀態；有接觸時，`ours` 的實際命令應能隨回饋改變，而非只是重播開合手軌跡。再檢查物體 lift 結果與統計，並跑一次既有 Shadow quick 範例確認沒有回歸。首次跑通只代表這個 CRX＋Sharpa 測試場景可用，不代表已完成實機控制或公開支援。
+
+### Phase 2 已實作的執行方式
+
+接續 Phase 1 印出的 run 目錄執行；請使用同一個目錄，且每個 run 目錄只執行一次 Phase 2：
+
+```bash
+PYTHONPATH=src python script/run_crx_sharpa_phase2.py output/examples/crx_sharpa/<Phase-1-run-ID>
+```
+
+程式會輸出 `control/ours_default/grasp_dist_0_pos_0.npy` 和 `phase2_summary.json`。實測一次完整 80 步：16 步有手物接觸，最多 7 個接觸點；接觸時最佳化器產生了不同於固定軌跡的命令，Stage 1／2 都有執行，沒有 solver degraded。物體最終沒有抬起，**因此這驗證了控制器接入與接觸回饋，沒有驗證抓取成功**。`hand.controller.final_sum_force=15 N` 目前沿用 Shadow 的數值作為實驗設定，尚未針對 Sharpa 校正。這個實驗腳本沒有產生公開 `control_eval` 的 batch report 或 `control_stat` 成功率，也沒有連接實體 ROS 命令。

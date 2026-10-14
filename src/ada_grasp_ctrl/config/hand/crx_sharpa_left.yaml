@@ -1,0 +1,10 @@
+# Experimental CRX-5iA and left Sharpa Wave example only.
+xml_path: ${asset_root}/robot/crx5ia_sharpa_wave_left/model.urdf
+kinematics_file_type: urdf
+robot_prefix: ""
+contact_body_prefixes: [left_thumb_, left_index_, left_middle_, left_ring_, left_pinky_]
+mocap: false
+dummy_arm: false
+controller:
+  final_sum_force: 15.0
+exclude_table_contact: null
