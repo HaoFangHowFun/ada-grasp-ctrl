@@ -1,6 +1,7 @@
 from glob import glob
 import os
 import numpy as np
+from scipy.spatial.transform import Rotation
 from itertools import islice
 import logging
 from pathlib import Path
@@ -189,9 +190,13 @@ def compute_dummy_arm_qpos(params, device, robot, kin):
     kin.create_ik_solver(num_retries=10, regularlization=1e-3)
 
     # Step 1: pre-grasp poses
-    zero_arm_qpos = np.zeros((n_grasp, n_arm_dof))
     zero_hand_qpos = np.zeros((n_grasp, n_hand_dof))
-    pregrasp_ref_config = np.concatenate([zero_arm_qpos, zero_hand_qpos], axis=-1)
+    # The dummy arm's XYZ slides and intrinsic XYZ hinges provide an exact seed
+    # for the requested hand-base pose. Random starts can miss a reachable pose.
+    pregrasp_arm_seed = np.empty((n_grasp, n_arm_dof))
+    pregrasp_arm_seed[:, :3] = pregrasp_qpos_array[:, :3]
+    pregrasp_arm_seed[:, 3:6] = Rotation.from_quat(pregrasp_qpos_array[:, [4, 5, 6, 3]]).as_euler("XYZ")
+    pregrasp_ref_config = np.concatenate([pregrasp_arm_seed, zero_hand_qpos], axis=-1)
 
     pregrasp_arm_qpos = solve_ik_for_arm_qpos(
         kin,
@@ -199,7 +204,7 @@ def compute_dummy_arm_qpos(params, device, robot, kin):
         n_arm_dof=n_arm_dof,
         batch_size=n_grasp,
         ref_config=pregrasp_ref_config,
-        use_seed_config=False,
+        use_seed_config=True,
         device=device,
     )
 
