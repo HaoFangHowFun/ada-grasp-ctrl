@@ -53,10 +53,32 @@ PYTHONPATH=src python script/run_crx_sharpa_phase1.py
 
 ### Phase 2 已實作的執行方式
 
-接續 Phase 1 印出的 run 目錄執行；請使用同一個目錄，且每個 run 目錄只執行一次 Phase 2：
+Phase 2 可以獨立執行。它用與 Phase 1 相同的規則各自產生控制模型和 grasp 目標，然後直接跑 `ours`，不需要先跑 Phase 1：
 
 ```bash
-PYTHONPATH=src python script/run_crx_sharpa_phase2.py output/examples/crx_sharpa/<Phase-1-run-ID>
+PYTHONPATH=src python script/run_crx_sharpa_phase2.py
 ```
 
+輸出預設在 `output/examples/crx_sharpa/phase2-<新 run ID>/`。若要在指定目錄執行，可加 `--run-dir <新目錄>`。既有的 `python script/run_crx_sharpa_phase2.py <已完成 Phase 1 目錄>` 仍可使用，但只是讀取該目錄的模型和 grasp 目標，不使用 Phase 1 的執行軌跡。
+
 程式會輸出 `control/ours_default/grasp_dist_0_pos_0.npy` 和 `phase2_summary.json`。實測一次完整 80 步：16 步有手物接觸，最多 7 個接觸點；接觸時最佳化器產生了不同於固定軌跡的命令，Stage 1／2 都有執行，沒有 solver degraded。物體最終沒有抬起，**因此這驗證了控制器接入與接觸回饋，沒有驗證抓取成功**。`hand.controller.final_sum_force=15 N` 目前沿用 Shadow 的數值作為實驗設定，尚未針對 Sharpa 校正。這個實驗腳本沒有產生公開 `control_eval` 的 batch report 或 `control_stat` 成功率，也沒有連接實體 ROS 命令。
+
+已跑完的 Phase 2 可以直接讀取紀錄預覽，不需重跑控制器，也不會改動該 run 的輸出：
+
+```bash
+PYTHONPATH=src python script/view_crx_sharpa_phase2.py output/examples/crx_sharpa/<Phase-2-run-ID>
+```
+
+viewer 預設用 10 fps 播放 80 個已記錄的控制狀態，顯示機器人和瓶子的外觀網格；加 `--fps 5` 可放慢。播放完會停在最後一個控制狀態，關閉視窗才退出。現有紀錄沒有抬升階段的逐步手臂關節角，因此預覽不重建抬升動作；`phase2_summary.json` 的 `object_lift_delta_m` 仍是抬升結果的數值依據。
+
+### 用三倍尺寸的瓶子重新跑
+
+原本的物體網格縮放值是 `0.06`；三倍是 `0.18`。這會同時放大瓶子的碰撞與外觀網格。Phase 1、Phase 2 各自開新 run，使用相同縮放值可比較固定控制與自適應控制。兩者共用 grasp 目標，但起始手臂姿勢和逐步路徑不同，因此目前不是逐步相同軌跡的嚴格 A/B 比較：
+
+```bash
+PYTHONPATH=src python script/run_crx_sharpa_phase1.py --object-scale 0.18 --viewer
+PYTHONPATH=src python script/run_crx_sharpa_phase2.py --object-scale 0.18
+PYTHONPATH=src python script/view_crx_sharpa_phase2.py output/examples/crx_sharpa/<Phase-2-run-ID>
+```
+
+關閉 Phase 1 視窗後，終端機會印出它自己的 run 目錄；Phase 2 摘要會印出另一個 `run_dir` 供 viewer 使用。三倍尺寸時，範例把瓶子移到開手姿勢不會互相穿透的位置；瓶子質量仍固定為 `0.1 kg`。本地測試兩階段都能完成，Phase 2 有接觸和最佳化步，但物體沒有被抬起。Phase 1 固定手勢在此擺位沒有碰到瓶子，因此不要把這個三倍尺寸實驗視為成功抓取。

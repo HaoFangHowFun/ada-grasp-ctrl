@@ -7,14 +7,21 @@ import time
 from pathlib import Path
 
 from hydra import compose, initialize_config_dir
+import mujoco
 import numpy as np
 
-from ada_grasp_ctrl.crx_sharpa_contract import PALM_FRAME
-from ada_grasp_ctrl.crx_sharpa_demo import solve_arm_ik
+from ada_grasp_ctrl.crx_sharpa_contract import JOINTS, OBJECT_SCALE, PALM_FRAME
+from ada_grasp_ctrl.crx_sharpa_demo import (
+    configure_crx_sharpa_viewer,
+    create_simulation,
+    prepare_crx_sharpa_example,
+    solve_arm_ik,
+)
 from ada_grasp_ctrl.paths import project_root, runtime_root
-from ada_grasp_ctrl.schema import load_npy_record, validate_control_record
+from ada_grasp_ctrl.schema import load_npy_record, validate_control_record, validate_grasp_record
 from ada_grasp_ctrl.tasks.control_eval_func.base import BaseEval
 from ada_grasp_ctrl.tasks.control_eval_func.optimized_runner import WrenchControlPolicy, run_wrench_control_episode
+from ada_grasp_ctrl.utils.hand_util import MjHO
 
 
 class CrxSharpaOursEval(BaseEval):
@@ -64,7 +71,7 @@ def _config_for_example(run_dir: Path, model_path: Path):
     """Compose a private hand configuration without changing public CLI support.
 
     Args:
-        run_dir: Completed Phase 1 run directory.
+        run_dir: Run directory containing generated control model and grasp input.
         model_path: Generated control MJCF.
 
     Returns:
@@ -92,22 +99,22 @@ def _config_for_example(run_dir: Path, model_path: Path):
 
 
 def run_phase2(run_dir: Path) -> dict[str, object]:
-    """Run an existing Phase 1 grasp through coordinated contact control.
+    """Run an existing grasp input through coordinated contact control.
 
     Args:
-        run_dir: Completed Phase 1 output directory.
+        run_dir: Directory containing generated model and grasp input.
 
     Returns:
         Current-run path, status, and contact summary.
 
     Raises:
-        FileNotFoundError: If Phase 1 output is incomplete.
+        FileNotFoundError: If the model or grasp input is missing.
         FileExistsError: If Phase 2 was already attempted in the run directory.
     """
     model_path = run_dir / "control_model.xml"
     record_path = run_dir / "grasp.npy"
     if not model_path.is_file() or not record_path.is_file():
-        raise FileNotFoundError(f"Phase 1 model and grasp are required below {run_dir}")
+        raise FileNotFoundError(f"Control model and grasp are required below {run_dir}")
     summary_path = run_dir / "phase2_summary.json"
     if summary_path.exists() or (run_dir / "control").exists():
         raise FileExistsError(f"Phase 2 output already exists below {run_dir}")
@@ -126,8 +133,10 @@ def run_phase2(run_dir: Path) -> dict[str, object]:
     )
     object_poses = np.asarray(result["obj_pose"])
     summary = {
+        "run_dir": str(run_dir.resolve()),
         "control_output": outputs[0],
         "statuses": [status.value for status in statuses],
+        "object_scale": float(load_npy_record(record_path)["obj_scale"]),
         "elapsed_seconds": time.monotonic() - started,
         "control_steps": len(result["stage"]),
         "contact_steps": sum(bool(step) for step in contacts),
@@ -135,7 +144,100 @@ def run_phase2(run_dir: Path) -> dict[str, object]:
         "max_contacts": max((len(step) for step in contacts), default=0),
         "stage_values": sorted({int(stage) for stage in result["stage"]}),
         "solver_degraded": any(not entry["accepted"] for entry in result["solver_diagnostics"]),
-        "object_lift_delta_m": float(object_poses[-1, 2] - object_poses[0, 2]),
+        "object_lift_delta_m": (
+            float(object_poses[-1, 2] - object_poses[0, 2]) if len(object_poses) >= 2 else None
+        ),
     }
     summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     return summary
+
+
+def run_phase2_example(run_dir: Path, *, object_scale: float = OBJECT_SCALE) -> dict[str, object]:
+    """Generate independent grasp inputs and run adaptive Phase 2 directly.
+
+    Args:
+        run_dir: Fresh Phase 2 output directory.
+        object_scale: Uniform physical scale for the bottle collision meshes.
+
+    Returns:
+        Adaptive control summary from the new run.
+    """
+    prepare_crx_sharpa_example(run_dir, object_scale=object_scale)
+    return run_phase2(run_dir)
+
+
+def _apply_recorded_state(simulation: MjHO, joint_positions: np.ndarray, object_pose: np.ndarray) -> None:
+    """Display one saved state without advancing MuJoCo physics.
+
+    Args:
+        simulation: CRX-Sharpa hand-object scene.
+        joint_positions: Recorded positions in the exact 28-joint contract order.
+        object_pose: Recorded world-space WXYZ object pose.
+    """
+    for name, position in zip(JOINTS, joint_positions):
+        simulation.data.joint(f"{simulation.hand_prefix}{name}").qpos[0] = position
+    simulation.data.joint("obj_freejoint").qpos[:] = object_pose
+    simulation.data.qvel[:] = 0
+    mujoco.mj_forward(simulation.model, simulation.data)
+
+
+def replay_phase2(run_dir: Path, *, fps: float = 10.0) -> dict[str, object]:
+    """Show the recorded Phase 2 control states in a native MuJoCo viewer.
+
+    Args:
+        run_dir: Existing run directory with model, grasp, and Phase 2 output.
+        fps: Playback rate for the recorded control samples.
+
+    Returns:
+        Read-only replay summary after the viewer window closes.
+
+    Raises:
+        FileNotFoundError: If any required input is missing.
+        ValueError: If playback rate or trajectory shape is invalid.
+    """
+    if not np.isfinite(fps) or fps <= 0:
+        raise ValueError("fps must be a positive finite number")
+    model_path = run_dir / "control_model.xml"
+    grasp_path = run_dir / "grasp.npy"
+    control_path = run_dir / "control" / "ours_default" / "grasp_dist_0_pos_0.npy"
+    for path in (model_path, grasp_path, control_path):
+        if not path.is_file():
+            raise FileNotFoundError(f"Phase 2 replay input is missing: {path}")
+    grasp = validate_grasp_record(
+        load_npy_record(grasp_path), grasp_path,
+        expected_joint_dim=len(JOINTS), expected_joint_names=JOINTS,
+        require_joint_names=True, require_assets=True,
+    )
+    result = validate_control_record(load_npy_record(control_path), control_path)
+    positions = np.asarray(result.get("dof", []), dtype=float)
+    object_poses = np.asarray(result["obj_pose"], dtype=float)
+    if positions.ndim != 2 or positions.shape[1] != len(JOINTS) or len(positions) == 0:
+        raise ValueError(f"Phase 2 replay requires recorded (T, {len(JOINTS)}) joint positions")
+    if object_poses.ndim != 2 or object_poses.shape[0] < len(positions):
+        raise ValueError("Phase 2 replay requires an object pose for every recorded control step")
+
+    simulation = create_simulation(model_path, grasp, viewer=True)
+    frames_replayed = 0
+    try:
+        _apply_recorded_state(simulation, positions[0], object_poses[0])
+        configure_crx_sharpa_viewer(simulation, object_poses[0])
+        print(f"Replaying {len(positions)} recorded Phase 2 control steps at {fps:g} fps.", flush=True)
+        for joint_positions, object_pose in zip(positions, object_poses):
+            if not simulation.debug_viewer.native_is_running():
+                break
+            _apply_recorded_state(simulation, joint_positions, object_pose)
+            simulation.debug_viewer.sync()
+            frames_replayed += 1
+            time.sleep(1.0 / fps)
+        if simulation.debug_viewer.native_is_running():
+            print("Replay finished. Close the viewer window to exit.", flush=True)
+            while simulation.debug_viewer.native_is_running():
+                simulation.debug_viewer.sync()
+                time.sleep(0.05)
+    finally:
+        simulation.close_view_and_render()
+    return {
+        "control_output": str(control_path.resolve()),
+        "frames_replayed": frames_replayed,
+        "lift_replayed": False,
+    }

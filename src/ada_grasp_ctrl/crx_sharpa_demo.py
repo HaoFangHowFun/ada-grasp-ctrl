@@ -109,12 +109,20 @@ def solve_arm_ik(helper: PinocchioHelper, target: np.ndarray, seed: np.ndarray) 
     return result.x
 
 
-def build_grasp_record() -> dict[str, object]:
+def build_grasp_record(*, object_scale: float = OBJECT_SCALE) -> dict[str, object]:
     """Create a reproducible reach, open, and close grasp for the bundled bottle.
+
+    Args:
+        object_scale: Uniform physical scale for the bottle collision meshes.
 
     Returns:
         Validated 28-joint common grasp record.
+
+    Raises:
+        ValueError: If the requested bottle scale is invalid.
     """
+    if not np.isfinite(object_scale) or object_scale <= 0:
+        raise ValueError("object_scale must be a positive finite number")
     helper = PinocchioHelper(str(resolve_from_root(ASSET, root_kind="asset")), "urdf")
     seed_arm = np.deg2rad([0.0, 30.0, -30.0, 0.0, 60.0, 0.0])
     grasp_target = _pose(helper, seed_arm)
@@ -132,9 +140,16 @@ def build_grasp_record() -> dict[str, object]:
             limit_index = helper.dof_joint_names.index(name)
             hand_close[index] = min(0.8 * helper.joint_limits[1, limit_index], 1.0)
     object_position = palm[:3, 3] + palm[:3, :3] @ np.array([0.06, -0.02, 0.07])
+    # Move a larger bottle outside the open fingers at initialization. The
+    # three-times-scale example uses a 2.5 cm X and 22.5 cm Y clearance shift.
+    size_growth = max(0.0, object_scale / OBJECT_SCALE - 1.0)
+    object_position[:2] += size_growth * np.array([0.0125, 0.1125])
+    # The bundled bottle's collider extends approximately 0.35 scale units
+    # below its origin; keep the bottom near the tabletop when resizing it.
+    object_position[2] += 0.35 * (object_scale - OBJECT_SCALE)
     record = with_current_schema({
         "obj_path": str(resolve_from_root(OBJECT, root_kind="data")),
-        "obj_scale": OBJECT_SCALE,
+        "obj_scale": object_scale,
         "obj_pose": np.r_[object_position, [1.0, 0.0, 0.0, 0.0]],
         "joint_names": list(JOINTS),
         "pregrasp_qpos": np.r_[arm_pregrasp, hand_open],
@@ -167,43 +182,76 @@ def create_simulation(control_model: Path, record: dict[str, object], *, viewer:
     )
 
 
-def run_phase1(run_dir: Path, *, viewer: bool = False) -> dict[str, object]:
-    """Generate a model and grasp record, then replay fixed open/close targets.
+def configure_crx_sharpa_viewer(simulation: MjHO, object_pose: np.ndarray) -> None:
+    """Frame the robot and bottle while drawing only their visual meshes.
+
+    Args:
+        simulation: Scene with an attached native MuJoCo viewer.
+        object_pose: Initial world-space WXYZ object pose.
+    """
+    # Robot collision geoms use group 0; keep the bottle's visual geoms
+    # visible when hiding that group in the native viewer.
+    for geom_id in range(simulation.model.ngeom):
+        name = simulation.model.geom(geom_id).name
+        if name.startswith("object_visual_"):
+            simulation.model.geom_group[geom_id] = 1
+            collision_id = simulation.model.geom(name.replace("object_visual_", "object_collision_", 1)).id
+            simulation.model.geom_rgba[geom_id] = simulation.model.geom_rgba[collision_id]
+    simulation.debug_viewer.set_native_geom_group(0, False)
+    object_position = np.asarray(object_pose[:3])
+    simulation.debug_viewer.set_native_camera(
+        lookat=[0.5 * object_position[0], 0.5 * object_position[1], 0.3],
+        distance=1.5,
+        azimuth=125,
+        elevation=-22,
+    )
+
+
+def prepare_crx_sharpa_example(
+    run_dir: Path, *, object_scale: float = OBJECT_SCALE
+) -> tuple[Path, Path, dict[str, object]]:
+    """Create the shared model and grasp input for an independent example run.
 
     Args:
         run_dir: Fresh destination directory.
-        viewer: Replay in a MuJoCo window and wait until it is closed.
+        object_scale: Uniform physical scale for the bottle collision meshes.
 
     Returns:
-        Summary of the executed example and generated paths.
+        Control model path, grasp record path, and validated grasp record.
+
+    Raises:
+        FileExistsError: If the destination already exists.
+        ValueError: If the object scale is invalid.
     """
+    if not np.isfinite(object_scale) or object_scale <= 0:
+        raise ValueError("object_scale must be a positive finite number")
     if run_dir.exists():
         raise FileExistsError(f"Example run directory already exists: {run_dir}")
     run_dir.mkdir(parents=True)
     model_path = build_control_model(run_dir / "control_model.xml")
-    record = build_grasp_record()
+    record = build_grasp_record(object_scale=object_scale)
     record_path = run_dir / "grasp.npy"
     np.save(record_path, record)
+    return model_path, record_path, record
+
+
+def run_phase1(run_dir: Path, *, viewer: bool = False, object_scale: float = OBJECT_SCALE) -> dict[str, object]:
+    """Run fixed open/close joint targets without contact adaptation.
+
+    Args:
+        run_dir: Fresh destination directory.
+        viewer: Replay in a MuJoCo window and wait until it is closed.
+        object_scale: Uniform physical scale for the bottle collision meshes.
+
+    Returns:
+        Summary of the executed fixed-target example.
+    """
+    model_path, record_path, record = prepare_crx_sharpa_example(run_dir, object_scale=object_scale)
     simulation = create_simulation(model_path, record, viewer=viewer)
     try:
         simulation.get_contact_info(record["pregrasp_qpos"], record["obj_pose"])
         if viewer:
-            # Robot collision geoms use group 0; keep the bottle's visual geoms
-            # visible when hiding that group in the native viewer.
-            for geom_id in range(simulation.model.ngeom):
-                name = simulation.model.geom(geom_id).name
-                if name.startswith("object_visual_"):
-                    simulation.model.geom_group[geom_id] = 1
-                    collision_id = simulation.model.geom(name.replace("object_visual_", "object_collision_", 1)).id
-                    simulation.model.geom_rgba[geom_id] = simulation.model.geom_rgba[collision_id]
-            simulation.debug_viewer.set_native_geom_group(0, False)
-            object_position = np.asarray(record["obj_pose"][:3])
-            simulation.debug_viewer.set_native_camera(
-                lookat=[0.5 * object_position[0], 0.5 * object_position[1], 0.3],
-                distance=1.5,
-                azimuth=125,
-                elevation=-22,
-            )
+            configure_crx_sharpa_viewer(simulation, record["obj_pose"])
         simulation.ctrl_qpos_a(JOINTS, record["pregrasp_qpos"])
         contacts = []
         peak_contacts = []
@@ -223,6 +271,7 @@ def run_phase1(run_dir: Path, *, viewer: bool = False) -> dict[str, object]:
         summary = {
             "model": str(model_path), "grasp": str(record_path.resolve()),
             "joint_count": len(JOINTS), "actuator_count": simulation.model.nu,
+            "object_scale": object_scale,
             "contact_counts": contacts, "peak_contact_counts": peak_contacts,
             "final_joint_error_norm": float(np.linalg.norm(actual - record["squeeze_qpos"])),
             "object_pose": simulation.get_obj_pose().tolist(),
