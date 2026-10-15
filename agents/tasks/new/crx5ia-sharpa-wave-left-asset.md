@@ -4,13 +4,13 @@
 
 ## 已建立的檔案
 
-- [model.urdf](assets/robot/crx5ia_sharpa_wave_left/model.urdf)：獨立的單側模型，mesh 路徑相對於模型檔，可直接交給 MuJoCo。
-- `assets/robot/crx5ia_sharpa_wave_left/meshes/`：25 個 Sharpa STL、7 個 FANUC 碰撞 STL、17 個保留材質分區的 FANUC 外觀 STL；另保留先前合成的 7 個單色外觀 STL，但模型不再引用。全部 56 個網格的 SHA-256 見 [SHA256SUMS.txt](assets/robot/crx5ia_sharpa_wave_left/SHA256SUMS.txt)。
-- [SOURCE.md](assets/robot/crx5ia_sharpa_wave_left/SOURCE.md)：來源 checkout、版本、轉換方式、授權紀錄與限制。
-- [預覽圖](assets/robot/crx5ia_sharpa_wave_left/preview.png)：已由這份 URDF 在 MuJoCo 離屏渲染產生。
-- [靜態預覽腳本](script/preview_crx_sharpa_asset.py)：開啟 MuJoCo 視窗、不推進物理模擬，並只顯示外觀網格。
+- [model.urdf](../../../assets/robot/crx5ia_sharpa_wave_left/model.urdf)：獨立的單側模型，mesh 路徑相對於模型檔，可直接交給 MuJoCo。
+- `assets/robot/crx5ia_sharpa_wave_left/meshes/`：25 個 Sharpa STL、7 個 FANUC 碰撞 STL、17 個保留材質分區的 FANUC 外觀 STL；另保留先前合成的 7 個單色外觀 STL，但模型不再引用。全部 56 個網格的 SHA-256 見 [SHA256SUMS.txt](../../../assets/robot/crx5ia_sharpa_wave_left/SHA256SUMS.txt)。
+- [SOURCE.md](../../../assets/robot/crx5ia_sharpa_wave_left/SOURCE.md)：來源 checkout、版本、轉換方式、授權紀錄與限制。
+- [預覽圖](../../../assets/robot/crx5ia_sharpa_wave_left/preview.png)：已由這份 URDF 在 MuJoCo 離屏渲染產生。
+- [靜態預覽腳本](../../../script/preview_crx_sharpa_asset.py)：開啟 MuJoCo 視窗、不推進物理模擬，並只顯示外觀網格。
 
-![左側 CRX-5iA 加 Sharpa Wave 預覽](assets/robot/crx5ia_sharpa_wave_left/preview.png)
+![左側 CRX-5iA 加 Sharpa Wave 預覽](../../../assets/robot/crx5ia_sharpa_wave_left/preview.png)
 
 ## 來源與接合方式
 
@@ -42,7 +42,7 @@ Path('/tmp/crx5ia_sharpa_left_source.urdf').write_text(build_description(sides='
 PY
 ```
 
-組裝後的 URDF 有 ROS `package://` 路徑，MuJoCo 不能直接用那些 URI 定位本地 mesh。本次把它們改為 `model.urdf` 旁的 `meshes/` 相對路徑。FANUC 原始 DAE 外觀網格以 `trimesh` 按材質分區轉為 17 個 STL，沿用 DAE 在 URDF 中的外觀位姿與公尺單位，並把各區塊的漫反射顏色寫入 URDF；碰撞網格仍使用原始 STL、原本的碰撞位姿與 `0.001` 縮放。Sharpa 的 STL 視覺與碰撞網格維持來源內容。最後加入 MuJoCo URDF `<compiler strippath="false" balanceinertia="true" discardvisual="false"/>`，保留相對路徑並編譯視覺幾何。先前曾錯把 FANUC 碰撞 STL 放在 DAE 的外觀位姿上，造成手臂外形錯位；現在已修正。轉換細節與來源 commit 見 [SOURCE.md](assets/robot/crx5ia_sharpa_wave_left/SOURCE.md)。
+組裝後的 URDF 有 ROS `package://` 路徑，MuJoCo 不能直接用那些 URI 定位本地 mesh。本次把它們改為 `model.urdf` 旁的 `meshes/` 相對路徑。FANUC 原始 DAE 外觀網格以 `trimesh` 按材質分區轉為 17 個 STL，沿用 DAE 在 URDF 中的外觀位姿與公尺單位，並把各區塊的漫反射顏色寫入 URDF；碰撞網格仍使用原始 STL、原本的碰撞位姿與 `0.001` 縮放。Sharpa 的 STL 視覺與碰撞網格維持來源內容。最後加入 MuJoCo URDF `<compiler strippath="false" balanceinertia="true" discardvisual="false"/>`，保留相對路徑並編譯視覺幾何。先前曾錯把 FANUC 碰撞 STL 放在 DAE 的外觀位姿上，造成手臂外形錯位；現在已修正。轉換細節與來源 commit 見 [SOURCE.md](../../../assets/robot/crx5ia_sharpa_wave_left/SOURCE.md)。
 
 ## 直接可視化
 
@@ -52,7 +52,7 @@ PY
 python script/preview_crx_sharpa_asset.py
 ```
 
-這個腳本只更新視窗，不呼叫 MuJoCo 的 `mj_step`，並把碰撞幾何所在的顯示群組 0 關閉，保留外觀幾何所在的群組 1。MuJoCo 預設同時顯示兩組，FANUC 簡化碰撞外殼會遮住原始外觀網格，使每節手臂的形狀看起來都不對；手部碰撞與外觀比較相似，所以較不明顯。這項設定只影響顯示，模型內的碰撞幾何仍在。模型沒有 actuator；若使用 `python -m mujoco.viewer --mjcf=...` 讓模擬持續運行，手臂也會受重力影響而塌下來。若只想看圖片，直接開啟上面的 [PNG 預覽圖](assets/robot/crx5ia_sharpa_wave_left/preview.png)。
+這個腳本只更新視窗，不呼叫 MuJoCo 的 `mj_step`，並把碰撞幾何所在的顯示群組 0 關閉，保留外觀幾何所在的群組 1。MuJoCo 預設同時顯示兩組，FANUC 簡化碰撞外殼會遮住原始外觀網格，使每節手臂的形狀看起來都不對；手部碰撞與外觀比較相似，所以較不明顯。這項設定只影響顯示，模型內的碰撞幾何仍在。模型沒有 actuator；若使用 `python -m mujoco.viewer --mjcf=...` 讓模擬持續運行，手臂也會受重力影響而塌下來。若只想看圖片，直接開啟上面的 [PNG 預覽圖](../../../assets/robot/crx5ia_sharpa_wave_left/preview.png)。
 
 目前 MuJoCo 預覽已保留 FANUC 的白、灰、綠、紅色區塊。若要看原始 DAE 的完整材質表現，也可以用 ROS mock 與 RViz（不連實體）：
 
