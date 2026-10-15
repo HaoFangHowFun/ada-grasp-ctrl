@@ -49,6 +49,25 @@ class CrxSharpaOursEval(BaseEval):
             WrenchControlPolicy(use_approaching_arm_motion=True),
         )
 
+    def _eval_simulate_under_extforce(self, obj_pose: np.ndarray, file_suffix: str):
+        """Keep the live viewer open after this example episode finishes.
+
+        Args:
+            obj_pose: Initial object WXYZ pose.
+            file_suffix: Output suffix for this episode.
+
+        Returns:
+            Saved control output path and episode status.
+        """
+        result = super()._eval_simulate_under_extforce(obj_pose, file_suffix)
+        viewer = self.mj_ho.debug_viewer
+        if self.configs.task.debug_viewer and viewer.native_is_running():
+            print("Phase 2 finished. Close the viewer window to exit.", flush=True)
+            while viewer.native_is_running():
+                viewer.sync()
+                time.sleep(0.05)
+        return result
+
     def _lift_target_qpos(self, current_qpos_a: np.ndarray, lift_height: float) -> np.ndarray:
         """Lift the palm in Cartesian Z with a bounded CRX IK solve.
 
@@ -67,12 +86,13 @@ class CrxSharpaOursEval(BaseEval):
         return target
 
 
-def _config_for_example(run_dir: Path, model_path: Path):
+def _config_for_example(run_dir: Path, model_path: Path, *, viewer: bool = False):
     """Compose a private hand configuration without changing public CLI support.
 
     Args:
         run_dir: Run directory containing generated control model and grasp input.
         model_path: Generated control MJCF.
+        viewer: Whether to show the live native MuJoCo scene.
 
     Returns:
         Hydra configuration for one CRX-Sharpa control evaluation.
@@ -94,15 +114,16 @@ def _config_for_example(run_dir: Path, model_path: Path):
     # Start at the grasp arm pose so the fixed demo's fingers can reach the object.
     configs.task.arm_pregrasp_is_grasp = True
     configs.task.debug_render = False
-    configs.task.debug_viewer = False
+    configs.task.debug_viewer = viewer
     return configs
 
 
-def run_phase2(run_dir: Path) -> dict[str, object]:
+def run_phase2(run_dir: Path, *, viewer: bool = False) -> dict[str, object]:
     """Run an existing grasp input through coordinated contact control.
 
     Args:
         run_dir: Directory containing generated model and grasp input.
+        viewer: Show the running simulation and hold its final frame.
 
     Returns:
         Current-run path, status, and contact summary.
@@ -118,9 +139,16 @@ def run_phase2(run_dir: Path) -> dict[str, object]:
     summary_path = run_dir / "phase2_summary.json"
     if summary_path.exists() or (run_dir / "control").exists():
         raise FileExistsError(f"Phase 2 output already exists below {run_dir}")
-    configs = _config_for_example(run_dir.resolve(), model_path.resolve())
+    configs = _config_for_example(run_dir.resolve(), model_path.resolve(), viewer=viewer)
     started = time.monotonic()
-    outputs, statuses = CrxSharpaOursEval(str(record_path), configs).run()
+    evaluator = CrxSharpaOursEval(str(record_path), configs)
+    if viewer:
+        try:
+            configure_crx_sharpa_viewer(evaluator.mj_ho, evaluator.grasp_data["obj_pose"])
+        except Exception:
+            evaluator.mj_ho.close_view_and_render()
+            raise
+    outputs, statuses = evaluator.run()
     result = validate_control_record(load_npy_record(outputs[0]), outputs[0])
     contacts = result["contacts"]
     optimized_contact_steps = int(
@@ -152,18 +180,21 @@ def run_phase2(run_dir: Path) -> dict[str, object]:
     return summary
 
 
-def run_phase2_example(run_dir: Path, *, object_scale: float = OBJECT_SCALE) -> dict[str, object]:
+def run_phase2_example(
+    run_dir: Path, *, object_scale: float = OBJECT_SCALE, viewer: bool = False
+) -> dict[str, object]:
     """Generate independent grasp inputs and run adaptive Phase 2 directly.
 
     Args:
         run_dir: Fresh Phase 2 output directory.
         object_scale: Uniform physical scale for the bottle collision meshes.
+        viewer: Show the running simulation and hold its final frame.
 
     Returns:
         Adaptive control summary from the new run.
     """
     prepare_crx_sharpa_example(run_dir, object_scale=object_scale)
-    return run_phase2(run_dir)
+    return run_phase2(run_dir, viewer=viewer)
 
 
 def _apply_recorded_state(simulation: MjHO, joint_positions: np.ndarray, object_pose: np.ndarray) -> None:

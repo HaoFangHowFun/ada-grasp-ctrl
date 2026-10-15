@@ -59,11 +59,19 @@ Phase 2 可以獨立執行。它用與 Phase 1 相同的規則各自產生控制
 PYTHONPATH=src python script/run_crx_sharpa_phase2.py
 ```
 
+若要執行時直接看 MuJoCo 畫面，加上 `--viewer`，不用先產生 Phase 2 控制紀錄：
+
+```bash
+PYTHONPATH=src python script/run_crx_sharpa_phase2.py --object-scale 0.18 --viewer
+```
+
+執行結束後畫面停在最後姿態，關閉視窗才印出摘要並退出。程式仍會在開始控制前建立 MuJoCo 模型與 grasp 目標；這是模擬的輸入，與預先跑過 Phase 1 或預先產生控制軌跡無關。
+
 輸出預設在 `output/examples/crx_sharpa/phase2-<新 run ID>/`。若要在指定目錄執行，可加 `--run-dir <新目錄>`。既有的 `python script/run_crx_sharpa_phase2.py <已完成 Phase 1 目錄>` 仍可使用，但只是讀取該目錄的模型和 grasp 目標，不使用 Phase 1 的執行軌跡。
 
 程式會輸出 `control/ours_default/grasp_dist_0_pos_0.npy` 和 `phase2_summary.json`。實測一次完整 80 步：16 步有手物接觸，最多 7 個接觸點；接觸時最佳化器產生了不同於固定軌跡的命令，Stage 1／2 都有執行，沒有 solver degraded。物體最終沒有抬起，**因此這驗證了控制器接入與接觸回饋，沒有驗證抓取成功**。`hand.controller.final_sum_force=15 N` 目前沿用 Shadow 的數值作為實驗設定，尚未針對 Sharpa 校正。這個實驗腳本沒有產生公開 `control_eval` 的 batch report 或 `control_stat` 成功率，也沒有連接實體 ROS 命令。
 
-已跑完的 Phase 2 可以直接讀取紀錄預覽，不需重跑控制器，也不會改動該 run 的輸出：
+若要事後重看，已跑完的 Phase 2 也可以直接讀取紀錄預覽，不需重跑控制器，也不會改動該 run 的輸出：
 
 ```bash
 PYTHONPATH=src python script/view_crx_sharpa_phase2.py output/examples/crx_sharpa/<Phase-2-run-ID>

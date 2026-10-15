@@ -71,6 +71,27 @@ class CrxSharpaAdaptiveTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "fps"):
             replay_phase2(Path("missing"), fps=0)
 
+    def test_live_viewer_starts_before_phase2_record_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary) / "adaptive"
+            control_path = run_dir / "control" / "ours_default" / "grasp_dist_0_pos_0.npy"
+            session = mock.MagicMock()
+            session.native_is_running.side_effect = [True, False]
+            output_exists_at_sync = []
+            session.sync.side_effect = lambda: output_exists_at_sync.append(control_path.exists())
+
+            with mock.patch("ada_grasp_ctrl.utils.hand_util.DebugViewerSession", return_value=session):
+                with mock.patch("ada_grasp_ctrl.crx_sharpa_adaptive.time.sleep"):
+                    summary = run_phase2_example(run_dir, viewer=True)
+
+            self.assertEqual(summary["statuses"], ["completed"])
+            self.assertFalse(output_exists_at_sync[0])
+            self.assertTrue(control_path.exists())
+            session.attach.assert_called_once()
+            session.set_native_geom_group.assert_called_once_with(0, False)
+            session.detach.assert_called_once()
+            session.close.assert_called_once()
+
     def test_three_times_bottle_scale_runs_both_phases(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = Path(temporary) / "run"
