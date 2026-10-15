@@ -4,6 +4,7 @@ import math
 import os
 import sys
 import threading
+from collections.abc import Sequence
 
 import numpy as np
 
@@ -98,6 +99,42 @@ class DebugViewerSession:
             raise
         except Exception as exc:
             raise DebugViewerError(f"Failed to update the {self.backend} debug viewer: {exc}") from exc
+
+    def set_native_camera(
+        self, *, lookat: Sequence[float], distance: float, azimuth: float, elevation: float
+    ) -> None:
+        """Set the active native viewer camera for a specific scene.
+
+        Args:
+            lookat: World-space camera target.
+            distance: Distance from the target in metres.
+            azimuth: Horizontal angle in degrees.
+            elevation: Vertical angle in degrees.
+
+        Raises:
+            DebugViewerError: If a native viewer has not been attached.
+        """
+        if self.backend != "mujoco" or self._native_viewer is None:
+            raise DebugViewerError("A native MuJoCo viewer must be attached before setting its camera.")
+        with self._native_viewer.lock():
+            self._native_viewer.cam.lookat[:] = lookat
+            self._native_viewer.cam.distance = distance
+            self._native_viewer.cam.azimuth = azimuth
+            self._native_viewer.cam.elevation = elevation
+        self.sync()
+
+    def native_is_running(self) -> bool:
+        """Return whether the attached native viewer window is still open.
+
+        Returns:
+            True while the native window is open.
+
+        Raises:
+            DebugViewerError: If this session uses a different backend.
+        """
+        if self.backend != "mujoco":
+            raise DebugViewerError("Window state is only available for the native MuJoCo viewer.")
+        return self._native_viewer is not None and self._native_viewer.is_running()
 
     def detach(self):
         """Detach the current sample while preserving a task-level web server.

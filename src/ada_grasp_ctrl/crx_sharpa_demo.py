@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -171,7 +172,7 @@ def run_phase1(run_dir: Path, *, viewer: bool = False) -> dict[str, object]:
 
     Args:
         run_dir: Fresh destination directory.
-        viewer: Open an interactive MuJoCo viewer.
+        viewer: Replay in a MuJoCo window and wait until it is closed.
 
     Returns:
         Summary of the executed example and generated paths.
@@ -186,6 +187,14 @@ def run_phase1(run_dir: Path, *, viewer: bool = False) -> dict[str, object]:
     simulation = create_simulation(model_path, record, viewer=viewer)
     try:
         simulation.get_contact_info(record["pregrasp_qpos"], record["obj_pose"])
+        if viewer:
+            object_position = np.asarray(record["obj_pose"][:3])
+            simulation.debug_viewer.set_native_camera(
+                lookat=[0.5 * object_position[0], 0.5 * object_position[1], 0.3],
+                distance=1.5,
+                azimuth=125,
+                elevation=-22,
+            )
         simulation.ctrl_qpos_a(JOINTS, record["pregrasp_qpos"])
         contacts = []
         peak_contacts = []
@@ -195,6 +204,9 @@ def run_phase1(run_dir: Path, *, viewer: bool = False) -> dict[str, object]:
             for q in np.linspace(start, target, 40):
                 simulation.ctrl_qpos_a(JOINTS, q)
                 simulation.control_hand_step(5)
+                if viewer:
+                    # MjHO sleeps for one physics step; pace the remaining four.
+                    time.sleep(4 * simulation.model.opt.timestep)
                 peak = max(peak, len(simulation.get_curr_contact_info()))
             peak_contacts.append(peak)
             contacts.append(len(simulation.get_curr_contact_info()))
@@ -207,6 +219,11 @@ def run_phase1(run_dir: Path, *, viewer: bool = False) -> dict[str, object]:
             "object_pose": simulation.get_obj_pose().tolist(),
         }
         (run_dir / "phase1_summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+        if viewer:
+            print("Phase 1 finished. Close the viewer window to exit.", flush=True)
+            while simulation.debug_viewer.native_is_running():
+                simulation.debug_viewer.sync()
+                time.sleep(0.05)
         return summary
     finally:
         simulation.close_view_and_render()

@@ -73,6 +73,23 @@ class DebugViewerSessionTest(unittest.TestCase):
             with self.assertRaisesRegex(DebugViewerError, "requires a graphical session"):
                 session.attach(model, data)
 
+    def test_native_camera_can_be_set_after_attach(self):
+        """Allow an example to frame its own scene without changing shared defaults."""
+        session = DebugViewerSession("mujoco")
+        native = mock.MagicMock()
+        native.cam.lookat = np.zeros(3)
+        native.is_running.return_value = True
+        session._native_viewer = native
+
+        session.set_native_camera(lookat=[0.3, -0.1, 0.3], distance=1.5, azimuth=125, elevation=-22)
+
+        np.testing.assert_allclose(native.cam.lookat, [0.3, -0.1, 0.3])
+        self.assertEqual(native.cam.distance, 1.5)
+        self.assertEqual(native.cam.azimuth, 125)
+        self.assertEqual(native.cam.elevation, -22)
+        self.assertTrue(session.native_is_running())
+        native.sync.assert_called_once()
+
     def test_web_camera_matches_native_free_camera(self):
         """Use MuJoCo camera conventions for the initial browser viewpoint."""
         model, _ = make_model("sphere")

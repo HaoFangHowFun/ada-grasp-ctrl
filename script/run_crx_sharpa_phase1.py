@@ -15,7 +15,7 @@ def main() -> None:
     """Parse CLI arguments and execute one fresh example run."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", type=str, default=None, help="Fresh output directory; defaults below output/.")
-    parser.add_argument("--viewer", action="store_true", help="Open a MuJoCo viewer during the run.")
+    parser.add_argument("--viewer", action="store_true", help="Show the MuJoCo run and wait for the window to close.")
     args = parser.parse_args()
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ-%f")
     run_dir = runtime_root("output") / "examples" / "crx_sharpa" / run_id if args.run_dir is None else args.run_dir
