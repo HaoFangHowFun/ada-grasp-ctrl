@@ -7,7 +7,7 @@ from unittest import mock
 
 import numpy as np
 
-from ada_grasp_ctrl.crx_sharpa_demo import JOINTS, build_grasp_record, run_phase1
+from ada_grasp_ctrl.crx_sharpa_demo import JOINTS, build_grasp_record, create_simulation, run_phase1
 from ada_grasp_ctrl.schema import load_npy_record, validate_grasp_record
 
 
@@ -43,16 +43,42 @@ class CrxSharpaDemoTest(unittest.TestCase):
                 return next(window_states)
 
             session.native_is_running.side_effect = window_is_running
+            scenes = []
+
+            def create_scene(control_model, record, *, viewer):
+                scene = create_simulation(control_model, record, viewer=viewer)
+                scenes.append(scene)
+                return scene
+
             with mock.patch("ada_grasp_ctrl.utils.hand_util.DebugViewerSession", return_value=session):
-                with mock.patch("ada_grasp_ctrl.crx_sharpa_demo.time.sleep"):
-                    run_phase1(run_dir, viewer=True)
+                with mock.patch("ada_grasp_ctrl.crx_sharpa_demo.create_simulation", side_effect=create_scene):
+                    with mock.patch("ada_grasp_ctrl.crx_sharpa_demo.time.sleep"):
+                        run_phase1(run_dir, viewer=True)
 
             record = load_npy_record(run_dir / "grasp.npy")
             camera = session.set_native_camera.call_args.kwargs
-            np.testing.assert_allclose(camera["lookat"], [0.5 * record["obj_pose"][0], 0.5 * record["obj_pose"][1], 0.3])
+            np.testing.assert_allclose(
+                camera["lookat"],
+                [0.5 * record["obj_pose"][0], 0.5 * record["obj_pose"][1], 0.3],
+            )
             self.assertEqual(camera["distance"], 1.5)
             self.assertEqual(camera["azimuth"], 125)
             self.assertEqual(camera["elevation"], -22)
+            session.set_native_geom_group.assert_called_once_with(0, False)
+            model = scenes[0].model
+            visual_groups = [
+                int(model.geom_group[i]) for i in range(model.ngeom) if model.geom(i).name.startswith("object_visual_")
+            ]
+            collision_groups = [
+                int(model.geom_group[i])
+                for i in range(model.ngeom)
+                if model.geom(i).name.startswith("object_collision_")
+            ]
+            self.assertEqual(visual_groups, [1, 1])
+            self.assertEqual(collision_groups, [0, 0, 0])
+            for visual_name in ("object_visual_000", "object_visual_001"):
+                collision_name = visual_name.replace("object_visual_", "object_collision_", 1)
+                np.testing.assert_allclose(model.geom(visual_name).rgba, model.geom(collision_name).rgba)
             self.assertEqual(session.native_is_running.call_count, 3)
             session.close.assert_called_once()
 

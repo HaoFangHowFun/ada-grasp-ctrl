@@ -136,6 +136,22 @@ class DebugViewerSession:
             raise DebugViewerError("Window state is only available for the native MuJoCo viewer.")
         return self._native_viewer is not None and self._native_viewer.is_running()
 
+    def set_native_geom_group(self, group: int, visible: bool) -> None:
+        """Toggle one geometry display group in the attached native viewer.
+
+        Args:
+            group: MuJoCo geometry display group index.
+            visible: Whether the viewer should draw the group.
+
+        Raises:
+            DebugViewerError: If a native viewer has not been attached.
+        """
+        if self.backend != "mujoco" or self._native_viewer is None:
+            raise DebugViewerError("A native MuJoCo viewer must be attached before changing geometry visibility.")
+        with self._native_viewer.lock():
+            self._native_viewer.opt.geomgroup[group] = visible
+        self.sync()
+
     def detach(self):
         """Detach the current sample while preserving a task-level web server.
 

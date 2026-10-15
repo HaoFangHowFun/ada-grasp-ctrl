@@ -188,6 +188,15 @@ def run_phase1(run_dir: Path, *, viewer: bool = False) -> dict[str, object]:
     try:
         simulation.get_contact_info(record["pregrasp_qpos"], record["obj_pose"])
         if viewer:
+            # Robot collision geoms use group 0; keep the bottle's visual geoms
+            # visible when hiding that group in the native viewer.
+            for geom_id in range(simulation.model.ngeom):
+                name = simulation.model.geom(geom_id).name
+                if name.startswith("object_visual_"):
+                    simulation.model.geom_group[geom_id] = 1
+                    collision_id = simulation.model.geom(name.replace("object_visual_", "object_collision_", 1)).id
+                    simulation.model.geom_rgba[geom_id] = simulation.model.geom_rgba[collision_id]
+            simulation.debug_viewer.set_native_geom_group(0, False)
             object_position = np.asarray(record["obj_pose"][:3])
             simulation.debug_viewer.set_native_camera(
                 lookat=[0.5 * object_position[0], 0.5 * object_position[1], 0.3],

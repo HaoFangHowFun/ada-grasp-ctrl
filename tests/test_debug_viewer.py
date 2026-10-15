@@ -90,6 +90,20 @@ class DebugViewerSessionTest(unittest.TestCase):
         self.assertTrue(session.native_is_running())
         native.sync.assert_called_once()
 
+    def test_native_geom_group_visibility_can_be_changed(self):
+        """Hide collision rendering without modifying the simulation contacts."""
+        session = DebugViewerSession("mujoco")
+        native = mock.MagicMock()
+        native.opt.geomgroup = np.ones(6, dtype=np.uint8)
+        native.is_running.return_value = True
+        session._native_viewer = native
+
+        session.set_native_geom_group(0, False)
+
+        self.assertEqual(native.opt.geomgroup[0], 0)
+        self.assertEqual(native.opt.geomgroup[1], 1)
+        native.sync.assert_called_once()
+
     def test_web_camera_matches_native_free_camera(self):
         """Use MuJoCo camera conventions for the initial browser viewpoint."""
         model, _ = make_model("sphere")

@@ -36,7 +36,7 @@
 PYTHONPATH=src python script/run_crx_sharpa_phase1.py
 ```
 
-程式會在 `output/examples/crx_sharpa/<新 run ID>/` 產生 `control_model.xml`（28 個 MuJoCo position actuator）、`grasp.npy`（同一筆 28 軸 grasp 資料）和 `phase1_summary.json`。加上 `--viewer` 可看模擬；初始視角涵蓋 CRX 手臂與瓶子，動作結束後畫面會停在最後姿態，關閉 viewer 視窗才退出程式並印出摘要。瓶子初始放在桌面上；headless 試跑在閉手過程中最多觀察到 2 個手物接觸，閉手末端沒有穩定保持接觸。物體未通過抬升驗證，因此這是**可執行的抓取嘗試**，尚不是成功抓起物體的證據。
+程式會在 `output/examples/crx_sharpa/<新 run ID>/` 產生 `control_model.xml`（28 個 MuJoCo position actuator）、`grasp.npy`（同一筆 28 軸 grasp 資料）和 `phase1_summary.json`。加上 `--viewer` 可看模擬；viewer 只顯示 CRX／Sharpa 的外觀網格和瓶子外觀網格，碰撞網格仍參與物理運算但不顯示。初始視角涵蓋手臂與瓶子，動作結束後畫面會停在最後姿態，關閉 viewer 視窗才退出程式並印出摘要。瓶子初始放在桌面上；headless 試跑在閉手過程中最多觀察到 2 個手物接觸，閉手末端沒有穩定保持接觸。物體未通過抬升驗證，因此這是**可執行的抓取嘗試**，尚不是成功抓起物體的證據。
 
 ## Phase 2：讓 CRX＋Sharpa 使用本專案的 `ours` 自適應控制器
 
