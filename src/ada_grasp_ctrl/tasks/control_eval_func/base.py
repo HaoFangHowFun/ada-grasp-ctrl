@@ -53,6 +53,7 @@ class BaseEval:
             None.
         """
         self.input_npy_path = input_npy_path
+        self.episode_recorder = None
         self.configs = configs
         robot_name = self.configs.hand_name
         robot_prefix = self.configs.hand.get("robot_prefix", "rh_" if "allegro" not in robot_name else "")
@@ -209,6 +210,20 @@ class BaseEval:
         ho_contact, hh_contact = self.mj_ho.get_contact_info(init_qpos, init_obj_pose)
         self.mj_ho.udpate_debug_viewer()
 
+        if getattr(self.configs.task, "record_episode", False):
+            from ada_grasp_ctrl.experiments.episode_recording import EpisodeRecorder, configure_scene_viewer
+
+            self.episode_recorder = EpisodeRecorder(
+                self.mj_ho,
+                {
+                    "pregrasp_qpos": pregrasp_qpos.copy(),
+                    "grasp_qpos": grasp_qpos.copy(),
+                    "squeeze_qpos": squeeze_qpos.copy(),
+                },
+            )
+            self.episode_recorder.capture("init")
+            configure_scene_viewer(self.mj_ho.debug_viewer)
+
         # compute target final obj qpos
         lift_height = 0.2
         pre_obj_qpos = deepcopy(self.mj_ho.get_obj_pose())
@@ -225,6 +240,15 @@ class BaseEval:
         invalid_initialization = (
             ho_dist < -eval_config.max_pene or hh_dist < -eval_config.max_pene or contact_force > eval_config.max_force
         )
+        if getattr(self, "episode_recorder", None) is not None:
+            self.episode_recorder.metadata.update(
+                reference_joint_names=list(self.robot.dof_names),
+                initialization={
+                    "hand_object_distance": float(ho_dist),
+                    "hand_hand_distance": float(hh_dist),
+                    "max_contact_force": float(contact_force),
+                },
+            )
         episode_aborted = False
         if invalid_initialization:
             if self.configs.task.debug_viewer or self.configs.task.debug_render:
@@ -268,6 +292,8 @@ class BaseEval:
                         step_outer=self.sim_step_per_action // 5,
                         step_inner=5,
                     )
+                    if getattr(self, "episode_recorder", None) is not None:
+                        self.episode_recorder.capture("lift", command=q_a)
 
                 # terminal state
                 obj_pose = self.mj_ho.get_obj_pose()
@@ -286,6 +312,13 @@ class BaseEval:
             method_name=self.method_name,
         )
         self.grasp_ctrl.save_recorded_data(path=str(save_path), episode_status=status.value)
+        if getattr(self, "episode_recorder", None) is not None:
+            self.episode_recorder.capture("terminal")
+            self.episode_recorder.save(save_path, status.value)
+        if getattr(self.configs.task, "hold_terminal_viewer", False):
+            from ada_grasp_ctrl.experiments.episode_recording import hold_viewer
+
+            hold_viewer(self.mj_ho.debug_viewer)
 
         # -------------------------------------------------------------------------------
         # Compare the resulted object pose

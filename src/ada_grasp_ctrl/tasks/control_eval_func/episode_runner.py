@@ -131,6 +131,10 @@ class DummyArmEpisodeRunner:
             step_outer=self.sim_step_per_action // 5,
             step_inner=5,
         )
+        recorder = getattr(self.evaluator, "episode_recorder", None)
+        if recorder is not None:
+            segment = "approach" if step.waypoint_index < len(self.path_approach) else "squeeze"
+            recorder.capture(segment, step.target_qpos_f, control.target_qpos_a)
 
         record = self.grasp_ctrl.r_data
         record["obj_pose"].append(step.object_pose)
