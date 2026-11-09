@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "mount_calibrated": false,
+  "source_url": "https://github.com/MSC-UCB/bimanual_manipulation",
+  "sources": {
+    "fanuc_macro": {
+      "path": "/home/hao-fang/ws_fanuc/src/fanuc_description/fanuc_crx_description/urdf/crx5ia_urdf_macro.xacro",
+      "sha256": "1ca7d43b3f31919a71da4670c64d474dee3056db62f6963220c99b6019cc2f5c"
+    },
+    "base_mounts": {
+      "path": "/home/hao-fang/ws_fanuc/src/dual_crx_control/urdf/dual_crx.urdf.xacro",
+      "sha256": "99f57a550ae929d021ecc67c25c8e83d1861e0ce1c961975ffdbdf4354c2981b"
+    },
+    "hand_mounts": {
+      "path": "/home/hao-fang/ws_fanuc/src/bimanual_manipulation/config/hand_mounts.yaml",
+      "sha256": "38054cc907ce49bcdf620e65218c2297f4a5f113988661570aedc262c963fded"
+    },
+    "assembly_reference": {
+      "path": "/home/hao-fang/ws_fanuc/src/bimanual_manipulation/bimanual_manipulation/composite_description.py",
+      "sha256": "e29d63d4dec125a1c9f2473a63444cad01b5d637a41160a6fd4095f932908651"
+    },
+    "grasp_dataset": {
+      "path": "/home/hao-fang/hugs-workspace/HUGS-DexLearn/dexlearn/dataset/robot_multidex.py",
+      "sha256": "bd3fa1797c99f3f1d2ae0dc5b404330ab1a69e3bb83a2ba949700a3f656d38d1"
+    },
+    "grasp_export": {
+      "path": "/home/hao-fang/hugs-workspace/HUGS-DexLearn/dexlearn/task/sample.py",
+      "sha256": "8815698df7901f8c7bcf2e4a905221c4d5c4b1433b991d5034abf2cdd3eefb11"
+    },
+    "initial_task_config": {
+      "path": "/home/hao-fang/ws_fanuc/src/bimanual_manipulation/config/right_arm_hand_task.yaml",
+      "sha256": "781f0c29df6d93b8aad5f83fd7c69b63aa2133a7b15ec876d92ae3d495cd3b0c"
+    },
+    "initial_pose_reference": {
+      "path": "/home/hao-fang/ws_fanuc/src/dual_crx_control/config/initial_pose.yaml",
+      "sha256": "dc0feb63b3e0a579d667c63356249c8d73c117e29c418be292ac44fc1061ba4b"
+    }
+  },
+  "generated_arm_sha256": "85851f0fbc7627ed14c73f42fab7836b3bc1b507caca0a0e2c09e78fa5c8cc86",
+  "hand_mount_rpy": [
+    3.14159265359,
+    -1.57079665359,
+    0.0
+  ],
+  "source_pose_evidence": {
+    "dataset": "robot_multidex.py: global_pose and world point cloud, then subtract pc_centroid",
+    "export": "sample.py:_decenter_robot_pose restores pc_centroid before saving pregrasp/grasp/squeeze_qpos"
+  },
+  "revisions": {
+    "fanuc_description": "fb40c9803a826ba68c7c8e28ba904a25efa7fcd2",
+    "dual_crx_control": "c0c25931b62f408eb0ed238d40ef305efd16387c",
+    "bimanual_manipulation": "a7a10b2e75b88ffa3b2704266d57041a0c3e497b"
+  }
+}
