@@ -165,9 +165,10 @@ def _build_grasp_controller(configs: Any) -> GraspController:
     from ada_grasp_ctrl.utils.pin_helper import PinocchioHelper
     from ada_grasp_ctrl.utils.robot_adaptor import RobotAdaptor
 
-    robot_prefix = "rh_" if "allegro" not in configs.hand_name else ""
+    robot_prefix = configs.hand.get("robot_prefix", "rh_" if "allegro" not in configs.hand_name else "")
     robot = RobotFactory.create_robot(robot_type=configs.hand_name, prefix=robot_prefix)
-    robot_model = PinocchioHelper(robot_file_path=robot.get_file_path("mjcf"), robot_file_type="mjcf")
+    file_type = configs.hand.get("kinematics_file_type", "mjcf")
+    robot_model = PinocchioHelper(robot_file_path=robot.get_file_path(file_type), robot_file_type=file_type)
     robot_adaptor = RobotAdaptor(
         robot_model=robot_model,
         dof_names=robot.dof_names,

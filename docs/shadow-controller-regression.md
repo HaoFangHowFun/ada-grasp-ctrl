@@ -1,5 +1,7 @@
 # Shadow controller：固定 2,000 次評估流程
 
+2026-11-09 更新：使用者已完成完整 2,000 次評估，見[Sharpa／Shadow 完整評估紀錄](sharpa-shadow-full-evaluation-2026-11-09.md)。下方首次實作與 workers 更新段落保留當時驗證範圍。
+
 ## 已確認的規模與用途
 
 依使用者決定，以 Ada 隨附資產為準，總共 2,000 次評估，不是 200 個不同物體：
@@ -130,7 +132,7 @@ bash script/test_shadow_controller.sh --prepare-only
 
 有物理抓取 failure 不必然導致非零退出；這沿用 native 應用程式退出語意。反之，**即使退化與基準完全相同，仍會返回 1**，不會為了讓 CI 變綠而吞掉 solver_degraded。需搭配 `baseline_delta.json` 區分「已存在的退化」與「這次新增的退步」。目前比較是分類層級，不是完整軌跡 golden gate。
 
-## 成本與本次驗證
+## 成本與首次實作驗證
 
 先前 40 筆的原生資產測試，eval manifest 到 report 的時間約 Phase 1 8.5 秒、Phase 2 37.5 秒；記錄約 8 MB 與 30 MB。以比例估算，1,000 筆／phase 約 **20 分鐘、約 1 GB／次**，但 optimizer 的接觸數／收斂速度、序列執行、CPU 負載會使實際時間不同，並非完成時間保證。這不含首次準備時間。
 
@@ -143,7 +145,7 @@ bash script/test_shadow_controller.sh --prepare-only
 - 135 個 unit tests 通過；全專案 Ruff check、compileall 通過；新增檔案 format check 通過。全專案 format check 尚有 8 個既有、無關檔案不符，未順手改動。
 - shell 語法與獨立 preview help 入口通過。
 
-**尚未執行完整 2,000 次，也尚未建立完整控制結果基準。** 本次先完成自動化、固定輸入及小規模重複驗證，之後用上方正式指令建立你的完整 baseline。這是額外的 controller 實驗工具，不取代現有 quick release gate。
+首次實作時尚未執行完整 2,000 次，僅完成自動化、固定輸入及小規模重複驗證。2026-11-09 已完成首輪完整結果，詳見頁首連結；此工具不取代現有 quick release gate，也沒有自動升格或替換 golden。
 
 ## CPU workers 更新
 
@@ -155,4 +157,4 @@ bash script/test_shadow_controller.sh --workers 8 --output-root output/regressio
 
 worker 數記錄在 experiment manifest 與 resolved config。保留完整 suite 的 sample_index、seed、原始結果排序及既有錯誤回報；不調整 BLAS threads。`progress.jsonl` 依輸入順序寫入，較慢案例完成前可能暫無進度輸出，其他 workers 仍可繼續運算。
 
-本次更新僅做靜態檢查，未啟動模擬或完整回歸。先前的小規模測速請見 [worker benchmark](shadow-controller-worker-benchmark.md)；完整 2,000 次結果仍待實際執行。
+workers 預設值更新當時僅做靜態檢查；先前的小規模測速請見 [worker benchmark](shadow-controller-worker-benchmark.md)。後續使用 8 workers 的完整 2,000 次結果見頁首連結。

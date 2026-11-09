@@ -1,0 +1,10 @@
+# Private controller experiment; not in the public control_eval support matrix.
+xml_path: ${asset_root}/sharpa_right.xml
+kinematics_file_type: urdf
+robot_prefix: ""
+contact_body_prefixes: [right_]
+mocap: false
+dummy_arm: true
+controller:
+  final_sum_force: 15.0 # Provisional, inherited from the earlier Sharpa experiment.
+exclude_table_contact: null
