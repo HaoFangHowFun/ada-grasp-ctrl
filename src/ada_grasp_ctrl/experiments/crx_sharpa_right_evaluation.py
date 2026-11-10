@@ -20,6 +20,12 @@ from ada_grasp_ctrl.schema import load_npy_record, validate_grasp_record
 from ada_grasp_ctrl.tasks.control_eval_func.base import BaseEval
 from ada_grasp_ctrl.tasks.control_eval_func.optimized_runner import WrenchControlPolicy, run_wrench_control_episode
 from ada_grasp_ctrl.tasks.control_eval_func.tabletop_dummy_arm_op import tabletopDummyArmOpEval
+from .crx_sharpa_right_approach import (
+    HEIGHT_M,
+    INITIALIZATION_SEGMENTS,
+    actual_palm_error,
+    prepare_approach,
+)
 from .crx_sharpa_right_model import JOINTS, matrix_pose
 from .crx_sharpa_right_preparation import RightKinematics, json_write, load_preview
 from .crx_sharpa_right_simulation import ApprovedScene, RightCrxSharpa, invalid_initialization
@@ -30,7 +36,7 @@ from .sharpa_regression import phase_config
 
 STATUSES = ("success", "physical_failure", "ik_invalid", "initialization_invalid", "solver_degraded", "execution_error")
 PROTOCOL = {
-    "name": "crx-sharpa-right-smoke-v2-base-j1-exclusion",
+    "name": "crx-sharpa-right-smoke-v3-overhead-30cm",
     "collision_exclusions_added": [["right_base_link", "right_J1_link"]],
     "collision_fix": "Exclude adjacent bearing surfaces; retain all arm/environment contacts",
     "evaluation_seed": 12,
@@ -46,8 +52,15 @@ PROTOCOL = {
     "control_frequency_hz": 10,
     "physics_timestep_s": 0.004,
     "offsets_m": [0],
-    "initialization": "config initial_qpos; shared open-loop motion to pregrasp, minimum 2 s",
-    "home_path_precheck": "61 linearly interpolated configurations; not a continuous collision-free proof",
+    "initialization": "config open hand; raise, move above object, align, then descend to frozen pregrasp",
+    "overhead_reference": "right_hand_C_MC (palm) above registered object pose center",
+    "overhead_height_m": HEIGHT_M,
+    "approach_linear_speed_m_s": 0.1,
+    "approach_angular_speed_rad_s": 0.5,
+    "approach_settle_timeout_s": 3.0,
+    "approach_arrival_position_tolerance_m": 0.001,
+    "approach_arrival_angle_tolerance_rad": 0.01,
+    "home_path_precheck": "Cartesian IK action targets plus 5 joint interpolation substeps; sampled collision checks",
     "control": "native op and coordinated ours; native 2 s approach/2 s squeeze references and ours stop policy",
     "lift": "20 Cartesian Z targets over 2 s, total 0.2 m, bounded continuous-seed flange IK",
     "lift_branch_step_limit_rad": 0.35,
@@ -55,7 +68,7 @@ PROTOCOL = {
     "success_rule": "abs((object_z_at_control_start + 0.2) - terminal_object_z) < 0.1",
     "differences_from_dummy": [
         "real CRX joints, limits, gains and bounded IK",
-        "config-to-pregrasp motion",
+        "config-to-overhead-to-pregrasp motion with actual arrival checks",
         "arm/table collisions retained and recorded",
         "Cartesian lift trajectory",
     ],
@@ -67,6 +80,10 @@ PROTOCOL = {
         "success or physical_failure after completed lift",
     ],
 }
+
+
+class ApproachInvalidError(RuntimeError):
+    """The shared initialization path collided or failed to reach a waypoint."""
 
 
 class LiftIKError(RuntimeError):
@@ -99,6 +116,7 @@ class RightEvaluator(BaseEval):
             },
         )
         self.lift_diagnostics: list[dict] = []
+        self.approach_diagnostics: list[dict] = []
 
     def motion(self, path: np.ndarray, segment: str) -> None:
         """Execute reference positions through the native actuator interpolation API."""
@@ -108,6 +126,37 @@ class RightEvaluator(BaseEval):
                 self.mj_ho.get_qpos_a(), target, self.robot.doa_names, step_outer=5, step_inner=5
             )
             self.episode_recorder.capture(segment, reference=target, command=target)
+
+    def overhead_approach(self, plan: dict) -> None:
+        """Execute the shared overhead route, requiring measured arrival before each handoff."""
+        sim = self.mj_ho
+        for segment in plan["segments"]:
+            name = segment["name"]
+            allow_contact = name == "descend_to_pregrasp"
+
+            def check_contacts() -> None:
+                contacts = sim.contact_diagnostics()
+                if (
+                    invalid_initialization(contacts)
+                    or sim.collision_history
+                    or (not allow_contact and sim.get_curr_contact_info())
+                ):
+                    raise ApproachInvalidError(f"Unexpected contact during {name}: {contacts}")
+
+            for target in segment["path"]:
+                self.motion(np.asarray([target]), name)
+                check_contacts()
+            diagnostic = actual_palm_error(sim, segment["target_palm_wxyz"])
+            settled = 0
+            while (diagnostic["position_m"] > 0.001 or diagnostic["orientation_rad"] > 0.01) and settled < 30:
+                self.motion(np.asarray([segment["path"][-1]]), f"settle_{name}")
+                check_contacts()
+                settled += 1
+                diagnostic = actual_palm_error(sim, segment["target_palm_wxyz"])
+            diagnostic.update(segment=name, target_palm_wxyz=segment["target_palm_wxyz"], settle_steps=settled)
+            self.approach_diagnostics.append(diagnostic)
+            if diagnostic["position_m"] > 0.001 or diagnostic["orientation_rad"] > 0.01:
+                raise ApproachInvalidError(f"Did not reach {name} within 3 s settling: {diagnostic}")
 
     def native_grasp(self) -> None:
         """Dispatch only the policy difference; both methods use the native shared runner."""
@@ -153,32 +202,15 @@ def make_config(report: dict, row: dict, output: Path, method: str) -> Any:
     return config
 
 
-def sample_preflight(row: dict, record: dict) -> dict:
-    """Retain input identity while separating IK rejection from initialization/path rejection."""
+def sample_preflight(row: dict, record: dict, model_info: dict) -> dict:
+    """Retain all sample IDs and check the shared overhead route before physics."""
     if not row["all_targets_reachable"]:
         return {"status": "ik_invalid", "reason": "One or more frozen grasp targets failed IK residual tolerance"}
     if any(t["joint_limit_violations"] for t in row["targets"]):
         return {"status": "initialization_invalid", "reason": "A target violates named joint limits"}
     if any(not t["arm_table_clear"] for t in row["targets"]):
         return {"status": "initialization_invalid", "reason": "A frozen target has arm/table penetration"}
-    simulation = ApprovedScene(Path(row["scene_path"]))
-    try:
-        snapshots = []
-        for i, q in enumerate(np.linspace(record["initial_qpos"], record["pregrasp_qpos"], 61)):
-            simulation.reset_pose_qpos(q, record["obj_pose"])
-            diag = simulation.contact_diagnostics()
-            if invalid_initialization(diag):
-                return {
-                    "status": "initialization_invalid",
-                    "reason": "Config-to-pregrasp path penetration",
-                    "waypoint": i,
-                    "diagnostic": diag,
-                }
-            if i in (0, 60):
-                snapshots.append(diag)
-        return {"status": "ready", "initial_and_pregrasp_contacts": snapshots}
-    finally:
-        simulation.close_view_and_render()
+    return prepare_approach(row, record, model_info)
 
 
 def classify(
@@ -245,18 +277,8 @@ def run_episode(row: dict, report: dict, output: Path, method: str, preflight: d
         evaluator.episode_recorder.metadata.update(
             sample_id=row["sample_id"], seed=seed, method=method, reference_joint_names=list(JOINTS), protocol=PROTOCOL
         )
-        duration = max(
-            2.0,
-            float(
-                np.max(
-                    np.abs(record["pregrasp_qpos"] - record["initial_qpos"]) / np.asarray(evaluator.robot.doa_max_vel)
-                )
-            ),
-        )
-        steps = int(np.ceil(duration * 10))
-        evaluator.motion(
-            np.linspace(record["initial_qpos"], record["pregrasp_qpos"], steps + 1)[1:], "home_to_pregrasp"
-        )
+        evaluator.episode_recorder.targets["overhead_palm_wxyz"] = np.asarray(preflight["overhead_palm_wxyz"])
+        evaluator.overhead_approach(preflight)
         diag = sim.contact_diagnostics()
         invalid = invalid_initialization(diag) or bool(sim.collision_history)
         result["post_approach_contacts"] = diag
@@ -268,6 +290,9 @@ def run_episode(row: dict, report: dict, output: Path, method: str, preflight: d
             evaluator.native_grasp()
             evaluator.cartesian_lift(RightKinematics(report["model"]))
             lift_completed = True
+    except ApproachInvalidError as exc:
+        invalid = True
+        result["reason"] = str(exc)
     except ControlSolveEpisodeAbort as exc:
         result["reason"] = str(exc)
     except LiftIKError as exc:
@@ -316,6 +341,7 @@ def run_episode(row: dict, report: dict, output: Path, method: str, preflight: d
                     adaptive_contact_steps=int(adaptive_steps),
                     lift_completed=lift_completed,
                     lift_diagnostics=evaluator.lift_diagnostics,
+                    approach_diagnostics=evaluator.approach_diagnostics,
                     object_z_at_control_start=initial_z,
                     terminal_object_z=terminal_z,
                     object_lift_delta_m=None if initial_z is None else terminal_z - initial_z,
@@ -347,7 +373,7 @@ def run_episode(row: dict, report: dict, output: Path, method: str, preflight: d
 def tracking_diagnostics(frames: list[dict], addresses: list[int]) -> dict:
     """Report measured arm tracking without converting tracking errors into grasp success."""
     diagnostics = {}
-    for segment in ("home_to_pregrasp", "approach", "squeeze", "lift"):
+    for segment in ("home_to_pregrasp", *sorted(INITIALIZATION_SEGMENTS), "approach", "squeeze", "lift"):
         selected = [f for f in frames if f["segment"] == segment and f["command"] is not None]
         if selected:
             errors = [np.max(np.abs(f["qpos"][addresses] - f["command"][:6])) for f in selected]
@@ -370,15 +396,21 @@ def verify_pairs(results: list[dict]) -> dict:
             continue
         records = [load_episode(Path(r["replay_path"])) for r in (a, b)]
         frames = [
-            [f for f in r["frames"] if f["segment"] in ("initial_config", "home_to_pregrasp", "control_initial")]
+            [
+                f
+                for f in r["frames"]
+                if f["segment"] in {"initial_config", "home_to_pregrasp", "control_initial"} | INITIALIZATION_SEGMENTS
+            ]
             for r in records
         ]
         if len(frames[0]) != len(frames[1]):
             raise ValueError(f"Pair initialization length mismatch: {sample_id}")
         for first, second in zip(*frames):
+            if first["segment"] != second["segment"] or first["time"] != second["time"]:
+                raise ValueError(f"Pair initialization stage/time mismatch: {sample_id}")
             for field in ("qpos", "qvel", "ctrl", "act", "object_pose"):
                 np.testing.assert_array_equal(first[field], second[field], err_msg=f"{sample_id}: {field}")
-        for field in (*FIELDS, "initial_qpos"):
+        for field in (*FIELDS, "initial_qpos", "overhead_palm_wxyz"):
             np.testing.assert_array_equal(records[0]["targets"][field], records[1]["targets"][field])
         checked.append(sample_id)
     return {"identical_initial_state_pairs": checked, "pairs_rejected_before_physics": invalid_pairs}
@@ -407,7 +439,7 @@ def run_smoke(preview_root: Path, output: Path, *, prepare_only: bool = False) -
         )
         for row in rows
     }
-    preflight = {row["sample_id"]: sample_preflight(row, records[row["sample_id"]]) for row in rows}
+    preflight = {row["sample_id"]: sample_preflight(row, records[row["sample_id"]], report["model"]) for row in rows}
     output.mkdir(parents=True, exist_ok=False)
     manifest = {
         "schema_version": 1,

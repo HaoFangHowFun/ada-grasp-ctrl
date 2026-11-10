@@ -9,7 +9,9 @@ from unittest.mock import Mock, patch
 import mujoco
 import numpy as np
 
+from ada_grasp_ctrl.experiments.crx_sharpa_right_approach import overhead_pose, interpolate_pose
 from ada_grasp_ctrl.experiments.crx_sharpa_right_evaluation import (
+    ApproachInvalidError,
     LiftIKError,
     RightEvaluator,
     classify,
@@ -25,6 +27,83 @@ from ada_grasp_ctrl.utils.hand_util import MjHO
 
 
 class RightSmokeTest(unittest.TestCase):
+    def test_overhead_is_palm_30cm_above_object_center(self):
+        palm = np.eye(4)
+        palm[:3, 3] = [0.2, -0.9, 0.1]
+        obj = np.array([0.8, -0.7, 0.02, 1, 0, 0, 0])
+        target = overhead_pose(palm, obj)
+        np.testing.assert_allclose(target[:3, 3], [0.8, -0.7, 0.32])
+        np.testing.assert_array_equal(target[:3, :3], palm[:3, :3])
+        np.testing.assert_array_equal(palm[:3, 3], [0.2, -0.9, 0.1])
+
+    def test_cartesian_interpolation_preserves_height_during_overhead_rotation(self):
+        from scipy.spatial.transform import Rotation
+
+        start = np.eye(4)
+        start[:3, 3] = [0.8, -0.7, 0.32]
+        end = start.copy()
+        end[:3, :3] = Rotation.from_euler("xyz", [0.3, 0.8, -0.2]).as_matrix()
+        path = interpolate_pose(start, end, 20)
+        self.assertEqual(len(path), 20)
+        for pose in path:
+            np.testing.assert_allclose(pose[:3, 3], start[:3, 3])
+            np.testing.assert_allclose(pose[:3, :3].T @ pose[:3, :3], np.eye(3), atol=1e-12)
+        np.testing.assert_allclose(path[-1], end, atol=1e-12)
+
+    @staticmethod
+    def approach_evaluator():
+        evaluator = object.__new__(RightEvaluator)
+        evaluator.approach_diagnostics = []
+        evaluator.motion = Mock()
+        evaluator.mj_ho = SimpleNamespace(
+            collision_history=[],
+            get_curr_contact_info=lambda: [],
+            contact_diagnostics=lambda: dict(
+                arm_penetration_m=0, hand_object_penetration_m=0, hand_self_penetration_m=0, hand_table_penetration_m=0
+            ),
+        )
+        return evaluator
+
+    def test_approach_waits_for_actual_overhead_arrival_before_descent(self):
+        evaluator = self.approach_evaluator()
+        plan = {
+            "segments": [
+                dict(name=name, path=[np.zeros(28).tolist()], target_palm_wxyz=[0] * 7)
+                for name in ("orient_above_object", "descend_to_pregrasp")
+            ]
+        }
+        errors = [{"position_m": value, "orientation_rad": 0} for value in (0.02, 0.0005, 0.0005)]
+        with patch("ada_grasp_ctrl.experiments.crx_sharpa_right_evaluation.actual_palm_error", side_effect=errors):
+            evaluator.overhead_approach(plan)
+        self.assertEqual(
+            [c.args[1] for c in evaluator.motion.call_args_list],
+            ["orient_above_object", "settle_orient_above_object", "descend_to_pregrasp"],
+        )
+
+    def test_approach_never_descends_after_arrival_timeout(self):
+        evaluator = self.approach_evaluator()
+        plan = {
+            "segments": [
+                dict(name=name, path=[np.zeros(28).tolist()], target_palm_wxyz=[0] * 7)
+                for name in ("orient_above_object", "descend_to_pregrasp")
+            ]
+        }
+        with patch(
+            "ada_grasp_ctrl.experiments.crx_sharpa_right_evaluation.actual_palm_error",
+            return_value={"position_m": 0.02, "orientation_rad": 0},
+        ):
+            with self.assertRaisesRegex(ApproachInvalidError, "Did not reach"):
+                evaluator.overhead_approach(plan)
+        self.assertEqual(evaluator.motion.call_count, 31)
+        self.assertNotIn("descend_to_pregrasp", [c.args[1] for c in evaluator.motion.call_args_list])
+
+    def test_approach_rejects_object_contact_before_overhead(self):
+        evaluator = self.approach_evaluator()
+        evaluator.mj_ho.get_curr_contact_info = lambda: [{"body1_name": "finger"}]
+        plan = {"segments": [dict(name="raise_clearance", path=[np.zeros(28).tolist()], target_palm_wxyz=[0] * 7)]}
+        with self.assertRaisesRegex(ApproachInvalidError, "Unexpected contact"):
+            evaluator.overhead_approach(plan)
+
     def test_classification_keeps_degradation_out_of_success_denominator(self):
         args = dict(
             error=None,
@@ -48,7 +127,7 @@ class RightSmokeTest(unittest.TestCase):
 
     def test_invalid_targets_keep_both_ids_without_physics(self):
         row = dict(sample_id="g0020", sample_index=20, scale=0.106, object_id="object", all_targets_reachable=False)
-        preflight = sample_preflight(row, {})
+        preflight = sample_preflight(row, {}, {})
         with (
             tempfile.TemporaryDirectory() as directory,
             patch("ada_grasp_ctrl.experiments.crx_sharpa_right_evaluation.RightEvaluator") as constructor,

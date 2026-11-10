@@ -32,9 +32,13 @@ Python 預設 `.conda/bin/python`，可由 `PYTHON_BIN` 覆寫；清除繼承的
 - 初始 28 軸直接使用預覽中的 `initial_qpos`；右臂來源為 `right_arm_hand_task.yaml`
   的 `offline_seed`，J1–J6 為 `[-90, -30, 210, 0, -60, 0]` 度所對應弧度。
   不做示教器 J3 換算。手指使用具名 `open_hand`。
-- 兩方法共享 config→pregrasp 的關節線性參考，至少 2 秒，依關節速度上限延長。
-  先抽查 61 個靜態路徑姿態；這不是連續無碰撞證明。
-  動態接近過程也記錄碰撞；保存實際追蹤誤差，未假定已到達參考。
+- 兩方法共享 config→原地抬高→物體上方 30 cm→上方轉向→原始 pregrasp 的路徑。
+  30 cm 指手掌 frame `right_hand_C_MC` 相對物體 pose 中心的 world Z 差；X／Y 對準物體中心。
+  先保持 config 的 open hand，在上方完成對準後才於下降途中插值到原 pregrasp 手指姿態。
+  每段至少 2 秒，平移參考速度上限 0.1 m/s、姿態角速度上限 0.5 rad/s，另檢查關節速度。
+  每個 Cartesian IK 目標及五個關節插值子步皆做靜態碰撞檢查；這不是連續無碰撞證明。
+  到達每段終點後最多保持 3 秒，實際手掌位置誤差須 ≤1 mm、角度誤差 ≤0.01 rad 才繼續。
+  上方對準之前出現手物接觸會拒絕執行；下降及 pregrasp 保留原手部穿透 gate。
 - op 與 ours 分別使用原生 open-loop／coordinated policy，重用 shared episode runner。
   保留既有 approach／squeeze 參考、ours 終止規則及 solver `apply_candidate` 政策。
   拒絕的有限 solver candidate 即使按政策套用，該 episode 仍是 degraded。
@@ -138,3 +142,34 @@ bash script/replay_crx_sharpa_right.sh \
 碰撞殼預設關閉；勾選 `Collision geometry` 才顯示，透過同步可見性更新網頁物件。
 這只控制畫面，不修改碰撞計算或已保存軌跡。回放不執行新的物理步進。
 必須指定同時有 op／ours 回放的樣本；缺失會拒絕啟動。Ctrl+C 關閉 server。
+
+
+## 上方 30 cm 接近流程（v3）
+
+使用者要求先移到物體上方 30 cm 再開始 pregrasp；本版按上述手掌／物體中心定義實作。
+與 v2 相比，只改接近路徑與實際到位銜接；原始 grasp targets、物體位置、模型／gain、
+原生 op／ours、摩擦、抓取時序及 lift／success 門檻沿用。
+protocol 為 `crx-sharpa-right-smoke-v3-overhead-30cm`。
+`preflight.json` 保存全部分段關節路徑和手掌目標，`approach_diagnostics` 保存實際到位姿態、
+誤差與等待步數。兩方法核對全部接近／等待 frame、時間及 overhead target 完全一致。
+
+最終測試：`output/regression/crx-sharpa-right-smoke/20261110T010645248343Z-21280/run_report.json`。
+
+| g0000 方法 | 狀態 | 物體實際抬升 | 接觸控制步數 |
+| --- | --- | ---: | ---: |
+| op | success | 0.180868 m | 34 / 40 |
+| ours | success | 0.179789 m | 31 / 40 |
+
+兩者的上方目標均為手掌 `(0.8, -0.7, 0.320790)` m；上方轉向後位置誤差約 0.90 mm，
+下降到 pregrasp 後約 0.53 mm。每筆完整執行 19.1 秒模擬時間、4,775 個 physics steps，
+沒有 execution error、solver degradation 或記錄到超標碰撞事件。
+
+8 個預期 pairs 全部有狀態：2 success、2 initialization_invalid、4 ik_invalid；missing=0。
+g0010 仍有 frozen target 手臂穿桌，g0020 原始 IK 不可達；g0030 在上方轉向時
+未通過 IK 分支／單步速度連續性檢查，保留原 ID，不強行跳到另一個解。
+每方法 success/selected=1/4，success/(success+physical_failure)=1/1。
+這只證明 g0000 的兩筆成功；四尺度 smoke 驗收仍未完成，也未啟動完整 2,000 筆。
+
+23 項右側測試及全專案 191 項單元測試通過；Ruff check、變更檔案格式、compileall 通過。
+新增測試涵蓋 30 cm 定義、上方轉向保持高度、到位後才下降、逾時停止及提前接觸拒絕。
+重開此輪回放時，將上一節指令的 run root 換成上述新目錄；碰撞殼仍預設隱藏。
