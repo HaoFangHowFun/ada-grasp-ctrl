@@ -1,0 +1,10 @@
+# Pass to bimanual_system.launch.py camera_config:=<absolute path>.
+# Only fixed is enabled; do not start a second driver for this serial.
+fixed:
+  serial_no: '347322060270'
+  color_profile: '640x480x30'
+  depth_profile: '640x480x30'
+  enable_depth: true
+  enable_pointcloud: true
+  publish_tf: true
+  enable_sync: true
