@@ -2,8 +2,8 @@
 
 本入口完成 Task 01 的第一個里程碑：使用 frozen suite 的真實物體、右手模型和抓取目標，
 建立右 CRX 的共用場景與 IK preparation，提供靜態預覽。**不執行物理步進、控制器或 lift**。
-使用者確認擺位後，才接續右側 op／ours runner、8 次 smoke 與完整 2,000 個 pairs；
-這三項尚未執行，也不以既有 dummy-arm 結果代替。
+使用者確認擺位後，已新增獨立右側 op／ours runner 並執行四尺度 smoke；
+結果與重跑方式見 [右側 smoke 測試](crx-sharpa-right-smoke.md)。完整 2,000 個 pairs 尚未執行。
 
 ## 執行與重開
 
@@ -84,7 +84,7 @@ IK 使用連續 seed 與固定 fallback seeds，並優先採用無手臂穿桌�
 在固定 seeds 與求解設定下，g0000／g0030 的三目標通過 IK 且無手臂穿桌；
 g0010 通過 IK，但三目標均有手臂穿桌；g0020 未通過 IK，位置誤差約 29–31 mm。
 這不是完整工作空間證明。四筆物體底面保留來源約 0.15–0.33 mm 的桌面微小穿透，未自動抬高。
-相對抓取位姿不變性檢查通過；home→pregrasp 路徑與右 CRX 控制評估均尚未執行。
+相對抓取位姿不變性檢查通過；後續 home→pregrasp 路徑與動態測試結果見上述 smoke 文件。
 
 單元測試涵蓋 config 的角度單位與具名手部關節、剛體搬移不變性、尺度只套用一次、
 錯誤 pose/frame、名稱映射、零 physics steps 與 hash 漂移。
