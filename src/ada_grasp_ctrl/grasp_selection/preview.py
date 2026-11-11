@@ -26,6 +26,14 @@ def transform_points(points: np.ndarray, transform: np.ndarray) -> np.ndarray:
     return points @ transform[:3, :3].T + transform[:3, 3]
 
 
+def display_without_contact_checks(adapter: CrxSharpaAdapter, q: np.ndarray) -> None:
+    """Update display geometry only; the optional lift is not collision/path checked."""
+    adapter.data.qpos[adapter.addresses] = q
+    adapter.data.qvel[:] = 0
+    mujoco.mj_kinematics(adapter.model, adapter.data)
+    mujoco.mj_comPos(adapter.model, adapter.data)
+
+
 def load_entries(summary_path: Path) -> list[dict]:
     """Verify saved inputs and selected endpoint FK without rerunning IK or inference."""
     summaries = json.loads(summary_path.read_text())
@@ -174,13 +182,20 @@ def render_images(entries: list[dict], output: Path) -> None:
                 picture.save(output / f"group{entry['group']}_{'closeup' if close else 'overview'}.png")
 
 
-def serve(entries: list[dict], port: int, duration_s: float = 0) -> None:
+def serve(
+    entries: list[dict],
+    port: int,
+    duration_s: float = 0,
+    status_path: Path | None = None,
+    execution_gate: bool = False,
+) -> None:
     """Serve all five datasets on one port with phase, playback and target controls."""
     import viser
     import trimesh
     from mjviser import ViserMujocoScene
+    from ada_grasp_ctrl.pipeline.plan import phase_progress, sample_plan, phase_at_progress
 
-    server = viser.ViserServer(host="127.0.0.1", port=port, label="五組抓取候選 · 右 CRX + Sharpa")
+    server = viser.ViserServer(host="127.0.0.1", port=port, label="抓取候選 · 右 CRX + Sharpa")
     if server.get_port() != port:
         server.stop()
         raise RuntimeError(f"Port {port} is occupied; refusing another port")
@@ -193,8 +208,18 @@ def serve(entries: list[dict], port: int, duration_s: float = 0) -> None:
     collision = server.gui.add_checkbox("顯示碰撞幾何", initial_value=False)
     ghosts = server.gui.add_checkbox("顯示原始抓取目標", initial_value=True)
     camera = server.gui.add_dropdown("視角", options=["全景", "手與物體"], initial_value="全景")
-    server.gui.add_markdown(
-        "**僅供預覽，未驗證執行路徑。**\n\n"
+    planned = any("plan" in entry for entry in entries)
+    gate_note = (
+        "\n\n選好測資後，在終端按 Enter 執行這一組。沒有按 Enter 不會送出動作。"
+        if execution_gate
+        else "\n\n此模式只預覽，不會送出動作命令。"
+    )
+    banner = server.gui.add_markdown(
+        "**Mock 抓取預覽**\n\n從實際量測的手臂與手指姿態開始，使用執行端的五次插值與規劃時間。"
+        + gate_note
+        + "\n\n這是命令預覽，尚未驗證完整環境與實機路徑。"
+        if planned
+        else "**僅供預覽，未驗證執行路徑。**\n\n"
         "播放依序呈現目前手臂 → pregrasp → grasp → squeeze。插值不是規劃好的運動路徑。\n\n"
         "初始手指使用 pregrasp 目標；目前手指狀態未量測。物體是單視角表面，標定與桌面尚待驗收。"
     )
@@ -235,10 +260,27 @@ def serve(entries: list[dict], port: int, duration_s: float = 0) -> None:
             dt, last = min(now - last, 0.1), now
             entry = labels[choice.value]
             adapter = entry["adapter"]
+            stages = entry.get("plan", {}).get("phases", list(STAGES))
             if state["choice"] != choice.value:
+                phase.options = ["目前手臂", *stages]
+                if "plan" in entry:
+                    environment = "實機" if entry["plan"]["environment"] == "hardware" else "Mock"
+                    banner.content = (
+                        f"**{environment} 抓取預覽**\n\n"
+                        + " → ".join(["目前姿態", *stages])
+                        + gate_note
+                        + "\n\n使用執行端的插值與時間；完整實機路徑尚未驗證。"
+                    )
                 server.scene.reset()
                 scene = ViserMujocoScene(server, adapter.model, num_envs=1)
                 scene.camera_tracking_enabled = False
+                if "environment_points" in entry:
+                    server.scene.add_point_cloud(
+                        "/environment_points",
+                        points=entry["environment_points"],
+                        colors=(110, 130, 150),
+                        point_size=0.002,
+                    )
                 surface = entry["surface"]
                 server.scene.add_mesh_trimesh(
                     "/measured_surface",
@@ -272,12 +314,22 @@ def serve(entries: list[dict], port: int, duration_s: float = 0) -> None:
                         axes_radius=0.001,
                     )
                     if entry["keyframes"] is not None:
-                        adapter.static_check(entry["keyframes"][i + 1])
+                        if stage in ("lift", "hold", "release", "return"):
+                            display_without_contact_checks(adapter, entry["keyframes"][i + 1])
+                        else:
+                            adapter.static_check(entry["keyframes"][i + 1])
                         v, f = hand_mesh(adapter.model, adapter.data, target)
                         server.scene.add_mesh_simple(
-                            f"/targets/ghost_{stage}", vertices=v, faces=f, color=COLORS[i], opacity=0.18, side="double"
+                            f"/targets/ghost_{stage}",
+                            vertices=v,
+                            faces=f,
+                            color=COLORS[i % len(COLORS)],
+                            opacity=0.18,
+                            side="double",
                         )
                 state.update(choice=choice.value, scene=scene, overlay=overlay, seek=200 / 3, phase="grasp")
+                if "plan" in entry:
+                    state["seek"] = phase_progress(entry["plan"], stages.index("grasp") + 1)
                 phase.value = "grasp"
                 for client in server.get_clients().values():
                     set_camera(client)
@@ -285,32 +337,92 @@ def serve(entries: list[dict], port: int, duration_s: float = 0) -> None:
                     f"PREVIEW_READY group={entry['group']} selected={entry['result']['selected_candidate_id']}",
                     flush=True,
                 )
+                if status_path is not None:
+                    temporary = status_path.with_suffix(".tmp")
+                    write_json(
+                        temporary,
+                        {
+                            "group": entry["group"],
+                            "selected": entry["result"]["selected_candidate_id"],
+                            "selection_sha256": entry["selection_sha256"],
+                            "ready": True,
+                            "phases": list(stages),
+                            "phase_progress": {
+                                stage: phase_progress(entry["plan"], i + 1) for i, stage in enumerate(stages)
+                            }
+                            if "plan" in entry
+                            else {},
+                            "execution_error": entry.get("execution_error"),
+                        },
+                    )
+                    temporary.replace(status_path)
             if phase.value != state["phase"]:
                 state["phase"] = phase.value
-                state["seek"] = ["目前手臂", *STAGES].index(phase.value) * 100 / 3
+                state["seek"] = ["目前手臂", *stages].index(phase.value) * 100 / len(stages)
+                if "plan" in entry:
+                    state["seek"] = phase_progress(entry["plan"], ["目前手臂", *stages].index(phase.value))
                 play.value = False
             if state["seek"] is not None:
                 state["progress"], state["seek"] = float(state["seek"]), None
             elif play.value and server.get_clients():
-                state["progress"] = (state["progress"] + dt * float(speed.value[:-1]) * 100 / 9) % 100
+                total = (
+                    sum(entry["plan"]["durations_s"]) + len(stages) * entry["plan"]["settle_time_s"]
+                    if "plan" in entry
+                    else 9
+                )
+                state["progress"] = (state["progress"] + dt * float(speed.value[:-1]) * 100 / total) % 100
             state["overlay"].visible = ghosts.value
             result = entry["result"]
             if entry["keyframes"] is not None:
-                diagnostic = adapter.static_check(interpolate(entry["keyframes"], state["progress"]))
-                known = "通過" if diagnostic["known_geometry_passed"] else "**碰撞超過既有門檻**"
-                info.content = (
-                    f"**{entry['label']} · {result['selected_candidate_id']}**\n\n"
-                    f"關節位移成本：{result['cost']:.6f} rad²\n\n"
-                    f"目前顯示姿態的既有穿透門檻檢查：{known}\n\n"
-                    f"手臂穿透 {diagnostic['arm_penetration_m'] * 1000:.3f} mm；"
-                    f"手指自身穿透 {diagnostic['hand_self_penetration_m'] * 1000:.3f} mm；"
-                    f"手／桌穿透 {diagnostic['hand_table_penetration_m'] * 1000:.3f} mm。\n\n"
-                    "手部穿透容許值沿用既有實驗的 10 mm，並非零碰撞保證。\n\n"
-                    "物體／其他環境碰撞未驗證；未執行物理模擬或抓取。"
+                q = (
+                    sample_plan(entry["plan"], state["progress"])
+                    if "plan" in entry
+                    else interpolate(entry["keyframes"], state["progress"])
                 )
+                plan = entry.get("plan", {})
+                lift_start = (
+                    (sum(plan["durations_s"][: stages.index("lift")]) + stages.index("lift") * plan["settle_time_s"])
+                    / (sum(plan["durations_s"]) + len(stages) * plan["settle_time_s"])
+                    * 100
+                    if "lift" in stages
+                    else 101
+                )
+                if state["progress"] >= lift_start:
+                    display_without_contact_checks(adapter, np.asarray(q))
+                    current_phase = phase_at_progress(plan, state["progress"])
+                    info.content = (
+                        f"**{entry['label']} · {result['selected_candidate_id']} · {current_phase}**\n\n"
+                        "抬升與回程不參與候選篩選，未做路徑／碰撞檢查。\n\n"
+                        + (
+                            f"抬升到位後保持夾緊 {plan['cycle']['hold_s']:g} 秒，再張開手、回到手臂起始姿態。\n\n"
+                            if "cycle" in plan
+                            else "手指維持 squeeze 姿態。\n\n"
+                        )
+                        + "顯示手臂目標不代表物體已被抓住或抬起。"
+                    )
+                else:
+                    diagnostic = adapter.static_check(np.asarray(q))
+                    known = "通過" if diagnostic["known_geometry_passed"] else "**碰撞超過既有門檻**"
+                    info.content = (
+                        f"**{entry['label']} · {result['selected_candidate_id']}**\n\n"
+                        f"關節位移成本：{result['cost']:.6f} rad²\n\n"
+                        f"目前顯示姿態的既有穿透門檻檢查：{known}\n\n"
+                        f"手臂穿透 {diagnostic['arm_penetration_m'] * 1000:.3f} mm；"
+                        f"手指自身穿透 {diagnostic['hand_self_penetration_m'] * 1000:.3f} mm；"
+                        f"手／桌穿透 {diagnostic['hand_table_penetration_m'] * 1000:.3f} mm。\n\n"
+                        "手部穿透容許值沿用既有實驗的 10 mm，並非零碰撞保證。\n\n"
+                        "物體／其他環境碰撞未驗證；未執行物理模擬或抓取。"
+                    )
             else:
                 play.value = False
                 info.content = "**沒有可行候選。** 原始目標僅供定位；不播放失敗 IK 解。"
+            if entry.get("execution_error"):
+                info.content = (
+                    "**動作目標產生失敗，此組無法執行。**\n\n"
+                    + entry["execution_error"]
+                    + "\n\n保留原本選中的 grasp；目前只顯示抓取三階段。\n\n"
+                    + info.content
+                )
             scene = state["scene"]
             scene.geom_groups_visible[0] = scene.geom_groups_visible[3] = collision.value
             scene._sync_visibilities()

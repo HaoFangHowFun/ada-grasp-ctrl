@@ -1,0 +1,29 @@
+# Local experimental CRX/Sharpa pipeline. Hardware requires explicit backend selection.
+schema_version: 1
+environment: mock
+ros_domain_id: 88
+ros_python: /usr/bin/python3
+ros_setup: /opt/ros/jazzy/setup.bash
+workspace_setup: /home/hao-fang/ws_fanuc/install/setup.bash
+dexlearn_python: /home/hao-fang/hugs-workspace/HUGS-DexLearn/.venv/bin/python
+dexlearn_root: /home/hao-fang/hugs-workspace/HUGS-DexLearn
+model_report: output/regression/crx-sharpa-right-preview-x080-y070-config-v1/preview_report.json
+gallery: output/fixed_camera/five_objects_gallery/manifest.json
+camera_config: src/ada_grasp_ctrl/config/experiments/fixed_camera.yaml
+extrinsics: /home/hao-fang/hugs-workspace/agent_tasks/camera_extrinsics_20261107_640x480.json
+table_plane: output/fixed_camera/table_recalibration_20261110_213933/fit/table_plane.json
+inference_reference: output/fixed_camera/green_pear_grasps_20261109_v1/candidates.json
+samples: 8
+seed: 4
+device: cuda:0
+# Applied only after selection; excluded from candidate IK/path filtering.
+above_object_clearance_m: 0.10
+above_object_hand_factor: 1.5
+# Finger arrival tolerance, radians; arm arrival tolerance remains 0.01 rad.
+hand_tolerance: 0.06
+# Record finger tracking error without requiring finger arrival; arm arrival remains required.
+hand_arrival_required: false
+lift_height_m: 0.05
+# After lift arrival, stream the same target, open the hand, then return the arm.
+complete_cycle: true
+hold_s: 5.0
