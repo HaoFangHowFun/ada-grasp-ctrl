@@ -1,0 +1,262 @@
+schema_version: 1
+units: radians/meters
+right_joint_names:
+- right_thumb_CMC_FE
+- right_thumb_CMC_AA
+- right_thumb_MCP_FE
+- right_thumb_MCP_AA
+- right_thumb_IP
+- right_index_MCP_FE
+- right_index_MCP_AA
+- right_index_PIP
+- right_index_DIP
+- right_middle_MCP_FE
+- right_middle_MCP_AA
+- right_middle_PIP
+- right_middle_DIP
+- right_ring_MCP_FE
+- right_ring_MCP_AA
+- right_ring_PIP
+- right_ring_DIP
+- right_pinky_CMC
+- right_pinky_MCP_FE
+- right_pinky_MCP_AA
+- right_pinky_PIP
+- right_pinky_DIP
+left_joint_names:
+- left_thumb_CMC_FE
+- left_thumb_CMC_AA
+- left_thumb_MCP_FE
+- left_thumb_MCP_AA
+- left_thumb_IP
+- left_index_MCP_FE
+- left_index_MCP_AA
+- left_index_PIP
+- left_index_DIP
+- left_middle_MCP_FE
+- left_middle_MCP_AA
+- left_middle_PIP
+- left_middle_DIP
+- left_ring_MCP_FE
+- left_ring_MCP_AA
+- left_ring_PIP
+- left_ring_DIP
+- left_pinky_CMC
+- left_pinky_MCP_FE
+- left_pinky_MCP_AA
+- left_pinky_PIP
+- left_pinky_DIP
+permutation:
+- 0
+- 1
+- 2
+- 3
+- 4
+- 5
+- 6
+- 7
+- 8
+- 9
+- 10
+- 11
+- 12
+- 13
+- 14
+- 15
+- 16
+- 17
+- 18
+- 19
+- 20
+- 21
+sign:
+- 1
+- 1
+- 1
+- 1
+- 1
+- 1
+- 1
+- 1
+- 1
+- 1
+- 1
+- 1
+- 1
+- 1
+- 1
+- 1
+- 1
+- 1
+- 1
+- 1
+- 1
+- 1
+offset:
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+- 0.0
+local_reflection:
+- - 1.0
+  - 0.0
+  - 0.0
+- - -0.0
+  - -1.0
+  - -0.0
+- - 0.0
+  - 0.0
+  - 1.0
+right_limits:
+- - -0.1745
+  - 1.9199
+- - -0.3491
+  - 0.3491
+- - -0.5236
+  - 1.3963
+- - -0.3491
+  - 0.3491
+- - 0.0
+  - 1.7453
+- - -0.17453293
+  - 1.5708
+- - -0.3491
+  - 0.3491
+- - 0.0
+  - 1.7453
+- - 0.0
+  - 1.3963
+- - -0.17453293
+  - 1.5708
+- - -0.3491
+  - 0.3491
+- - 0.0
+  - 1.7453
+- - 0.0
+  - 1.3963
+- - -0.17453293
+  - 1.5708
+- - -0.3491
+  - 0.3491
+- - 0.0
+  - 1.7453
+- - 0.0
+  - 1.3963
+- - 0.0
+  - 0.2618
+- - -0.17453293
+  - 1.5708
+- - -0.3491
+  - 0.3491
+- - 0.0
+  - 1.7453
+- - 0.0
+  - 1.3963
+left_limits:
+- - -0.1745
+  - 1.9199
+- - -0.3491
+  - 0.3491
+- - -0.5236
+  - 1.3963
+- - -0.3491
+  - 0.3491
+- - 0.0
+  - 1.7453
+- - -0.17453293
+  - 1.5708
+- - -0.3491
+  - 0.3491
+- - 0.0
+  - 1.7453
+- - 0.0
+  - 1.3963
+- - -0.17453293
+  - 1.5708
+- - -0.3491
+  - 0.3491
+- - 0.0
+  - 1.7453
+- - 0.0
+  - 1.3963
+- - -0.17453293
+  - 1.5708
+- - -0.3491
+  - 0.3491
+- - 0.0
+  - 1.7453
+- - 0.0
+  - 1.3963
+- - 0.0
+  - 0.2618
+- - -0.17453293
+  - 1.5708
+- - -0.3491
+  - 0.3491
+- - 0.0
+  - 1.7453
+- - 0.0
+  - 1.3963
+pose_frame: hand_flange or hand_wrist; homogeneous world-from-frame
+flange_to_wrist_xyz:
+- 0
+- 0
+- 0.0005
+wrist_to_palm_xyz:
+- 0
+- 0
+- 0.029
+tcp: No arbitrary TCP or arm mount included; convert to flange before mirroring
+assets:
+  right:
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/right/DP_Visual_HB1_TH.STL: db4e895306f51b7cc369b01b705d276b6d69c773033d7e01c8bafbf2d1ecd7e8
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/right/DP_visual_HB1_4F.STL: 5123fd1776cfc82895f9f0b6ba4098522baaad9ebaaa3110ff1246775cfbd737
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/right/elastomer_HB1_4F.STL: 88b214c5c614b4b5f0c7cf195a90825b41e20745b1b65442854b371ff065e858
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/right/elastomer_HB1_TH.STL: 437f363ca7a40b6e9b9152ebb81db249c51de71565cdb44b7df6e2cdf0da3312
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/right/flange_B.STL: c5051bf5e1ee87cdecc061326d4413b9e6232fe07777e5b3437f4a459a9280bc
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/right/right_MCP_VL_visual.STL: ec48548aaafa6589112e9b609ed58f1b5e7ec0157ca15e0e4e8c93bff706a9d0
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/right/right_MP_visual.STL: af867d754ae0f3d5c38610f72cf4699789c82bb0391c2a406e6924f76e850ec6
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/right/right_PP_visual.STL: aa8b0ac6b6a7769033daa149416035712b23b79af0a7ddeb83d62142f8ff8a14
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/right/right_hand_C_MC_visual.STL: 9234e513974246de38de76ce5f2a48078ebb014e890083219e2bd93caef55b60
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/right/right_pinky_MC_visual.STL: 5ae38bab4f573bd147e5a5e231eb399e2396575884cd36e574235258a048e53b
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/right/right_thumb_CMC_VL_visual.STL: ebaf499965a51e4b539b7ec5481efbddaf2003b69d0e5e72425a430cecd187b0
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/right/right_thumb_MCP_VL_visual.STL: 30d656738130093b7023100c73fac065a173aaba2e4314034c050c984005d634
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/right/right_thumb_MC_visual.STL: 81f4bf8c39117b7bf7a4f0fdeb577948056139a84927adc55e9b049434a41a3b
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/right/right_thumb_PP_visual.STL: 1024905f9af3ad14160ce55d2e1d98fb7028274f7b267bee8b057754eb165faa
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/right/wrist_B.STL: ce978dda8bbfb8ad59cb2f5decf647882d1be67fd758329d40c7c4cefacbf771
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/urdf/right_sharpa_wave_with_flange.urdf: fee5882e3e00c2e5ca3c126fdfc884f745e39f54eea27f61669e4e2901d9ded5
+  left:
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/left/DP_Visual_HB1_TH.STL: 16584576da037618d311cee65a7a459adeae36ae854d0c974c225ceb3c0f145a
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/left/DP_visual_HB1_4F.STL: 5123fd1776cfc82895f9f0b6ba4098522baaad9ebaaa3110ff1246775cfbd737
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/left/elastomer_HB1_4F.STL: 88b214c5c614b4b5f0c7cf195a90825b41e20745b1b65442854b371ff065e858
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/left/elastomer_HB1_TH.STL: 437f363ca7a40b6e9b9152ebb81db249c51de71565cdb44b7df6e2cdf0da3312
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/left/flange_B.STL: c5051bf5e1ee87cdecc061326d4413b9e6232fe07777e5b3437f4a459a9280bc
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/left/left_MCP_VL_visual.STL: 0e8b15c4d8426a26cb222b8c1592f5e913c079aebdc0abaecda273b7d8ed0f3a
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/left/left_MP_visual.STL: 0e9ac7a8208ab2478cdff8ae40036b93e040a05f89ae0c43ece83a62fdf15293
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/left/left_PP_visual.STL: 881e6eeeaecbf0a8bd6b11fa7f41a5aa139900635fe82b765586460c9a9c1580
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/left/left_hand_C_MC_visual.STL: 41301682f7da6d9b9f16d2c9248169a8d257c3c816d4ae8df0258187d06fa54b
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/left/left_pinky_MC_visual.STL: d49c63f5adeca6b1f6e329d7e541b09fdc48259d88aec3ff4c5ac371648cb881
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/left/left_thumb_CMC_VL.STL: 9c862ce10c4958ef967ed46fed837fafb20dd2c84a23ef9ee4f793576ef1fb93
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/left/left_thumb_MCP_VL_visual.STL: 47f990c04f09174666773687f9e4e1b4031dd150481c1d26719bbba874ae0709
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/left/left_thumb_MC_visual.STL: da4fb47f6126ca3b653689aea6d958e08dde7d0c232a3043773e18f447aa121a
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/left/left_thumb_PP_visual.STL: 7f4a561b611af82e27bb5c8d6838d574e71e2ede42d25edf1f57c2b54ebde072
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/meshes/left/wrist_B.STL: ce978dda8bbfb8ad59cb2f5decf647882d1be67fd758329d40c7c4cefacbf771
+    /home/hao-fang/hugs-workspace/HUGS-Sharpa-Assets/urdf/left_sharpa_wave_with_flange.urdf: 493da9388df83698ac8a8dd27a71aa1cbcf7903378b3acfcc107f815e9fe1eb1
