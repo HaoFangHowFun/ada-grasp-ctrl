@@ -195,41 +195,43 @@ def serve(
     from mjviser import ViserMujocoScene
     from ada_grasp_ctrl.pipeline.plan import phase_progress, sample_plan, phase_at_progress
 
-    server = viser.ViserServer(host="127.0.0.1", port=port, label="抓取候選 · 右 CRX + Sharpa")
+    server = viser.ViserServer(host="127.0.0.1", port=port, label="Grasp candidates · Right CRX + Sharpa")
     if server.get_port() != port:
         server.stop()
         raise RuntimeError(f"Port {port} is occupied; refusing another port")
     labels = {f"{e['group']} · {e['label']}": e for e in entries}
-    choice = server.gui.add_dropdown("測資", options=list(labels))
-    phase = server.gui.add_dropdown("姿態", options=["目前手臂", *STAGES], initial_value="grasp")
-    play = server.gui.add_checkbox("播放姿態插值", initial_value=False)
-    progress = server.gui.add_slider("進度 %", min=0, max=100, step=0.1, initial_value=200 / 3)
-    speed = server.gui.add_dropdown("播放速度", options=["0.25x", "0.5x", "1x"], initial_value="0.5x")
-    collision = server.gui.add_checkbox("顯示碰撞幾何", initial_value=False)
-    ghosts = server.gui.add_checkbox("顯示原始抓取目標", initial_value=True)
-    camera = server.gui.add_dropdown("視角", options=["全景", "手與物體"], initial_value="全景")
+    choice = server.gui.add_dropdown("Dataset", options=list(labels))
+    phase = server.gui.add_dropdown("Pose", options=["Current arm", *STAGES], initial_value="grasp")
+    play = server.gui.add_checkbox("Play interpolation", initial_value=False)
+    progress = server.gui.add_slider("Progress %", min=0, max=100, step=0.1, initial_value=200 / 3)
+    speed = server.gui.add_dropdown("Playback speed", options=["0.25x", "0.5x", "1x"], initial_value="0.5x")
+    collision = server.gui.add_checkbox("Show collision geometry", initial_value=False)
+    ghosts = server.gui.add_checkbox("Show original grasp targets", initial_value=True)
+    camera = server.gui.add_dropdown("View", options=["Overview", "Hand and object"], initial_value="Overview")
     planned = any("plan" in entry for entry in entries)
     gate_note = (
-        "\n\n選好測資後，在終端按 Enter 執行這一組。沒有按 Enter 不會送出動作。"
+        "\n\nSelect a dataset, then press Enter in the terminal to execute it. No motion is sent until you press Enter."
         if execution_gate
-        else "\n\n此模式只預覽，不會送出動作命令。"
+        else "\n\nPreview only. No motion commands are sent in this mode."
     )
     banner = server.gui.add_markdown(
-        "**Mock 抓取預覽**\n\n從實際量測的手臂與手指姿態開始，使用執行端的五次插值與規劃時間。"
+        "**Mock grasp preview**\n\nStarts from measured arm and finger positions, "
+        "using the execution runtime's quintic interpolation and planned timing."
         + gate_note
-        + "\n\n這是命令預覽，尚未驗證完整環境與實機路徑。"
+        + "\n\nThis previews the commands. The full environment and hardware motion path have not been validated."
         if planned
-        else "**僅供預覽，未驗證執行路徑。**\n\n"
-        "播放依序呈現目前手臂 → pregrasp → grasp → squeeze。插值不是規劃好的運動路徑。\n\n"
-        "初始手指使用 pregrasp 目標；目前手指狀態未量測。物體是單視角表面，標定與桌面尚待驗收。"
+        else "**Preview only. The execution path has not been validated.**\n\n"
+        "Playback shows current arm → pregrasp → grasp → squeeze. Interpolation is not a planned motion path.\n\n"
+        "Initial fingers use the pregrasp target; current finger positions were not measured. "
+        "The object is a single-view surface; calibration and the table plane await acceptance."
     )
-    info = server.gui.add_markdown("載入中…")
+    info = server.gui.add_markdown("Loading...")
     state: dict[str, Any] = {"choice": None, "seek": 200 / 3, "progress": 200 / 3, "phase": "grasp"}
 
     def set_camera(client: Any) -> None:
         entry = labels[choice.value]
         center = entry["surface"]["vertices"].mean(axis=0)
-        close = camera.value == "手與物體"
+        close = camera.value == "Hand and object"
         target = center + [0, 0, 0.05] if close else np.array([0.35, -0.65, 0.2])
         with client.atomic():
             client.camera.up_direction = np.array([0, 0, 1])
@@ -262,14 +264,15 @@ def serve(
             adapter = entry["adapter"]
             stages = entry.get("plan", {}).get("phases", list(STAGES))
             if state["choice"] != choice.value:
-                phase.options = ["目前手臂", *stages]
+                phase.options = ["Current arm", *stages]
                 if "plan" in entry:
-                    environment = "實機" if entry["plan"]["environment"] == "hardware" else "Mock"
+                    environment = "Hardware" if entry["plan"]["environment"] == "hardware" else "Mock"
                     banner.content = (
-                        f"**{environment} 抓取預覽**\n\n"
-                        + " → ".join(["目前姿態", *stages])
+                        f"**{environment} grasp preview**\n\n"
+                        + " → ".join(["Current pose", *stages])
                         + gate_note
-                        + "\n\n使用執行端的插值與時間；完整實機路徑尚未驗證。"
+                        + "\n\nUses the execution runtime's interpolation and timing. "
+                        "The full hardware motion path has not been validated."
                     )
                 server.scene.reset()
                 scene = ViserMujocoScene(server, adapter.model, num_envs=1)
@@ -358,9 +361,9 @@ def serve(
                     temporary.replace(status_path)
             if phase.value != state["phase"]:
                 state["phase"] = phase.value
-                state["seek"] = ["目前手臂", *stages].index(phase.value) * 100 / len(stages)
+                state["seek"] = ["Current arm", *stages].index(phase.value) * 100 / len(stages)
                 if "plan" in entry:
-                    state["seek"] = phase_progress(entry["plan"], ["目前手臂", *stages].index(phase.value))
+                    state["seek"] = phase_progress(entry["plan"], ["Current arm", *stages].index(phase.value))
                 play.value = False
             if state["seek"] is not None:
                 state["progress"], state["seek"] = float(state["seek"]), None
@@ -392,35 +395,46 @@ def serve(
                     current_phase = phase_at_progress(plan, state["progress"])
                     info.content = (
                         f"**{entry['label']} · {result['selected_candidate_id']} · {current_phase}**\n\n"
-                        "抬升與回程不參與候選篩選，未做路徑／碰撞檢查。\n\n"
+                        "Lift and return are excluded from candidate filtering "
+                        "and have not been checked for path feasibility or collisions.\n\n"
                         + (
-                            f"抬升到位後保持夾緊 {plan['cycle']['hold_s']:g} 秒，再張開手、回到手臂起始姿態。\n\n"
+                            f"After reaching the lift target, hold the squeeze for {plan['cycle']['hold_s']:g} s, "
+                            "then open the hand and return the arm to its starting pose.\n\n"
                             if "cycle" in plan
-                            else "手指維持 squeeze 姿態。\n\n"
+                            else "Fingers remain in the squeeze pose.\n\n"
                         )
-                        + "顯示手臂目標不代表物體已被抓住或抬起。"
+                        + "Displaying arm targets does not confirm that the object has been grasped or lifted."
                     )
                 else:
                     diagnostic = adapter.static_check(np.asarray(q))
-                    known = "通過" if diagnostic["known_geometry_passed"] else "**碰撞超過既有門檻**"
+                    known = (
+                        "Passed"
+                        if diagnostic["known_geometry_passed"]
+                        else "**Collision exceeds the existing threshold**"
+                    )
                     info.content = (
                         f"**{entry['label']} · {result['selected_candidate_id']}**\n\n"
-                        f"關節位移成本：{result['cost']:.6f} rad²\n\n"
-                        f"目前顯示姿態的既有穿透門檻檢查：{known}\n\n"
-                        f"手臂穿透 {diagnostic['arm_penetration_m'] * 1000:.3f} mm；"
-                        f"手指自身穿透 {diagnostic['hand_self_penetration_m'] * 1000:.3f} mm；"
-                        f"手／桌穿透 {diagnostic['hand_table_penetration_m'] * 1000:.3f} mm。\n\n"
-                        "手部穿透容許值沿用既有實驗的 10 mm，並非零碰撞保證。\n\n"
-                        "物體／其他環境碰撞未驗證；未執行物理模擬或抓取。"
+                        f"Joint displacement cost: {result['cost']:.6f} rad²\n\n"
+                        f"Existing penetration threshold check for the displayed pose: {known}\n\n"
+                        f"Arm penetration: {diagnostic['arm_penetration_m'] * 1000:.3f} mm; "
+                        f"Hand self-penetration: {diagnostic['hand_self_penetration_m'] * 1000:.3f} mm; "
+                        f"Hand/table penetration: {diagnostic['hand_table_penetration_m'] * 1000:.3f} mm.\n\n"
+                        "The hand penetration tolerance is 10 mm, as in the existing experiments; "
+                        "this does not guarantee zero collisions.\n\n"
+                        "Collisions with the object or other surroundings have not been checked. "
+                        "No physics simulation or grasp has been executed."
                     )
             else:
                 play.value = False
-                info.content = "**沒有可行候選。** 原始目標僅供定位；不播放失敗 IK 解。"
+                info.content = (
+                    "**No feasible candidates.** Original targets are shown for reference only; "
+                    "failed IK solutions are not played."
+                )
             if entry.get("execution_error"):
                 info.content = (
-                    "**動作目標產生失敗，此組無法執行。**\n\n"
+                    "**Motion target generation failed. This dataset cannot be executed.**\n\n"
                     + entry["execution_error"]
-                    + "\n\n保留原本選中的 grasp；目前只顯示抓取三階段。\n\n"
+                    + "\n\nThe originally selected grasp is retained. Only the three grasp stages are displayed.\n\n"
                     + info.content
                 )
             scene = state["scene"]

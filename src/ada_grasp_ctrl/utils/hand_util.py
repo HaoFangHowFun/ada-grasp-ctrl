@@ -205,7 +205,7 @@ class MjHO:
             self.debug_options.flags[mujoco.mjtVisFlag.mjVIS_TRANSPARENT] = False
             self.debug_images = []
 
-            # # 初始化视角参数
+            # # Initialize camera view parameters
             self.cam = mujoco.MjvCamera()
             mujoco.mjv_defaultCamera(self.cam)
 

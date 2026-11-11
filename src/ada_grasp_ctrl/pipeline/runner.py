@@ -116,7 +116,11 @@ class Processes:
 def wait_for_enter(processes: Processes, stream: Any = None) -> bool:
     """Only an explicitly received empty line approves; EOF and other input cancel."""
     stream = sys.stdin if stream is None else stream
-    print("8089 預覽已就緒。按 Enter 執行目前顯示的完整流程；輸入 q 或 Ctrl+C 取消。", flush=True)
+    print(
+        "Preview ready on port 8089. Press Enter to execute the full displayed sequence; "
+        "enter q or press Ctrl+C to cancel.",
+        flush=True,
+    )
     while True:
         processes.check_services()
         if select.select([stream], [], [], 0.2)[0]:
@@ -288,7 +292,7 @@ def run(args: argparse.Namespace, config: dict, root: Path, report: dict, proces
         else [
             {
                 "group": "live",
-                "label": "即時點雲",
+                "label": "Live point cloud",
                 "candidates_path": str(resolve_from_root(config["inference_reference"])),
             }
         ]

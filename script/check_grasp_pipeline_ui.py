@@ -77,31 +77,31 @@ def main() -> int:
                 )
             )
 
-        wait(lambda: all(name in controls for name in ("測資", "姿態", "播放姿態插值", "進度 %")))
-        for label in controls["測資"]["props"]["options"]:
-            update("測資", label)
+        wait(lambda: all(name in controls for name in ("Dataset", "Pose", "Play interpolation", "Progress %")))
+        for label in controls["Dataset"]["props"]["options"]:
+            update("Dataset", label)
             group = label.split(" · ")[0]
             wait(lambda: json.loads(args.status.read_text())["group"] == group)
             report["groups"].append(group)
             status = json.loads(args.status.read_text())
-            phase_id = controls["姿態"]["uuid"]
-            expected = ["目前手臂", *status.get("phases", ["pregrasp", "grasp", "squeeze"])]
-            wait(lambda: values.get(phase_id, {}).get("options", controls["姿態"]["props"]["options"]) == expected)
+            phase_id = controls["Pose"]["uuid"]
+            expected = ["Current arm", *status.get("phases", ["pregrasp", "grasp", "squeeze"])]
+            wait(lambda: values.get(phase_id, {}).get("options", controls["Pose"]["props"]["options"]) == expected)
             if status.get("execution_error"):
                 report["execution_blocked_groups"].append(group)
             if "lift" in expected:
                 for phase in [p for p in ("lift", "hold", "release", "return") if p in expected]:
-                    update("姿態", phase)
-                    progress_id = controls["進度 %"]["uuid"]
+                    update("Pose", phase)
+                    progress_id = controls["Progress %"]["uuid"]
                     target_progress = status["phase_progress"][phase]
                     wait(lambda: abs(values.get(progress_id, {}).get("value", -100) - target_progress) < 0.11)
                 report["lift_controls"].append(group)
                 if "return" in expected:
                     report["cycle_controls"].append(group)
-        update("測資", controls["測資"]["props"]["options"][0])
+        update("Dataset", controls["Dataset"]["props"]["options"][0])
         wait(lambda: json.loads(args.status.read_text())["group"] == report["groups"][0])
-        update("播放姿態插值", True)
-        progress_id = controls["進度 %"]["uuid"]
+        update("Play interpolation", True)
+        progress_id = controls["Progress %"]["uuid"]
         seen = []
         deadline = time.monotonic() + 2
         while time.monotonic() < deadline:
@@ -110,7 +110,7 @@ def main() -> int:
             if value is not None:
                 seen.append(value)
         assert len(set(seen)) > 2, seen
-        update("播放姿態插值", False)
+        update("Play interpolation", False)
         report["playback_progress_changed"] = True
         assert report["environment_point_cloud_seen"], "Missing captured environment point cloud"
     args.output.write_text(json.dumps(report, indent=2) + "\n")

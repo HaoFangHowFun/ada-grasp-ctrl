@@ -183,7 +183,7 @@ def preview(adapter: object, plan: dict, port: int, execute: bool) -> bool:
     from mjviser import ViserMujocoScene
     from ada_grasp_ctrl.experiments.fixed_camera_preview import plane_mesh
 
-    server = viser.ViserServer(host="127.0.0.1", port=port, label="桌面净空评估")
+    server = viser.ViserServer(host="127.0.0.1", port=port, label="Table clearance evaluation")
     try:
         if server.get_port() != port:
             raise RuntimeError(f"Port {port} is occupied")
@@ -196,16 +196,23 @@ def preview(adapter: object, plan: dict, port: int, execute: bool) -> bool:
         server.scene.add_mesh_simple(
             "/measured_table", vertices=vertices, faces=faces, color=(155, 145, 125), side="double", opacity=0.7
         )
-        slider = server.gui.add_slider("路径进度 %", min=0, max=100, step=0.1, initial_value=100)
+        slider = server.gui.add_slider("Path progress %", min=0, max=100, step=0.1, initial_value=100)
         server.gui.add_markdown(
-            f"整只手最低净空：{plan['target']['gap_m'] * 100:.2f} cm\n\n"
-            "保持当前手指姿态和手腕方向。桌面及外参未独立验收；仅检查已知模型的离散路径。\n\n"
+            f"Minimum clearance across the entire hand: {plan['target']['gap_m'] * 100:.2f} cm\n\n"
+            "Current finger positions and wrist orientation are preserved. "
+            "The table plane and extrinsics have not been independently accepted; "
+            "only discrete path samples in the known model are checked.\n\n"
             + (
-                "最低点位于标定采样区域外，桌面高度由平面外推；请核对实际桌边。\n\n"
+                "The lowest point is outside the calibration sampling area, "
+                "so table height is extrapolated from the plane. Check the actual table edge.\n\n"
                 if plan.get("target_uses_plane_extrapolation")
                 else ""
             )
-            + ("终端输入 MOVE 才执行；其他输入取消。" if execute else "只预览，不发送运动指令。Ctrl+C 退出。")
+            + (
+                "Type MOVE in the terminal to execute; any other input cancels."
+                if execute
+                else "Preview only. No motion commands are sent. Press Ctrl+C to exit."
+            )
         )
         center = (adapter.model_T_world @ np.r_[plan["target"]["point_world_m"], 1])[:3]
         server.initial_camera.look_at = tuple(center)
@@ -213,7 +220,7 @@ def preview(adapter: object, plan: dict, port: int, execute: bool) -> bool:
         server.initial_camera.up = (0, 0, 1)
         print(f"PREVIEW_URL=http://localhost:{port}", flush=True)
         if execute:
-            print("检查预览后输入 MOVE 并回车执行；其他输入取消。", flush=True)
+            print("Review the preview, then type MOVE and press Enter to execute; any other input cancels.", flush=True)
         frames = np.asarray(plan["keyframes"])
         while True:
             progress = slider.value / 100 * sum(plan["durations_s"])
