@@ -47,6 +47,11 @@ default-pose command. Sliders use radians; reset restores those imported angles.
 snapshots without that YAML, supply `--initial-pose /absolute/path/to/initial_pose.yaml` explicitly.
 The numerical model's `home_configuration()` remains the zero-angle inspection pose.
 
+For Phase 2 object placement, this same viewer also accepts `--scene config/simulation_scene.yaml`.
+See [interactive object placement](phase2-dual-arm-grasp-pipeline.md#interactive-object-placement)
+for XYZ/RPY controls, Save Scene, and optional simulated camera/cloud previews. The `--snapshot`
+workflow above and its 56 joint sliders remain supported.
+
 The browser displays the original DAE material parts (white, green, gray/black and red details)
 from the snapshot and updates them with MuJoCo link poses. It hides the corresponding colorless STL
 visual duplicates in its private display model. Collision geometry remains unchanged. This restores

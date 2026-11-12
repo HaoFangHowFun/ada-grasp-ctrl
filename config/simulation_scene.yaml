@@ -1,0 +1,69 @@
+# Local experimental scene. Relative paths resolve through Ada's data/output roots.
+schema_version: 1
+scene:
+  robot_snapshot: output/dual_arm/phase1_20261111/commit_snapshot
+  initial_robot_state: snapshot_initial_pose
+object:
+  name: dgn_bottle
+  mesh: examples/assets/object/DGN_2k/processed_data/core_bottle_15787789482f045d8add95bf56d3d2fa/mesh/simplified.obj
+  collision_meshes:
+    - examples/assets/object/DGN_2k/processed_data/core_bottle_15787789482f045d8add95bf56d3d2fa/urdf/meshes/convex_piece_000.obj
+    - examples/assets/object/DGN_2k/processed_data/core_bottle_15787789482f045d8add95bf56d3d2fa/urdf/meshes/convex_piece_001.obj
+  scale: [0.08, 0.08, 0.08]
+  pose:
+    frame_id: world
+    position_m: [0.08, -0.08, 0.072]
+    quaternion_wxyz: [0.7071067811865476, 0.7071067811865476, 0, 0]
+  freejoint: true
+  placement: explicit_pose
+  physics:
+    # Explicit exploratory assumptions, not measured properties or benchmark settings.
+    mass_kg: 0.1
+    friction: [0.8, 0.02, 0.001]
+    assumptions: "Diagnostic 100 g bottle; uniform density/equal mass per source convex piece; friction uncalibrated."
+camera:
+  name: grasp_camera
+  position_world_m: [0.4, -0.4, 0.5]
+  look_at_world_m: [0.08, -0.08, 0.07]
+  width: 320
+  height: 240
+  fovy_deg: 60
+  near_m: 0.01
+  far_m: 3
+point_cloud:
+  source: complete_mesh
+  object_only: true
+  num_points: 2048
+  seed: 42
+inference:
+  # Reuse exact established checkpoint/config/metadata paths and verified hashes.
+  reference: output/fixed_camera/green_pear_grasps_20261109_v1/candidates.json
+  python: /home/hao-fang/hugs-workspace/HUGS-DexLearn/.venv/bin/python
+  dexlearn_root: /home/hao-fang/hugs-workspace/HUGS-DexLearn
+  device: cuda:0
+  samples_per_side: 8
+mirroring:
+  plane_normal_world: [0, 1, 0]
+  plane_point: object_point_cloud_centroid
+selector:
+  enabled_arms: [left, right]
+  # Omit weights to inherit incumbent equal six-CRX-joint weights.
+  max_nfev: 200
+execution:
+  phases: [pregrasp, grasp, squeeze, lift]
+  durations_s: {pregrasp: 2, grasp: 2, squeeze: 2, lift: 2}
+  settle_timeout_s: 3
+  arm_arrival_tolerance_rad: 0.01
+  # Diagnostic tolerance for MuJoCo soft constraints; commanded targets remain strictly bounded.
+  soft_limit_tolerance_rad: 0.01
+  # New experimental feedforward: combined arm torque is bounded by source effort limits.
+  # Passive arm keeps its prior position target. Object gravity is unchanged.
+  arm_bias_compensation: true
+  lift_height_m: 0.05
+  hold_s: 1
+  # Independent Phase 2 diagnostic criterion, not the legacy benchmark definition.
+  success:
+    minimum_lift_m: 0.03
+    maximum_object_speed_m_s: 0.02
+output:
+  root: output/phase2/example_run

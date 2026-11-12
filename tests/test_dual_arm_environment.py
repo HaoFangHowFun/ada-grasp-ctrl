@@ -160,6 +160,14 @@ class DualArmEnvironmentTest(unittest.TestCase):
         for _ in range(400):
             q = rng.uniform(self.robot.limits[:, 0], self.robot.limits[:, 1])
             for contact in self.sim.check_static_contacts(q):
+                expected_hands = []
+                for name in contact["bodies"]:
+                    ancestor = name
+                    while ancestor not in ("left_hand_flange", "right_hand_flange", "world"):
+                        ancestor = self.robot.parent_links.get(ancestor, "world")
+                    if ancestor != "world":
+                        expected_hands.append(name)
+                self.assertEqual(contact["hand_bodies"], expected_hands)
                 if contact["penetration_m"] > 1e-5:
                     found.add(contact["category"])
             if {"left_right", "robot_table", "within_robot"} <= found:

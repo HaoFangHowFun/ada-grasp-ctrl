@@ -46,8 +46,12 @@ class DualArmSimulation:
             if self.model.body(name).id < 0:
                 raise ValueError(f"Missing scene body: {name}")
         self.body_labels = {0: "environment"}
+        # Match the legacy selector's hand-flange subtree, not a body-name prefix.
+        self.hand_body_ids = {self.model.body(f"{side}_hand_flange").id for side in ("left", "right")}
         for i in range(1, self.model.nbody):
             name = self.model.body(i).name
+            if int(self.model.body_parentid[i]) in self.hand_body_ids:
+                self.hand_body_ids.add(i)
             parent = self.body_labels[int(self.model.body_parentid[i])]
             self.body_labels[i] = roots.get(
                 name, "left" if name.startswith("left_") else "right" if name.startswith("right_") else parent
@@ -134,6 +138,7 @@ class DualArmSimulation:
                     "category": category,
                     "sides": sorted(robot_sides),
                     "bodies": names,
+                    "hand_bodies": [name for body, name in zip(bodies, names) if body in self.hand_body_ids],
                     "geoms": [self.model.geom(g).name for g in geoms],
                     "distance_m": float(contact.dist),
                     "penetration_m": max(0.0, float(-contact.dist)),
