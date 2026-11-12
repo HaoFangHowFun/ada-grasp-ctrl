@@ -237,7 +237,16 @@ def classify(
     return "success" if abs(initial_z + 0.2 - terminal_z) < 0.1 else "physical_failure"
 
 
-def run_episode(row: dict, report: dict, output: Path, method: str, preflight: dict) -> dict:
+def run_episode(
+    row: dict,
+    report: dict,
+    output: Path,
+    method: str,
+    preflight: dict,
+    *,
+    evaluator_factory=RightEvaluator,
+    config: Any = None,
+) -> dict:
     """Execute one attributable method/sample pair, saving partial records on every runtime failure."""
     episode_dir = output / row["sample_id"] / method
     episode_dir.mkdir(parents=True, exist_ok=False)
@@ -266,9 +275,10 @@ def run_episode(row: dict, report: dict, output: Path, method: str, preflight: d
     invalid = lift_error = lift_completed = False
     initial_z = terminal_z = None
     try:
-        config = make_config(report, row, episode_dir, method)
+        if config is None:
+            config = make_config(report, row, episode_dir, method)
         OmegaConf.save(config, episode_dir / "run_manifest.yaml", resolve=True)
-        evaluator = RightEvaluator(row, report, config, method)
+        evaluator = evaluator_factory(row, report, config, method)
         seed_sample(12, row["sample_index"])
         sim, record = evaluator.mj_ho, evaluator.grasp_data
         sim.reset_pose_qpos(record["initial_qpos"], record["obj_pose"])

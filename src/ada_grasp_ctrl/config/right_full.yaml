@@ -1,0 +1,9 @@
+# Offline real-CRX execution; scientific MPC parameters come from the frozen suite.
+controller:
+  mode: ours
+  ours:
+    frequency_hz: 10
+trajectory:
+  interpolation: linear
+contact:
+  source: mujoco
