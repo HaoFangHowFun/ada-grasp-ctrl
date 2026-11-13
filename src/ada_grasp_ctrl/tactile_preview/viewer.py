@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-import time
 from typing import Any
 
 import numpy as np
@@ -12,63 +10,10 @@ import viser
 from viser.extras import ViserUrdf
 import yourdfpy
 
-from ada_grasp_ctrl.experiments.right_ros_contract import HAND_NAMES
-from .data import FINGERS, Frame, force_to_world, frame_status, select_force
-from .geometry import GeometryCatalog, transform_contact
-
-
-def load_hand(path: Path, package_share: Path) -> yourdfpy.URDF:
-    """Load original URDF visual meshes and FK without copying or altering assets."""
-
-    def filename_handler(fname: str) -> str:
-        filename = fname
-        prefix = "package://dual_sharpa_wave/"
-        if filename.startswith(prefix):
-            return str((package_share / filename[len(prefix) :]).resolve(strict=True))
-        if filename.startswith("package://"):
-            raise ValueError(f"Unsupported mesh package: {filename}")
-        return str((path.parent / filename).resolve(strict=True))
-
-    hand = yourdfpy.URDF.load(str(path), filename_handler=filename_handler, load_collision_meshes=False)
-    if hand.base_link != "right_hand_flange" or set(hand.actuated_joint_names) != set(HAND_NAMES):
-        raise ValueError("Expected the official right-hand-only URDF with 22 named joints and right_hand_flange root")
-    for finger in FINGERS:
-        hand.get_transform(f"right_{finger}_elastomer")
-    return hand
-
-
-def joint_configuration(
-    packet: dict[str, Any],
-    hand: yourdfpy.URDF,
-    now: float,
-    stale_after: float,
-    synchronized: bool,
-) -> tuple[np.ndarray | None, str]:
-    """Reject incomplete/stale poses instead of extrapolating or padding missing joints."""
-    if not packet:
-        return None, "STATIC / UNCERTAIN: neutral or last pose; no joint feedback"
-    if packet.get("error"):
-        return None, "INVALID POSE: " + packet["error"]
-    age = now - packet["received"]
-    if age < -0.05 or age > stale_after:
-        return None, "STALE POSE: last posture retained; world arrows hidden"
-    if synchronized:
-        source_age = packet["subscriber_ros"] - packet["receipt_ros"] + age
-        if packet["receipt_ros"] <= 0 or source_age < -0.05 or source_age > stale_after:
-            return None, "STALE / CLOCK ERROR POSE: world arrows hidden"
-    names, positions = packet["names"], packet["positions"]
-    if len(names) != len(positions) or len(set(names)) != len(names) or set(names) != set(hand.actuated_joint_names):
-        return None, "INVALID POSE: expected all 22 unique right-hand joint names"
-    lookup = dict(zip(names, positions))
-    q = np.array([lookup[n] for n in hand.actuated_joint_names], dtype=float)
-    if not np.isfinite(q).all():
-        return None, "INVALID POSE: nonfinite joint position"
-    for name, value in zip(hand.actuated_joint_names, q):
-        limit = hand.joint_map[name].limit
-        if limit is not None and not limit.lower - 1e-3 <= value <= limit.upper + 1e-3:
-            return None, f"INVALID POSE: {name} outside URDF limits"
-    suffix = "ROS receipt clocks asserted synchronized" if synchronized else "source age unverified"
-    return q, f"LIVE hand FK ({suffix}); viewer world = fixed right_hand_flange"
+from .data import FINGERS
+from .adapter import TactileAdapter
+from .kinematics import load_hand as load_hand, joint_configuration as joint_configuration
+from .geometry import GeometryCatalog
 
 
 class Preview:
@@ -87,6 +32,13 @@ class Preview:
                 if config
                 else GeometryCatalog.installed_candidate()
             )
+        )
+        self.adapter = TactileAdapter(
+            hand,
+            self.geometry,
+            stale_after=args.stale_after,
+            pose_skew=args.pose_skew,
+            receipt_clock_synchronized=args.receipt_clock_synchronized,
         )
         server.scene.set_up_direction("+z")
         server.initial_camera.position = (0.35, -0.5, 0.32)
@@ -225,10 +177,22 @@ class Preview:
 
     def _update(self, packet: dict[str, Any], connected: bool, error: str = "") -> dict[str, Any]:
         """Render an owned snapshot and expose the same state for integration checks."""
-        now = time.monotonic()
         synchronized = self.args.receipt_clock_synchronized
         joints = packet.get("joints", {})
-        q, pose_state = joint_configuration(joints, self.hand, now, self.args.stale_after, synchronized)
+        indices = tuple(int(widget.value) for widget in self.indices)
+        self.adapter.geometry = self.geometry
+        snapshot = self.adapter.update(
+            packet.get("frames", {}),
+            joints,
+            connected=connected,
+            endpoints=packet.get("endpoints", {}),
+            errors=packet.get("errors", {}),
+            force_indices=indices,
+            allow_unverified_geometry=self.allow_geometry.value,
+        )
+        self.last_snapshot = snapshot
+        derived = dict(snapshot.fingers)
+        q, pose_state = snapshot.configuration, snapshot.pose_status
         if q is not None and connected:
             self.robot.update_cfg(q)
         self.pose_status.content = f"**{pose_state}**\n\nJoint ROS stamp: {joints.get('receipt_ros', 'unavailable')}"
@@ -241,7 +205,6 @@ class Preview:
                 "SDK timestamp epoch/unit unknown and never used for freshness."
             )
         )
-        indices = tuple(int(widget.value) for widget in self.indices)
         mapping_valid = len(set(indices)) == 3
         self.mapping_status.content = (
             f"**{'UNVERIFIED mapping' if mapping_valid else 'INVALID mapping: indices must differ'}**: "
@@ -276,91 +239,63 @@ class Preview:
             marker, normal_arrow, warning = self.markers[finger], self.normals[finger], self.geometry_labels[finger]
             arrow.visible = marker.visible = normal_arrow.visible = warning.visible = False
             endpoints = packet.get("endpoints", {}).get(finger, [])
-            endpoint_ok = len(endpoints) == 1 and endpoints[0]["type"] == "dual_sharpa_wave/msg/TactileFrame"
             endpoint_text = (
                 "; ".join(f"{e['node']} {e['reliability']}/{e['durability']} depth={e['depth']}" for e in endpoints)
                 or "no publisher discovered"
             )
-            payload = packet.get("frames", {}).get(finger)
-            rejection = packet.get("errors", {}).get(finger)
-            if payload is None:
-                status = "INVALID: " + rejection if rejection else "NO DATA"
+            result = derived[finger]
+            frame = result.frame
+            if frame is None:
+                status = "INVALID: " + result.detail if result.detail else "NO DATA"
                 self.readouts[finger].content = f"**{status}**\n\n{endpoint_text}"
                 state["fingers"][finger] = dict(
-                    status=status, contact_status="NO DATA", arrow=False, contact_visible=False
+                    status=status, contact_status=result.status, arrow=False, contact_visible=False
                 )
                 continue
-            frame = Frame(**payload)
-            status, arrival_age, receipt_age = frame_status(frame, now, self.args.stale_after, synchronized)
-            if not connected:
-                status = "DISCONNECTED"
-            elif not endpoint_ok:
-                status = "NO / AMBIGUOUS PUBLISHER"
+            status, arrival_age, receipt_age = result.transport_status, result.arrival_age, result.receipt_age
             rate = packet.get("rates", {}).get(finger, 0)
-            f_e = (
-                select_force(frame.raw, indices, self.flip.value) if frame.status == "VALID" and mapping_valid else None
-            )
-            f_w = force_to_world(rotation, f_e) if f_e is not None else None
+            sign = -1 if self.flip.value else 1
+            f_e = tuple(sign * x for x in result.force_local) if result.force_local is not None else None
+            f_w = sign * np.asarray(result.force_base) if result.force_base is not None else None
             norm = float(np.linalg.norm(f_e)) if f_e is not None else None
-            # A recent pose may still be unrelated to the current force sample.
-            skew = (
-                abs(frame.receipt_ros - joints.get("receipt_ros", 0))
-                if synchronized
-                else abs(frame.received - joints.get("received", 0))
-            )
-            pose_ok = q is not None and skew <= self.args.pose_skew
-            contact_status, geometry_note, contact_state = frame.contact_status, frame.contact_error, {}
-            if status != "VALID":
-                contact_status = (
-                    status if status in ("STALE", "CLOCK_ERROR", "DISCONNECTED") else "F6/TRANSPORT " + status
+            pose_ok = result.force_base is not None
+            contact_status, geometry_note, contact_state = result.status, result.detail, {}
+            local, base = result.local, result.observation
+            if local is not None:
+                contact_state = dict(
+                    p_E=list(local.position),
+                    n_E=list(local.normal),
+                    p_W=list(base.position) if base else None,
+                    n_W=list(base.normal) if base else None,
+                    pixel_row=local.pixel_row,
+                    pixel_col=local.pixel_col,
+                    geometry=local.geometry.verification,
                 )
-            elif not mapping_valid:
-                contact_status = "INVALID FORCE MAPPING"
-            elif frame.contact_status == "VALID":
-                try:
-                    contact = self.geometry.lookup(finger, frame.contact_row[:2], self.allow_geometry.value)
-                    p_w, n_w, _ = transform_contact(pose, contact.p_E, contact.n_E, f_e)
-                    contact_state = dict(
-                        p_E=contact.p_E.tolist(),
-                        n_E=contact.n_E.tolist(),
-                        p_W=p_w.tolist() if pose_ok else None,
-                        n_W=n_w.tolist() if pose_ok else None,
-                        pixel_row=contact.row,
-                        pixel_col=contact.col,
-                        geometry=contact.verification,
-                    )
-                    geometry_note = (
-                        f"**{contact.verification}** · pixel(row,col)=({contact.row},{contact.col})\n\n"
-                        f"p_S ({contact.units}): `{contact.p_S.round(5).tolist()}`\n\n"
-                        f"n_S: `{contact.n_S.round(5).tolist()}`\n\n"
-                        f"p_E (m): `{contact.p_E.round(6).tolist()}` · n_E: `{contact.n_E.round(5).tolist()}`\n\n"
-                        f"p_W (m): `{contact_state['p_W']}` · n_W: `{contact_state['n_W']}`"
-                    )
-                    visible = pose_ok if not local_mode else finger == self.selected.value
-                    if not local_mode and not pose_ok:
-                        contact_status = "POSE UNAVAILABLE / STALE / SKEWED"
-                    if visible:
-                        point, direction, force = (
-                            (p_w, n_w, f_w)
-                            if not local_mode
-                            else (self.local_origin + contact.p_E, contact.n_E, np.asarray(f_e))
-                        )
-                        handles = (
-                            (marker, normal_arrow, arrow, warning)
-                            if not local_mode
-                            else (self.local_marker, self.local_normal, self.local_arrow, self.local_warning)
-                        )
-                        point_handle, normal_handle, force_handle, warning_handle = handles
-                        point_handle.position, point_handle.visible = point, True
-                        normal_handle.points = np.array([[point, point + self.normal_length.value * direction]])
-                        normal_handle.visible = True
-                        if norm is not None and norm > self.zero.value:
-                            force_handle.points = np.array([[point, point + self.scale.value * force]])
-                            force_handle.visible = True
-                        warning_handle.position = point + [0, 0, 0.012]
-                        warning_handle.visible = contact.verification == "UNVERIFIED DIAGNOSTIC"
-                except ValueError as exc:
-                    contact_status, geometry_note = "GEOMETRY ERROR / UNVERIFIED", str(exc)
+                geometry_note = (
+                    f"**{local.geometry.verification}** · pixel(row,col)=({local.pixel_row},{local.pixel_col})\n\n"
+                    f"p_S ({local.geometry.units}): `{result.source_position}` · n_S: `{result.source_normal}`\n\n"
+                    f"p_E (m): `{local.position}` · n_E: `{local.normal}`\n\n"
+                    f"p_W (m): `{contact_state['p_W']}` · n_W: `{contact_state['n_W']}`\n\n"
+                    f"Force convention: {local.force_convention} ({local.force_convention_quality})"
+                )
+            observation = local if local_mode and finger == self.selected.value else base if not local_mode else None
+            if observation is not None:
+                point = np.asarray(observation.position) + (self.local_origin if local_mode else 0)
+                direction, force = np.asarray(observation.normal), sign * np.asarray(observation.force)
+                handles = (
+                    (self.local_marker, self.local_normal, self.local_arrow, self.local_warning)
+                    if local_mode
+                    else (marker, normal_arrow, arrow, warning)
+                )
+                point_handle, normal_handle, force_handle, warning_handle = handles
+                point_handle.position, point_handle.visible = point, True
+                normal_handle.points = np.array([[point, point + self.normal_length.value * direction]])
+                normal_handle.visible = True
+                if norm is not None and norm > self.zero.value:
+                    force_handle.points = np.array([[point, point + self.scale.value * force]])
+                    force_handle.visible = True
+                warning_handle.position = point + [0, 0, 0.012]
+                warning_handle.visible = observation.geometry.verification == "UNVERIFIED DIAGNOSTIC"
             pose_note = "" if pose_ok else "WORLD VECTOR UNCERTAIN: missing/stale/skewed pose; world arrow hidden"
             self.readouts[finger].content = (
                 f"**{status}** · {rate:.2f} Hz measured\n\n"

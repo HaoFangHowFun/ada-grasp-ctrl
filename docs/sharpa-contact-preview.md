@@ -5,6 +5,10 @@ This extends the existing `ada_grasp_ctrl.tactile_preview` entrypoint on
 commands, tare, or change any ROS topics/QoS. The existing URDF, FK, force readouts,
 axes, freshness checks and Python 3.12/3.10 process separation are retained.
 
+The reusable [tactile adapter](sharpa-tactile-adapter.md) now owns the derived
+contact observations and shared hand FK. The viewer consumes those results;
+its diagnostic sign flip affects rendering only.
+
 ## What appears
 
 - Red marker: the first current contact row's mapped position.

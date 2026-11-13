@@ -274,6 +274,22 @@ class ViewerTests(unittest.TestCase):
         state = self.preview.update(packet, True)
         self.assertGreater(np.linalg.norm(before - state["fingers"]["index"]["origin"]), 0.001)
 
+    def test_renderer_uses_exact_adapter_observation_and_flip_is_display_only(self) -> None:
+        packet = self.packet()
+        self.preview.flip.value = True
+        self.preview.update(packet, True)
+        for finger, result in self.preview.last_snapshot.fingers:
+            observation = result.observation
+            self.assertIsNotNone(observation)
+            points = self.preview.arrows[finger].points[0]
+            np.testing.assert_allclose(points[0], observation.position, atol=1e-7)
+            np.testing.assert_allclose(points[1] - points[0], -0.02 * np.asarray(observation.force), atol=1e-7)
+            np.testing.assert_allclose(self.preview.markers[finger].position, observation.position, atol=1e-7)
+            normal = self.preview.normals[finger].points[0]
+            np.testing.assert_allclose(normal[1] - normal[0], 0.025 * np.asarray(observation.normal), atol=1e-7)
+            self.assertEqual(result.local.force, (1, -2, 3))
+            self.assertEqual(observation.force_convention, "object_on_finger")
+
     def test_missing_stale_disconnect_and_reconnect_hide_arrows(self) -> None:
         for condition in ("missing", "invalid", "stale", "disconnect", "pose", "skew", "duplicate_publisher"):
             packet = self.packet()

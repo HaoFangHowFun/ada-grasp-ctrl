@@ -90,6 +90,16 @@ class GeometryMap:
             raise ValueError("Geometry/normal/mask shapes disagree")
         if not np.isfinite(meters_per_unit) or meters_per_unit <= 0:
             raise ValueError("Explicit positive meters_per_unit required")
+        unit = units.removeprefix("candidate ").split(" ", 1)[0] if isinstance(units, str) else ""
+        scales = {"m": 1.0, "mm": 0.001}
+        if unit not in scales or not np.isclose(meters_per_unit, scales[unit], rtol=0, atol=1e-12):
+            raise ValueError("Geometry units must declare m or mm with matching meters_per_unit")
+        if not isinstance(source, str) or not source.strip():
+            raise ValueError("Explicit geometry source required")
+        if not isinstance(evidence, dict) or any(
+            not isinstance(k, str) or not isinstance(v, str) for k, v in evidence.items()
+        ):
+            raise ValueError("Geometry evidence requires string key/value pairs")
         if type(verified) is not bool or (verified and any(not evidence.get(k, "").strip() for k in CHECKS)):
             raise ValueError("Verified geometry requires evidence for every verification gate")
         self.T_E_S = rigid_transform(T_E_S)
@@ -185,8 +195,14 @@ def sdk_hb1_arrays(path: Path) -> dict[str, np.ndarray]:
 class GeometryCatalog:
     """Per-finger maps and independent failures; one missing profile cannot stop the viewer."""
 
-    def __init__(self, maps: dict[str, GeometryMap] | None = None, errors: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        maps: dict[str, GeometryMap] | None = None,
+        errors: dict[str, str] | None = None,
+        profile_names: dict[str, str] | None = None,
+    ) -> None:
         self.maps, self.errors = maps or {}, errors or {}
+        self.profile_names = dict(profile_names or {})
 
     def lookup(self, finger: str, uv: Any, allow_unverified: bool) -> ContactGeometry:
         """Look up only the explicitly mapped finger profile."""
@@ -214,14 +230,15 @@ class GeometryCatalog:
                     units="candidate mm (not certified)",
                     source=f"SDK 5.0.10.6 HB1 {kind}; {library}; sha256={SDK_SHA256}",
                 )
-            return cls({f: profiles["thumb" if f == "thumb" else "general"] for f in FINGERS})
+            names = {f: "thumb" if f == "thumb" else "general" for f in FINGERS}
+            return cls({f: profiles[n] for f, n in names.items()}, profile_names=names)
         except (OSError, ValueError, struct.error) as exc:
             return cls(errors={f: str(exc) for f in FINGERS})
 
     @classmethod
     def from_config(cls, path: Path) -> GeometryCatalog:
         """Read explicit external NPY profiles and transforms; never infer identity or units."""
-        maps, errors = {}, {}
+        maps, errors, names = {}, {}, {}
         try:
             config = json.loads(path.read_text())
             if config["schema_version"] != 1:
@@ -239,8 +256,9 @@ class GeometryCatalog:
                         }
                         loaded[name] = GeometryMap(**arrays, **item)
                     maps[finger] = loaded[name]
+                    names[finger] = name
                 except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
                     errors[finger] = str(exc)
         except (OSError, ValueError, TypeError, KeyError) as exc:
             errors = {f: str(exc) for f in FINGERS}
-        return cls(maps, errors)
+        return cls(maps, errors, names)
