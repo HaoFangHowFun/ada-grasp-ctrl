@@ -50,7 +50,7 @@ class Preview:
         self.robot.update_cfg(hand.cfg)
         server.scene.add_frame("/world", axes_length=0.06, axes_radius=0.0015)
         server.scene.add_label("/world_label", "Viewer world = right_hand_flange", position=(0, 0, -0.025))
-        server.gui.add_markdown(
+        self.intro = server.gui.add_markdown(
             "# Right Sharpa tactile · read only\n\n"
             "**HYPOTHESIS: selected F6 axes = elastomer axes. Alignment and force sign are unverified.**\n\n"
             "Force on fingertip is the interpretation under test; no default negation. "
@@ -99,7 +99,7 @@ class Preview:
         )
         self.pose_status = server.gui.add_markdown("")
         self.connection = server.gui.add_markdown("")
-        server.gui.add_markdown(
+        self.legend = server.gui.add_markdown(
             "**Red point = contact row 0; blue = surface normal; green = fingertip F6 resultant.** "
             "Both arrows start at the red point. Placing resultant F6 there is a visualization approximation, "
             "not per-contact force allocation or wrench relocation. Missing contact hides all three. "
@@ -134,7 +134,7 @@ class Preview:
             self.geometry_labels[finger] = server.scene.add_label(
                 f"/geometry_warning/{finger}", f"{finger}: UNVERIFIED geometry", visible=False
             )
-            with server.gui.add_folder(finger, expand_by_default=True):
+            with server.gui.add_folder(finger, expand_by_default=not getattr(args, "force_replay", False)):
                 self.readouts[finger] = server.gui.add_markdown("NO DATA")
         self.local_origin = np.array([0.22, 0, 0.1])
         self.local_axes = server.scene.add_frame(
@@ -185,7 +185,7 @@ class Preview:
             packet.get("frames", {}),
             joints,
             connected=connected,
-            endpoints=packet.get("endpoints", {}),
+            endpoints=None if getattr(self.args, "force_replay", False) else packet.get("endpoints", {}),
             errors=packet.get("errors", {}),
             force_indices=indices,
             allow_unverified_geometry=self.allow_geometry.value,

@@ -37,7 +37,7 @@ python3 script/run_grasp_pipeline.py \
 
 ## 動作定義
 
-- above_object：沿用選中 pregrasp 的水平位置與手腕方向，手指使用 `q_grasp + 1.5 × (q_pregrasp − q_grasp)` 外插。依此外插手形重新計算最低點，向 world +Z 平移至高於物體觀測點雲最高點至少 10 公分；若已更高則保留高度。下降途中逐漸回到原 pregrasp 手形。兩段均沿用關節插值，不保證直線下降。超出關節限制或端點 IK 失敗時拒絕執行，不裁切角度或重選候選。
+- above_object：沿用選中 pregrasp 的水平位置與手腕方向，22 個手指關節目標全部設為 `0 rad` 張開，與 release 使用相同全開姿態。依全開手形重新計算最低點，向 world +Z 平移至高於物體觀測點雲最高點至少 10 公分；若已更高則保留高度。移往上方端點時逐漸張開，下降途中逐漸回到原 pregrasp 手形。兩段均沿用關節插值，不保證直線下降。超出關節限制或端點 IK 失敗時拒絕執行，不裁切角度或重選候選。
 - lift：從選中的 squeeze 姿態，維持末端方向，沿 world +Z 抬升 5 公分。
 - hold：lift 確認到位後，持續送出相同的 28 軸目標 5 秒，保留回饋及取消檢查。
 - release：手臂停在抬升位置，22 個 Sharpa 關節回到既有的全零張開姿態。
@@ -74,7 +74,8 @@ receiver 綁定這次確認的 packet，僅接受下一階段的精確關節目�
 - `--export-only`：只產生圖片、selection、plan 和 packet，不開 viewer／receiver。
 - `--lift-height-m 0.05`：覆寫抬升高度；mock 使用 0 時停用 lift／hold／release／return。搭配 `--above-object-clearance-m 0` 可恢復舊三階段。
 - `--above-object-clearance-m 0.10`：覆寫新增接近階段的手對物體淨空；設為 `0` 可關閉此階段。新端點 IK 失敗時保留抓取結果，但不產生可執行 packet。
-- `--above-object-hand-factor 1.5`：上方階段的手指外插倍數；`1` 沿用原 pregrasp。只改手指，不外插手腕位置或方向。
+- `--above-object-open-hand`：上方階段使用 22 軸全零張開；目前預設設定已啟用。預覽與 ROS packet 驗證相同的全開目標；既有 `hand_arrival_required: false` 仍表示不保證手指實際到位。
+- `--no-above-object-open-hand --above-object-hand-factor 1.5`：恢復先前上方階段的手指外插策略；倍數 `1` 沿用原 pregrasp。全開模式下外插倍數不參與手形計算。只改手指，不外插手腕位置或方向。
 - 目前設定 `hand_arrival_required: false`：手指位置誤差只記錄，不阻止階段完成或下一階段啟動。仍等待指令完成、手臂到位並穩定 0.3 秒；首次執行前的姿態檢查、力保護、回饋與關節限制保留。必要時依實際手指起點延長指令時間以維持速度／加速度限制；預覽時間為名目值。
 - `--hand-tolerance-rad 0.06`：手指誤差報告的判定值，約 3.44°；只有 `hand_arrival_required: true` 時才作為手指到位門檻。手臂到位容差仍為 0.01 rad。
 
@@ -94,6 +95,10 @@ python3 script/run_grasp_pipeline.py \
 
 ## 輸出
 
+若要同時錄製實機關節與觸覺資料，使用[精簡錄製指南](tactile-compact-recording.md)。
+它省略 `dist_force` 分布圖、保留 F6 與接觸點，使用 domain 87；在另一個終端啟動，
+動作結束後按 Ctrl+C 存檔。錄製器不占用 8089，也不改變 baseline 控制方式。
+
 live 輸出在 `grouplive/`；replay 則在 `groupNN/`：
 
 | 路徑 | 內容 |
@@ -112,3 +117,5 @@ live 輸出在 `grouplive/`；replay 則在 `groupNN/`：
 
 設定：`src/ada_grasp_ctrl/config/experiments/grasp_pipeline.yaml`。
 測試證據：[grasp-pipeline-validation.md](grasp-pipeline-validation.md)。
+
+雙側啟動、自動選擇左手或右手的即時入口見 [dual-live-grasp-pipeline.md](dual-live-grasp-pipeline.md)。

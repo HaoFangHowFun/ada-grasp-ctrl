@@ -1,0 +1,20 @@
+# Each invocation captures and selects a new object; no object-specific targets.
+base_config: src/ada_grasp_ctrl/config/experiments/grasp_pipeline.yaml
+environment: hardware
+robot_snapshot: output/dual_arm/phase1_20261111/commit_snapshot
+enabled_arms: [left, right]
+mirroring:
+  plane_normal_world: [0, 1, 0]
+  plane_point: object_point_cloud_centroid
+
+# Model references only; no captured object, ROI or candidate is reused.
+inference_model:
+  checkpoint:
+    path: /home/hao-fang/hugs-dataset/BimanBODex_sharpa_1264k_v1/dexlearn_training/sharpaMulti_robotMultiHierar_sharpa_right_full_1m_100k_v1/ckpts/step_100000.pth
+    sha256: 92fc78e580753a3659116e867e075e91d75a342176abd2434b9d98828b3083d6
+  training_config:
+    path: /home/hao-fang/hugs-dataset/BimanBODex_sharpa_1264k_v1/dexlearn_training/sharpaMulti_robotMultiHierar_sharpa_right_full_1m_100k_v1/.hydra/config.yaml
+    sha256: 194f740dc401582afb151505083e77a32318ab7b8d38e42710ea6e05f2165dbb
+  metadata:
+    path: /home/hao-fang/hugs-dataset/BimanBODex_sharpa_1264k_v1/sharpa_right/right_full/metadata.json
+    sha256: 284f272d6355f002cbaf3421c2b74ba18a7b986ba8a6ffeb37e738b13629f42e

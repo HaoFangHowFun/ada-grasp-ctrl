@@ -18,6 +18,7 @@ from .plan import check_start, validate_plan
 from .lift import lift_target
 from .approach import above_object_target
 from ada_grasp_ctrl.experiments.crx_sharpa_right_model import matrix_pose
+from ada_grasp_ctrl.mpc.contracts import controller_mode as validate_controller_mode
 
 
 def export_selection(
@@ -30,8 +31,10 @@ def export_selection(
     hold_s: float = 5.0,
     above_object_clearance_m: float = 0.0,
     above_object_hand_factor: float = 1.0,
+    above_object_open_hand: bool = False,
     hand_tolerance: float | None = None,
     hand_arrival_required: bool = True,
+    controller_mode: str = "baseline",
 ) -> Path:
     """Export verified selected endpoints, preserving full arm and hand targets.
 
@@ -44,8 +47,10 @@ def export_selection(
         hold_s: Time maintaining the lift target after confirmed arrival.
         above_object_clearance_m: Optional hand-to-object overhead clearance; zero preserves legacy plans.
         above_object_hand_factor: Finger extrapolation from grasp toward pregrasp; 1 preserves pregrasp.
+        above_object_open_hand: Use zero-joint open fingers instead of extrapolation at the overhead endpoint.
         hand_tolerance: Optional pipeline finger-arrival tolerance in radians.
         hand_arrival_required: Whether finger position error gates arrival and phase transitions.
+        controller_mode: Opt-in offline controller mode; legacy baseline remains the default.
 
     Returns:
         Path to the sender packet, bound to its selection and preview plan.
@@ -56,6 +61,7 @@ def export_selection(
     if state.get("environment") not in ("mock", "hardware") or state.get("full_joint_names") != list(JOINT_NAMES):
         raise ValueError("Execution export requires a measured full 28-joint snapshot")
     start = state["full_positions_rad"]
+    validate_controller_mode({"environment": state["environment"]}, controller_mode)
     if start[:6] != entry["keyframes"][0, :6].tolist():
         raise ValueError("Selection start differs from snapshot")
     frames = [start, *entry["keyframes"][1:].tolist()]
@@ -93,6 +99,7 @@ def export_selection(
             "environment": state["environment"],
             "hand_arrival_required": hand_arrival_required,
             **({"hand_tolerance": hand_tolerance} if hand_tolerance is not None else {}),
+            **({"interpolation": "linear"} if controller_mode == "linear" else {}),
         }
     )
     args = argparse.Namespace(minimum_duration=2.0, **settings)
@@ -110,6 +117,10 @@ def export_selection(
         "hardware_execution_ready": False,
         "receiver_settings": settings,
     }
+    if controller_mode != "baseline":
+        plan["controller_mode"] = controller_mode
+    if controller_mode == "linear":
+        plan["interpolation"] = "linear"
     if lift is not None:
         plan["lift"] = lift
     if cycle is not None:
@@ -209,6 +220,7 @@ def export_selection(
             above_object_clearance_m,
             grasp=frames[2],
             hand_extrapolation_factor=above_object_hand_factor,
+            open_hand=above_object_open_hand,
         )
         first_duration = motion_duration(start, above["positions"], args)
         descent_duration = motion_duration(above["positions"], frames[1], args)

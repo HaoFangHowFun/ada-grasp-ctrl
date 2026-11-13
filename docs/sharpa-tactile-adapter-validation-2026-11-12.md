@@ -13,6 +13,19 @@ identities and six-component wrenches that this sensor path cannot establish.
 It remains intact; `TactileContactObservation` is a separate sensing type, not a
 fake controller-compatible wrench with zero-filled unknown fields.
 
+## Operator follow-up after adapter handoff
+
+After the adapter handoff, the operator reported: 「驗證沒問題跟之前的一樣」
+(validation passed; behavior is the same as before). Record this as an
+operator-reported manual regression pass for the refactored preview under the
+tested conditions. No behavior difference was reported.
+
+This aggregate feedback adds manual regression evidence to the automated checks
+below. It does not supply new per-finger/per-axis measurements, reference-load
+calibration or a separate verification of contact position and surface normals.
+Existing geometry verification gates and provisional force conventions remain
+unchanged. The operator did not provide a separate raw capture for this follow-up.
+
 ## Changed paths
 
 - `src/ada_grasp_ctrl/contact/tactile_observation.py`: frozen sensing observation
@@ -123,8 +136,9 @@ UI/adapter agreement and isolated ROS delivery. There is no measured end-to-end
 hardware latency or new real-hand contact capture in this refactor.
 
 **Operator observed in the preceding session:** force direction was correct and
-Newton units were reasonable; selected channels remain `0,1,2`. No additional
-physical tests were performed or claimed in this task.
+Newton units were reasonable; selected channels remain `0,1,2`. After the adapter
+handoff, the operator additionally reported that validation passed and behavior
+matched the previous preview, as recorded in the follow-up above.
 
 **Still unverified:** contact-marker position, blue surface normal, geometry XYZ
 units/calibration, exact S-to-E alignment, connected sensor variant, full

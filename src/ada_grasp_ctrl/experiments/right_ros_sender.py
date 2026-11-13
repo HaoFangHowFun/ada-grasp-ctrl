@@ -18,7 +18,7 @@ import time
 from typing import Any
 
 from ada_grasp_ctrl.paths import resolve_external_root
-from .right_ros_contract import ACTION, ARM_NAMES, HAND_NAMES, JOINT_NAMES
+from .right_ros_contract import action_name, side_names, packet_side
 from .right_ros_contract import check_kinematics, kinematic_contract, validate_packet
 
 
@@ -50,10 +50,23 @@ def load_packet(path: Path) -> dict[str, Any]:
             raise ValueError("Reviewed plan changed")
         plan = json.loads(Path(source["plan_path"]).read_text())
         validate_plan(plan)
+        side = packet_side(packet)
+        if plan.get("side", "right") != side:
+            raise ValueError("Packet and plan side differ")
         if plan != packet["reviewed_plan"]:
             raise ValueError("Packet differs from reviewed plan")
         selected = json.loads(Path(source["selection_path"]).read_text())
         snapshot = json.loads(Path(source["snapshot_path"]).read_text())
+        if selected.get("selected_side", "right") != side or snapshot.get("side", "right") != side:
+            raise ValueError("Selection/snapshot side differs from packet")
+        if "passive_positions_rad" in plan:
+            if snapshot.get("passive_positions_rad") != plan["passive_positions_rad"]:
+                raise ValueError("Passive state differs from snapshot")
+            expected_scene = {
+                s: kinematic_contract(Path(source["model_path"]).read_text(), s) for s in ("left", "right")
+            }
+            if packet.get("scene_kinematics") != expected_scene:
+                raise ValueError("Dual scene kinematics differ from source")
         if selected["selected_candidate_id"] != plan["candidate_id"]:
             raise ValueError("Reviewed candidate identity differs")
         if snapshot["full_positions_rad"] != plan["keyframes"][0]:
@@ -125,8 +138,13 @@ def execute(packet: dict[str, Any], args: argparse.Namespace, root: Path, report
         raise ValueError("Sender environment differs from reviewed packet")
     validate_domain(args.environment, os.environ.get("ROS_DOMAIN_ID"))
     rclpy.init(args=[], signal_handler_options=SignalHandlerOptions.NO)
-    node = rclpy.create_node("ada_right_grasp_sender")
-    client = ActionClient(node, FollowJointTrajectory, ACTION)
+    side = packet_side(packet)
+    arm_names, hand_names = side_names(side)
+    joint_names = arm_names + hand_names
+    passive = "left" if side == "right" else "right"
+    passive_q = packet.get("reviewed_plan", {}).get("passive_positions_rad")
+    node = rclpy.create_node(f"ada_{side}_grasp_sender")
+    client = ActionClient(node, FollowJointTrajectory, action_name(side))
     states: dict[str, tuple[list[float], float]] = {}
     stamps: dict[str, float] = {}
     description: list[str] = []
@@ -153,6 +171,8 @@ def execute(packet: dict[str, Any], args: argparse.Namespace, root: Path, report
         age = node.get_clock().now().nanoseconds * 1e-9 - stamp
         if stamp <= 0 or abs(age) > args.feedback_timeout:
             event("feedback_rejected", group=group, stamp=stamp, age_seconds=age, timeout=args.feedback_timeout)
+            if group not in states:
+                return  # Discard startup DDS history; only a fresh sample can initialize this group.
             faults.append(f"{group}: stale/invalid timestamp")
             return
         if stamp <= stamps.get(group, 0):
@@ -165,19 +185,29 @@ def execute(packet: dict[str, Any], args: argparse.Namespace, root: Path, report
         try:
             if description and description[0] != msg.data:
                 raise ValueError("ROS model changed during execution")
-            check_kinematics(packet["kinematics"], kinematic_contract(msg.data))
+            check_kinematics(packet["kinematics"], kinematic_contract(msg.data, side))
+            for scene_side, expected in packet.get("scene_kinematics", {}).items():
+                check_kinematics(expected, kinematic_contract(msg.data, scene_side))
             if not description:
                 description.append(msg.data)
         except ValueError as error:
             faults.append(str(error))
 
     for group, topic, names in (
-        ("arm", "/crx5ia/right/joint_states", ARM_NAMES),
-        ("hand", "/sharpa/right_hand/joint_states", HAND_NAMES),
+        ("arm", f"/crx5ia/{side}/joint_states", arm_names),
+        ("hand", f"/sharpa/{side}_hand/joint_states", hand_names),
     ):
         node.create_subscription(
             JointState, topic, lambda m, g=group, n=names: receive(g, n, m), qos_profile_sensor_data
         )
+    if passive_q is not None:
+        for group, topic, names in (
+            ("passive_arm", f"/crx5ia/{passive}/joint_states", side_names(passive)[0]),
+            ("passive_hand", f"/sharpa/{passive}_hand/joint_states", side_names(passive)[1]),
+        ):
+            node.create_subscription(
+                JointState, topic, lambda m, g=group, n=names: receive(g, n, m), qos_profile_sensor_data
+            )
     node.create_subscription(
         String,
         "/bimanual/robot_description",
@@ -186,7 +216,10 @@ def execute(packet: dict[str, Any], args: argparse.Namespace, root: Path, report
     )
 
     def fresh() -> bool:
-        return all(g in states and time.monotonic() - states[g][1] <= args.feedback_timeout for g in ("arm", "hand"))
+        return all(
+            g in states and time.monotonic() - states[g][1] <= args.feedback_timeout
+            for g in (("arm", "hand", "passive_arm", "passive_hand") if passive_q is not None else ("arm", "hand"))
+        )
 
     def wait(predicate: Any, timeout: float, require_feedback: bool = False) -> None:
         if interrupt_requested:
@@ -198,6 +231,10 @@ def execute(packet: dict[str, Any], args: argparse.Namespace, root: Path, report
                 raise KeyboardInterrupt
             if faults:
                 raise RuntimeError(faults[0])
+            if passive_q is not None and fresh():
+                from ada_grasp_ctrl.pipeline.plan import check_start
+
+                check_start(states["passive_arm"][0] + states["passive_hand"][0], passive_q)
             if require_feedback and not fresh():
                 raise RuntimeError("Feedback expired while awaiting ROS result")
             if time.monotonic() > deadline:
@@ -213,7 +250,12 @@ def execute(packet: dict[str, Any], args: argparse.Namespace, root: Path, report
         wait(lambda: bool(description) and fresh() and client.server_is_ready(), args.startup_timeout)
         (root / "live_model.urdf").write_text(description[0])
         event("model_verified", source_model_sha256=packet["source"]["model_sha256"])
+        native_completed = False
         for index, target in enumerate(packet["targets"]):
+            if getattr(args, "controller_mode", "linear") == "mpc_active" and target["phase"] == "squeeze":
+                if not native_completed:
+                    raise RuntimeError("Cannot skip squeeze without native completion")
+                continue
             if interrupt_requested:
                 raise KeyboardInterrupt
             if not fresh() or faults:
@@ -240,7 +282,7 @@ def execute(packet: dict[str, Any], args: argparse.Namespace, root: Path, report
             point = JointTrajectoryPoint(
                 positions=target["positions"], time_from_start=Duration(sec=secs, nanosec=int((duration - secs) * 1e9))
             )
-            goal = FollowJointTrajectory.Goal(trajectory=JointTrajectory(joint_names=list(JOINT_NAMES), points=[point]))
+            goal = FollowJointTrajectory.Goal(trajectory=JointTrajectory(joint_names=list(joint_names), points=[point]))
             event("goal_sent", phase=phase, positions=target["positions"], duration=duration)
             print(f"Ada sending {phase}: 28 named joints, {duration:.2f} s", flush=True)
 
@@ -264,8 +306,12 @@ def execute(packet: dict[str, Any], args: argparse.Namespace, root: Path, report
                 raise RuntimeError(f"{phase}: receiver rejected the goal")
             outcome = active.get_result_async()
             wait_duration = duration
+            if getattr(args, "controller_mode", "linear") == "mpc_active" and phase == "grasp":
+                plan = packet["reviewed_plan"]
+                wait_duration = 2 * sum(plan["durations_s"][plan["phases"].index(p)] for p in ("grasp", "squeeze"))
+
             if not packet.get("reviewed_plan", {}).get("receiver_settings", {}).get("hand_arrival_required", True):
-                wait_duration = max(duration, measured_duration)
+                wait_duration = max(wait_duration, measured_duration)
             wait(outcome.done, wait_duration + args.startup_timeout + args.result_margin, True)
             response = outcome.result()
             active = None
@@ -279,6 +325,10 @@ def execute(packet: dict[str, Any], args: argparse.Namespace, root: Path, report
             event("result", **entry)
             if response.status != GoalStatus.STATUS_SUCCEEDED or response.result.error_code != 0:
                 raise RuntimeError(f"{phase}: {response.result.error_string}")
+            if getattr(args, "controller_mode", "linear") == "mpc_active" and phase == "grasp":
+                if not response.result.error_string.startswith("Ours native_complete:"):
+                    raise RuntimeError("Receiver did not acknowledge native completion; no lift")
+                native_completed = True
             if phase == "lift":
                 report["lift_motion_completed"] = True
             if phase in ("hold", "release", "return"):
@@ -319,6 +369,7 @@ def main() -> int:
     parser.add_argument("--targets", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--controller-mode", choices=("linear", "mpc_passive", "mpc_active"), default="linear")
     parser.add_argument("--environment", choices=("mock", "hardware"), default="mock")
     for name, value in (
         ("minimum-duration", 2.0),

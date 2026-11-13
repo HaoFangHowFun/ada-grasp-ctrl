@@ -21,11 +21,12 @@ def above_object_target(
     *,
     grasp: object | None = None,
     hand_extrapolation_factor: float = 1.0,
+    open_hand: bool = False,
 ) -> dict:
     """Raise pregrasp until the lowest hand mesh clears the observed object top.
 
-    Retain pregrasp XY and wrist orientation. Optionally extend the finger motion
-    from grasp toward pregrasp, then recompute mesh clearance for that hand shape.
+    Retain pregrasp XY and wrist orientation. Open all fingers to zero or extend
+    the grasp-to-pregrasp motion, then recompute mesh clearance for that hand shape.
     Only a local endpoint IK is computed; execution uses joint interpolation.
     """
     if isinstance(clearance_m, bool) or not np.isfinite(clearance_m) or clearance_m <= 0:
@@ -44,7 +45,13 @@ def above_object_target(
         or hand_extrapolation_factor < 1
     ):
         raise AboveObjectTargetError("Hand extrapolation factor must be finite and at least 1")
-    if hand_extrapolation_factor != 1:
+    if not isinstance(open_hand, bool):
+        raise AboveObjectTargetError("open_hand must be boolean")
+    if open_hand:
+        q[6:] = 0.0
+        if np.any(q[6:] < adapter.limits[6:, 0]) or np.any(q[6:] > adapter.limits[6:, 1]):
+            raise AboveObjectTargetError("Open hand exceeds joint limits")
+    elif hand_extrapolation_factor != 1:
         closing = np.asarray(grasp, dtype=float)
         if closing.shape != (28,) or not np.isfinite(closing).all():
             raise AboveObjectTargetError("Hand extrapolation requires 28 finite grasp joints")
@@ -79,7 +86,9 @@ def above_object_target(
         "target_flange_wxyz": matrix_pose(target).tolist(),
         "frame_id": "world",
         "axis": "+Z",
-        "hand_policy": "retain_selected_pregrasp"
+        "hand_policy": "zero_joint_open"
+        if open_hand
+        else "retain_selected_pregrasp"
         if hand_extrapolation_factor == 1
         else "extrapolate_grasp_to_pregrasp",
         "hand_extrapolation_factor": float(hand_extrapolation_factor),

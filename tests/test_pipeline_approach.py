@@ -31,6 +31,40 @@ class CartesianKinematics:
 
 
 class ApproachTest(unittest.TestCase):
+    def test_open_fingers_recompute_clearance_and_preserve_selected_grasps(self) -> None:
+        adapter = SimpleNamespace(
+            kin=CartesianKinematics(), model_T_world=np.eye(4), limits=np.array([[-2, 2]] * 28, dtype=float)
+        )
+        pre = np.r_[[0.4, -0.4, 0.5, 0, 0, 0], [0.2] * 22]
+        grasp = np.r_[pre[:6], [0.3] * 22]
+        original_pre, original_grasp = pre.copy(), grasp.copy()
+        # Opening lowers the mesh: clearance must be recomputed before solving IK.
+        geometry = SimpleNamespace(measure=lambda q: {"gap_m": float(q[2] - 0.2 + q[6])})
+        with patch("ada_grasp_ctrl.pipeline.approach.HandGeometry", return_value=geometry):
+            result = above_object_target(
+                adapter, pre, [[0, 0, 0.4]], 0.1, grasp=grasp, hand_extrapolation_factor=1.5, open_hand=True
+            )
+        self.assertEqual(result["hand_policy"], "zero_joint_open")
+        np.testing.assert_array_equal(result["positions"][6:], np.zeros(22))
+        np.testing.assert_allclose(result["positions"][:2], pre[:2], atol=1e-8)
+        np.testing.assert_allclose(result["positions"][3:6], pre[3:6], atol=1e-8)
+        self.assertAlmostEqual(result["pregrasp_lowest_world_z_m"], 0.5)
+        self.assertAlmostEqual(result["approach_hand_lowest_world_z_m"], 0.3)
+        self.assertAlmostEqual(result["height_m"], 0.2)
+        self.assertAlmostEqual(result["lowest_world_z_m"], 0.5)
+        np.testing.assert_array_equal(pre, original_pre)
+        np.testing.assert_array_equal(grasp, original_grasp)
+        with patch("ada_grasp_ctrl.pipeline.approach.HandGeometry", return_value=geometry):
+            high = above_object_target(adapter, pre, [[0, 0, 0.0]], 0.1, open_hand=True)
+            self.assertEqual(high["height_m"], 0)
+            np.testing.assert_array_equal(high["positions"][:6], pre[:6])
+            np.testing.assert_array_equal(high["positions"][6:], np.zeros(22))
+            adapter.limits[6, 0] = 0.1
+            with self.assertRaisesRegex(AboveObjectTargetError, "Open hand exceeds joint limits"):
+                above_object_target(adapter, pre, [[0, 0, 0.4]], 0.1, open_hand=True)
+            with self.assertRaisesRegex(AboveObjectTargetError, "must be boolean"):
+                above_object_target(adapter, pre, [[0, 0, 0.4]], 0.1, open_hand="false")
+
     def test_nonblocking_finger_errors_keep_arm_and_finite_feedback_gates(self) -> None:
         config = bridge_config({"hand_arrival_required": False, "hand_tolerance": 0.06})
         error = [0.0] * 28
@@ -111,12 +145,18 @@ class ApproachTest(unittest.TestCase):
                 self.target(0.25)
 
     def test_eight_phase_hardware_plan_is_bound_to_preview(self) -> None:
+        self.check_eight_phase_plan(open_hand=False)
+
+    def test_open_hand_hardware_plan_is_bound_to_preview_and_rejects_nonzero_fingers(self) -> None:
+        self.check_eight_phase_plan(open_hand=True)
+
+    def check_eight_phase_plan(self, *, open_hand: bool) -> None:
         fixture = fixtures.PipelineTransportTest()
         with tempfile.TemporaryDirectory() as directory:
             path, packet = fixture.write_packet(Path(directory), lift=True, complete=True, environment="hardware")
             plan = packet["reviewed_plan"]
             pregrasp = plan["keyframes"][1]
-            q = [v + 0.01 for v in pregrasp[:6]] + pregrasp[6:]
+            q = [v + 0.01 for v in pregrasp[:6]] + ([0.0] * 22 if open_hand else pregrasp[6:])
             above = dict(
                 positions=q,
                 clearance_m=0.1,
@@ -128,7 +168,7 @@ class ApproachTest(unittest.TestCase):
                 target_flange_wxyz=[0, 0, 0.1, 1, 0, 0, 0],
                 frame_id="world",
                 axis="+Z",
-                hand_policy="retain_selected_pregrasp",
+                hand_policy="zero_joint_open" if open_hand else "retain_selected_pregrasp",
                 solver_success=True,
                 used_for_candidate_selection=False,
                 path_checked=False,
@@ -156,7 +196,7 @@ class ApproachTest(unittest.TestCase):
                 )
             changed = deepcopy(plan)
             changed["keyframes"][1][6] += 0.01
-            with self.assertRaisesRegex(ValueError, "pregrasp fingers"):
+            with self.assertRaisesRegex(ValueError, "open all fingers" if open_hand else "pregrasp fingers"):
                 validate_plan(changed)
             packet["targets"][0]["flange_target_wxyz"] = [0, 0, 0.2, 1, 0, 0, 0]
             fixture.save_packet(path, packet)

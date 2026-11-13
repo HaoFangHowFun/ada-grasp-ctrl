@@ -7,6 +7,8 @@ from typing import Any
 
 import numpy as np
 
+from ada_grasp_ctrl.mpc.reference import linear_reference as sample_linear
+
 from ada_grasp_ctrl.contact import ContactObservation
 from ada_grasp_ctrl.tasks.control_eval_func.episode_runner import EpisodeStep, StepControl
 from ada_grasp_ctrl.tasks.control_eval_func.optimized_runner import _CoordinatedWrenchPolicy, WrenchControlPolicy
@@ -32,7 +34,7 @@ def linear_reference(start: np.ndarray, end: np.ndarray, elapsed: float, duratio
     a, b = np.asarray(start, dtype=float), np.asarray(end, dtype=float)
     if a.ndim != 1 or b.shape != a.shape or not np.isfinite([*a, *b, elapsed, duration]).all() or duration <= 0:
         raise ValueError("Invalid linear segment")
-    return a + np.clip(elapsed / duration, 0, 1) * (b - a)
+    return np.asarray(sample_linear(a, b, elapsed, duration))
 
 
 def validate_command(command: np.ndarray, previous: np.ndarray, limits: np.ndarray, velocity: np.ndarray) -> None:

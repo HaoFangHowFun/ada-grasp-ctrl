@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 from dual_crx_control.robot.kinematics import CRXKinematics
 
-from ada_grasp_ctrl.experiments.right_ros_contract import ARM_NAMES as ARM_ORDER, HAND_NAMES as HAND_ORDER
+from ada_grasp_ctrl.experiments.right_ros_contract import ARM_NAMES as ARM_ORDER, HAND_NAMES as HAND_ORDER, side_names
 
 ARM_NAMES = list(ARM_ORDER)
 HAND_NAMES = list(HAND_ORDER)
@@ -31,13 +31,15 @@ def named_positions(names: list[str], positions: Any, expected: list[str]) -> np
 
 class Model:
     def __init__(self, description: str, config: dict[str, Any]) -> None:
+        self.side = config.get("side", "right")
+        arm_names, hand_names = map(list, side_names(self.side))
         self.description = description
         self.kin = CRXKinematics(description, config["tip_frame"], config["reference_frame"])
-        if self.kin.joint_names != ARM_NAMES:
+        if self.kin.joint_names != arm_names:
             raise ValueError("Kinematic chain must contain exactly right_J1..right_J6")
         root = ET.fromstring(description)
         self.limits = {}
-        for group, names in (("arm", ARM_NAMES), ("hand", HAND_NAMES)):
+        for group, names in (("arm", arm_names), ("hand", hand_names)):
             rows = []
             for name in names:
                 j = root.find(f"joint[@name='{name}']")
@@ -52,7 +54,7 @@ class Model:
         self.fixed_joints = [
             ET.tostring(j, encoding="unicode")
             for j in root.findall("joint")
-            if j.get("type") == "fixed" and j.get("name", "").startswith("right_")
+            if j.get("type") == "fixed" and j.get("name", "").startswith(self.side + "_")
         ]
 
     def check(self, group: str, q: Any) -> np.ndarray:

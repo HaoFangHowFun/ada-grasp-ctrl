@@ -13,8 +13,10 @@ class ContactObservation:
 
     Each contact retains the original controller dictionary keys. Frames contain
     column axes; +X points from hand to object, and the six-vector wrench acts on
-    the object. Missing physical quantities must remain unavailable, never zero.
-    A future sensor adapter must set valid=False and explain missing quantities.
+    the object. Missing sensed quantities must never be represented as measured
+    zeros. The audited tactile point-contact compatibility layer may represent
+    zero local moments as an explicit model assumption in per-contact provenance;
+    these are not sensor measurements. Other unavailable fields reject control.
     """
 
     timestamp: float

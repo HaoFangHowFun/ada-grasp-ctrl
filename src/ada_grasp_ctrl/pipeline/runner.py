@@ -26,6 +26,7 @@ from .plan import check_start
 from .lift import LiftTargetError
 from .approach import AboveObjectTargetError
 from ada_grasp_ctrl.ros_execution.settings import validate_domain
+from ada_grasp_ctrl.mpc.contracts import MODES, controller_mode
 
 
 class Processes:
@@ -127,9 +128,11 @@ def wait_for_enter(processes: Processes, stream: Any = None) -> bool:
             return stream.readline() in ("\n", "\r\n")
 
 
-def perceive(group: dict, args: argparse.Namespace, config: dict, processes: Processes, root: Path) -> Path:
+def perceive(
+    group: dict, args: argparse.Namespace, config: dict, processes: Processes, root: Path, *, infer: bool = True
+) -> Path:
     """Capture or replay a cloud, apply calibration and run real checkpoint inference."""
-    reference = load_candidates(resolve_from_root(group["candidates_path"]))
+    reference = load_candidates(resolve_from_root(group["candidates_path"])) if infer or args.mode == "replay" else None
     if args.reuse_candidates:
         if args.mode != "replay":
             raise ValueError("--reuse-candidates is only valid for replay")
@@ -205,6 +208,8 @@ def perceive(group: dict, args: argparse.Namespace, config: dict, processes: Pro
         f"group{group['group']}_asset",
         ros=True,
     )
+    if not infer:
+        return object_root
     command = [
         config["dexlearn_python"],
         "-m",
@@ -234,6 +239,7 @@ def run(args: argparse.Namespace, config: dict, root: Path, report: dict, proces
     if config.get("schema_version") != 1:
         raise ValueError("Expected schema-1 pipeline config")
     validate_domain(config.get("environment"), config.get("ros_domain_id"))
+    selected_mode = controller_mode(config)
     if args.start_mock and config["environment"] != "mock":
         raise ValueError("--start-mock cannot be combined with hardware mode")
     if args.reuse_candidates and args.mode != "replay":
@@ -341,8 +347,10 @@ def run(args: argparse.Namespace, config: dict, root: Path, report: dict, proces
                         hold_s=config.get("hold_s", 5.0),
                         above_object_clearance_m=config.get("above_object_clearance_m", 0.0),
                         above_object_hand_factor=config.get("above_object_hand_factor", 1.0),
+                        above_object_open_hand=config.get("above_object_open_hand", False),
                         hand_tolerance=config.get("hand_tolerance"),
                         hand_arrival_required=config.get("hand_arrival_required", True),
+                        controller_mode=selected_mode,
                     )
                 )
             except (LiftTargetError, AboveObjectTargetError) as error:
@@ -409,6 +417,21 @@ def run(args: argparse.Namespace, config: dict, root: Path, report: dict, proces
     packet = load_packet(Path(row["packet_path"]))
     if displayed["selection_sha256"] != packet["source"]["references"][packet["source"]["selection_path"]]:
         raise ValueError("Displayed selection changed")
+    if selected_mode in ("mpc_passive", "mpc_active"):
+        # Phase 2 uses a separate offline mock plant, with no live actuator publisher.
+        # The reviewed packet remains the sole source of stage endpoints/ordering.
+        from ada_grasp_ctrl.mpc.offline import run_packet
+
+        report["mpc_offline"] = run_packet(
+            packet,
+            read_json(model_report),
+            root / "mpc_offline",
+            selected_mode,
+            tactile_replay=getattr(args, "tactile_replay", None),
+            simulation_scene=getattr(args, "mpc_scene", None),
+        )
+        report["status"] = "offline_complete"
+        return
     actual = read_json(snapshot("before_execute"))
     check_start(actual["full_positions_rad"], packet["reviewed_plan"]["keyframes"][0])
     if read_json(status) != displayed:
@@ -421,6 +444,7 @@ def run(args: argparse.Namespace, config: dict, root: Path, report: dict, proces
         yaml.safe_dump(
             {
                 "environment": config["environment"],
+                **({"interpolation": "linear"} if selected_mode == "linear" else {}),
                 "hand_tolerance": packet["reviewed_plan"]["receiver_settings"]["hand_tolerance"],
                 "hand_arrival_required": packet["reviewed_plan"]["receiver_settings"].get(
                     "hand_arrival_required", True
@@ -472,6 +496,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--config", default="src/ada_grasp_ctrl/config/experiments/grasp_pipeline.yaml")
     parser.add_argument("--output-root", required=True)
     parser.add_argument("--mode", choices=("replay", "live"), default="live")
+    parser.add_argument("--controller-mode", choices=MODES, help="Controller selection; baseline is unchanged")
+    parser.add_argument("--offline-packet", help="Run an existing reviewed mock packet without camera/viewer/ROS")
+    parser.add_argument("--tactile-replay", help="Versioned tactile replay for offline MPC")
+    parser.add_argument("--mpc-scene", help="Explicit MuJoCo scene for offline kinematic contact fixtures")
     parser.add_argument("--environment", choices=("mock", "hardware"), help="Backend to verify; default from config")
     parser.add_argument("--ros-domain-id", type=int, help="Domain of the already-running camera and robot drivers")
     parser.add_argument("--group", default="01", help="Replay group ID or all; Enter executes only the displayed group")
@@ -488,9 +516,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lift-height-m", type=float, help="Post-selection world-Z lift; 0 disables it")
     parser.add_argument("--hand-tolerance-rad", type=float, help="Finger arrival tolerance; arm tolerance is unchanged")
     parser.add_argument(
+        "--above-object-open-hand",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Open all fingers to zero above the object; disabling restores the hand-factor policy",
+    )
+    parser.add_argument(
         "--above-object-hand-factor",
         type=float,
-        help="Finger extrapolation from grasp toward pregrasp; 1 preserves pregrasp",
+        help="Finger extrapolation when --no-above-object-open-hand is used; 1 preserves pregrasp",
     )
     parser.add_argument(
         "--above-object-clearance-m",
@@ -517,6 +551,9 @@ def main(argv: list[str] | None = None) -> int:
         config = yaml.safe_load(config_path.read_text())
         if args.environment is not None:
             config["environment"] = args.environment
+        selected_mode = controller_mode(config, args.controller_mode)
+        config.setdefault("controller", {})["mode"] = selected_mode
+        report["controller_mode"] = selected_mode
         if args.ros_domain_id is not None:
             config["ros_domain_id"] = args.ros_domain_id
         elif config.get("environment") == "hardware":
@@ -528,6 +565,8 @@ def main(argv: list[str] | None = None) -> int:
             config["above_object_clearance_m"] = args.above_object_clearance_m
         if args.above_object_hand_factor is not None:
             config["above_object_hand_factor"] = args.above_object_hand_factor
+        if args.above_object_open_hand is not None:
+            config["above_object_open_hand"] = args.above_object_open_hand
         if args.hand_tolerance_rad is not None:
             config["hand_tolerance"] = args.hand_tolerance_rad
         root.mkdir(parents=True, exist_ok=False)
@@ -549,6 +588,20 @@ def main(argv: list[str] | None = None) -> int:
             },
         )
         processes = Processes(config, root)
+        if args.offline_packet:
+            from ada_grasp_ctrl.mpc.offline import run_packet
+
+            packet = load_packet(resolve_from_root(args.offline_packet))
+            report["mpc_offline"] = run_packet(
+                packet,
+                read_json(resolve_from_root(config["model_report"])),
+                root / "mpc_offline",
+                selected_mode,
+                tactile_replay=args.tactile_replay,
+                simulation_scene=args.mpc_scene,
+            )
+            report["status"] = "offline_complete"
+            return 0
         run(args, config, root, report, processes)
         return 1 if report.get("preparation_errors") else 0
     except (KeyboardInterrupt, EOFError):

@@ -167,6 +167,9 @@ and malformed evidence are rejected. A configured profile name is retained; a
 missing profile disables its finger. No hardware variant is inferred from a grid.
 
 The operator confirmed **force direction looks correct and N units are reasonable**.
+After the adapter handoff, the operator also reported that validation passed and
+behavior matched the previous preview; this is a manual regression pass recorded
+in the [validation report](sharpa-tactile-adapter-validation-2026-11-12.md#operator-follow-up-after-adapter-handoff).
 Contact-marker placement, blue normal, S-to-E alignment, geometry-map unit scale
 and all-finger/per-axis calibration remain unverified. `object_on_finger` is the
 requested provisional interpretation; an independently measured push/reaction
@@ -200,3 +203,12 @@ The existing preview launch command and controls are unchanged. A currently
 running Python preview must be restarted by its owner to load the new code.
 See [adapter validation](sharpa-tactile-adapter-validation-2026-11-12.md) for actual
 checks and limits. No MPC, motor, tare or calibration calls are added.
+
+## Compact ROS recording
+
+For baseline execution recordings on physical ROS domain 87, see the
+[compact recording guide](tactile-compact-recording.md). The recorder retains F6,
+contact points, timestamps/identities and joint feedback/commands, while omitting
+only the `dist_force` numeric payload from the saved messages. It marks the omitted
+block explicitly; source contact `MISSING` is never converted to `EMPTY`. The driver
+and this adapter remain unchanged. This saves disk space, not live ROS bandwidth.

@@ -48,6 +48,31 @@ JOINT_NAMES = ARM_NAMES + HAND_NAMES
 ACTION = "/bimanual/right_arm_hand/follow_joint_trajectory"
 
 
+def side_names(side: str = "right") -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Return the explicit arm/hand order without importing a robot runtime."""
+    if side not in ("left", "right"):
+        raise ValueError("side must be left or right")
+    return tuple(f"{side}_J{i}" for i in range(1, 7)), tuple(side + n[5:] for n in HAND_NAMES)
+
+
+def packet_side(packet: dict[str, Any]) -> str:
+    """Keep legacy right packets explicit while accepting side-bound exports."""
+    side = packet.get("side", "right")
+    side_names(side)
+    if packet.get("kind") == "ada_right_joint_targets":
+        if side != "right":
+            raise ValueError("Legacy right packet cannot target the left side")
+    elif packet.get("kind") != "ada_side_joint_targets" or "side" not in packet:
+        raise ValueError("Unsupported Ada ROS packet kind")
+    return side
+
+
+def action_name(side: str = "right") -> str:
+    """Return the selected side's passive trajectory action."""
+    side_names(side)
+    return f"/bimanual/{side}_arm_hand/follow_joint_trajectory"
+
+
 def finite_vector(value: Any, size: int, field: str) -> list[float]:
     """Validate one finite vector without silently padding or clipping values."""
     if not isinstance(value, (list, tuple)) or len(value) != size:
@@ -66,11 +91,13 @@ def validate_packet(packet: dict[str, Any]) -> None:
     Raises:
         ValueError: If schema, frame, names or target values do not match the wire contract.
     """
-    if packet.get("schema_version") != 1 or packet.get("kind") != "ada_right_joint_targets":
+    side = packet_side(packet)
+    names = sum(side_names(side), ())
+    if packet.get("schema_version") != 1:
         raise ValueError("Unsupported Ada ROS packet schema")
-    if packet.get("units") != "rad" or packet.get("joint_names") != list(JOINT_NAMES):
+    if packet.get("units") != "rad" or packet.get("joint_names") != list(names):
         raise ValueError("Expected named right CRX + Sharpa joints in radians")
-    if packet.get("reference_frame") != "world" or packet.get("pose_frame") != "right_hand_flange":
+    if packet.get("reference_frame") != "world" or packet.get("pose_frame") != f"{side}_hand_flange":
         raise ValueError("Expected registered world-frame right_hand_flange targets")
     if packet.get("environment") not in ("mock", "hardware"):
         raise ValueError("Expected an explicit mock or hardware environment")
@@ -93,23 +120,24 @@ def validate_packet(packet: dict[str, Any]) -> None:
         raise ValueError("Missing source model kinematic contract")
 
 
-def kinematic_contract(description: str) -> dict[str, Any]:
+def kinematic_contract(description: str, side: str = "right") -> dict[str, Any]:
     """Extract the named moving joints and their ancestors, ignoring visual assets.
 
     Returns:
         Numeric joint origins, axes and limits indexed by child link, including
         world/base/mount/flange/palm chains. Fixed joint names may differ by exporter.
     """
+    joint_names = sum(side_names(side), ())
     root = ET.fromstring(description)
     joints = root.findall("joint")
     names = {j.get("name"): j for j in joints}
     children = {j.find("child").get("link"): j for j in joints}
     selected = set()
-    for name in JOINT_NAMES:
+    for name in joint_names:
         if name not in names or names[name].get("type") != "revolute":
             raise ValueError(f"Missing revolute {name}")
-    starts = [names[n].find("child").get("link") for n in JOINT_NAMES]
-    starts.extend(["right_hand_flange", "right_hand_C_MC"])
+    starts = [names[n].find("child").get("link") for n in joint_names]
+    starts.extend([f"{side}_hand_flange", f"{side}_hand_C_MC"])
     for link in starts:
         seen = set()
         while link != "world":

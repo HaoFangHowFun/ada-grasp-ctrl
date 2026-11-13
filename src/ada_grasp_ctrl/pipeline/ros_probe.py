@@ -3,7 +3,7 @@
 import argparse
 import time
 
-from ada_grasp_ctrl.experiments.right_ros_contract import ACTION
+from ada_grasp_ctrl.experiments.right_ros_contract import action_name
 
 
 def main() -> int:
@@ -14,10 +14,11 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--empty-domain", action="store_true")
+    parser.add_argument("--side", choices=("left", "right"), default="right")
     args = parser.parse_args()
     rclpy.init(args=[])
     node = rclpy.create_node("ada_pipeline_probe", enable_rosout=False, start_parameter_services=False)
-    client = ActionClient(node, FollowJointTrajectory, ACTION)
+    client = ActionClient(node, FollowJointTrajectory, action_name(args.side))
     try:
         deadline = time.monotonic() + 2
         while time.monotonic() < deadline:

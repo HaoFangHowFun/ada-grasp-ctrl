@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ada_grasp_ctrl.experiments.right_ros_contract import CYCLE_PHASES, finite_vector, validate_packet
+from ada_grasp_ctrl.experiments.right_ros_contract import CYCLE_PHASES, finite_vector, validate_packet, packet_side
 from ada_grasp_ctrl.pipeline.plan import validate_plan
 
 
@@ -18,6 +18,8 @@ def check_reviewed_goal(
     external joint goals retain the runtime's original hardware path requirement.
     """
     validate_packet(packet)
+    if packet_side(packet) != config.get("side", "right"):
+        raise ValueError("Packet side differs from receiver")
     plan = packet["reviewed_plan"]
     validate_plan(plan)
     if packet["environment"] != config["environment"] or plan["environment"] != config["environment"]:

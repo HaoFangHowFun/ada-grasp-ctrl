@@ -1,0 +1,3327 @@
+{
+  "schema_version": 1,
+  "kind": "ada_tactile_adapter_replay",
+  "origin_s": 10.0,
+  "tactile_joint_names": [
+    "right_thumb_CMC_FE",
+    "right_thumb_CMC_AA",
+    "right_thumb_MCP_FE",
+    "right_thumb_MCP_AA",
+    "right_thumb_IP",
+    "right_index_MCP_FE",
+    "right_index_MCP_AA",
+    "right_index_PIP",
+    "right_index_DIP",
+    "right_middle_MCP_FE",
+    "right_middle_MCP_AA",
+    "right_middle_PIP",
+    "right_middle_DIP",
+    "right_ring_MCP_FE",
+    "right_ring_MCP_AA",
+    "right_ring_PIP",
+    "right_ring_DIP",
+    "right_pinky_CMC",
+    "right_pinky_MCP_FE",
+    "right_pinky_MCP_AA",
+    "right_pinky_PIP",
+    "right_pinky_DIP"
+  ],
+  "provenance": {
+    "kind": "synthetic_equivalent_observation_recording",
+    "hardware_recording": false,
+    "generator": "tests/test_mpc_tactile_compatibility.py:equivalent_fixture",
+    "note": "Generated physical equivalence vectors; not a hardware calibration or sensor acquisition recording."
+  },
+  "events": [
+    {
+      "delivered_at": 10.0,
+      "expected_event": "contact",
+      "snapshot": {
+        "evaluated_at": 10.0,
+        "fingers": [
+          [
+            "pinky",
+            {
+              "status": "VALID",
+              "detail": "",
+              "observation": {
+                "finger": "pinky",
+                "position": [
+                  -0.3434722223090233,
+                  0.4181054573463465,
+                  -0.18772229233445675
+                ],
+                "normal": [
+                  0.6548940284889878,
+                  -0.6770606568888025,
+                  -0.3357121957015681
+                ],
+                "force": [
+                  -21.485601831774574,
+                  76.39917589426757,
+                  83.36104803826333
+                ],
+                "frame_id": "right_hand_flange",
+                "timestamp": 10.0,
+                "receipt_ros": 110.0,
+                "subscriber_ros": 110.0,
+                "session_id": "synthetic-fixture",
+                "sequence": 1,
+                "sdk_frame_id": 1,
+                "sdk_frame_id_raw": "1",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "contact_uv": [
+                  1.0,
+                  2.0
+                ],
+                "contact_count": 1,
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "raw_f6": [
+                  -93.78298902776648,
+                  8.89676001425093,
+                  66.12963120796225,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "force_indices": [
+                  0,
+                  1,
+                  2
+                ],
+                "geometry": {
+                  "profile": "synthetic_candidate",
+                  "source": "generated_fixture",
+                  "units": "native",
+                  "meters_per_unit": 0.001,
+                  "transform_s_to_e": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      1.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  ],
+                  "uv_to_col_row": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0
+                    ]
+                  ],
+                  "verification": "UNVERIFIED CANDIDATE",
+                  "evidence": [
+                    [
+                      "origin",
+                      "synthetic"
+                    ]
+                  ]
+                },
+                "pixel_row": 2,
+                "pixel_col": 1,
+                "joint_received": 10.0,
+                "joint_receipt_ros": 110.0,
+                "warnings": [],
+                "force_convention": "object_on_finger",
+                "force_convention_quality": "provisional; operator-observed direction and reasonable N units",
+                "timestamp_clock": "subscriber host monotonic"
+              },
+              "local": null,
+              "frame": {
+                "finger": "pinky",
+                "status": "VALID",
+                "raw": [
+                  -93.78298902776648,
+                  8.89676001425093,
+                  66.12963120796225,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.0,
+                "receipt_ros": 110.0,
+                "subscriber_ros": 110.0,
+                "session_id": "synthetic-fixture",
+                "sequence": 1,
+                "sdk_frame_id": 1,
+                "sdk_frame_id_raw": "1",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "VALID",
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_count": 1,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ],
+          [
+            "ring",
+            {
+              "status": "VALID",
+              "detail": "",
+              "observation": {
+                "finger": "ring",
+                "position": [
+                  -0.35209025999881144,
+                  0.3645299716672633,
+                  -0.19647990227816858
+                ],
+                "normal": [
+                  0.8464059771509451,
+                  0.5135056915352683,
+                  -0.14109864139685968
+                ],
+                "force": [
+                  -10.616606756593415,
+                  -22.332891794385827,
+                  3.828898372237582
+                ],
+                "frame_id": "right_hand_flange",
+                "timestamp": 10.0,
+                "receipt_ros": 110.0,
+                "subscriber_ros": 110.0,
+                "session_id": "synthetic-fixture",
+                "sequence": 1,
+                "sdk_frame_id": 1,
+                "sdk_frame_id_raw": "1",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "contact_uv": [
+                  1.0,
+                  2.0
+                ],
+                "contact_count": 1,
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "raw_f6": [
+                  6.8825621411625075,
+                  -23.61605327723625,
+                  -4.5872893574081175,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "force_indices": [
+                  0,
+                  1,
+                  2
+                ],
+                "geometry": {
+                  "profile": "synthetic_candidate",
+                  "source": "generated_fixture",
+                  "units": "native",
+                  "meters_per_unit": 0.001,
+                  "transform_s_to_e": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      1.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  ],
+                  "uv_to_col_row": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0
+                    ]
+                  ],
+                  "verification": "UNVERIFIED CANDIDATE",
+                  "evidence": [
+                    [
+                      "origin",
+                      "synthetic"
+                    ]
+                  ]
+                },
+                "pixel_row": 2,
+                "pixel_col": 1,
+                "joint_received": 10.0,
+                "joint_receipt_ros": 110.0,
+                "warnings": [],
+                "force_convention": "object_on_finger",
+                "force_convention_quality": "provisional; operator-observed direction and reasonable N units",
+                "timestamp_clock": "subscriber host monotonic"
+              },
+              "local": null,
+              "frame": {
+                "finger": "ring",
+                "status": "VALID",
+                "raw": [
+                  6.8825621411625075,
+                  -23.61605327723625,
+                  -4.5872893574081175,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.0,
+                "receipt_ros": 110.0,
+                "subscriber_ros": 110.0,
+                "session_id": "synthetic-fixture",
+                "sequence": 1,
+                "sdk_frame_id": 1,
+                "sdk_frame_id_raw": "1",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "VALID",
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_count": 1,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ],
+          [
+            "middle",
+            {
+              "status": "VALID",
+              "detail": "",
+              "observation": {
+                "finger": "middle",
+                "position": [
+                  -0.3379232328897491,
+                  0.38327440146569325,
+                  -0.24069404200032662
+                ],
+                "normal": [
+                  0.5315831525051155,
+                  0.0969628071257155,
+                  0.8414377968733187
+                ],
+                "force": [
+                  -1.0969366708904005,
+                  -48.40181831663797,
+                  -93.83217908715378
+                ],
+                "frame_id": "right_hand_flange",
+                "timestamp": 10.0,
+                "receipt_ros": 110.0,
+                "subscriber_ros": 110.0,
+                "session_id": "synthetic-fixture",
+                "sequence": 1,
+                "sdk_frame_id": 1,
+                "sdk_frame_id_raw": "1",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "contact_uv": [
+                  1.0,
+                  2.0
+                ],
+                "contact_count": 1,
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "raw_f6": [
+                  63.55319649748981,
+                  3.83098852210847,
+                  -84.23023127449784,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "force_indices": [
+                  0,
+                  1,
+                  2
+                ],
+                "geometry": {
+                  "profile": "synthetic_candidate",
+                  "source": "generated_fixture",
+                  "units": "native",
+                  "meters_per_unit": 0.001,
+                  "transform_s_to_e": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      1.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  ],
+                  "uv_to_col_row": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0
+                    ]
+                  ],
+                  "verification": "UNVERIFIED CANDIDATE",
+                  "evidence": [
+                    [
+                      "origin",
+                      "synthetic"
+                    ]
+                  ]
+                },
+                "pixel_row": 2,
+                "pixel_col": 1,
+                "joint_received": 10.0,
+                "joint_receipt_ros": 110.0,
+                "warnings": [],
+                "force_convention": "object_on_finger",
+                "force_convention_quality": "provisional; operator-observed direction and reasonable N units",
+                "timestamp_clock": "subscriber host monotonic"
+              },
+              "local": null,
+              "frame": {
+                "finger": "middle",
+                "status": "VALID",
+                "raw": [
+                  63.55319649748981,
+                  3.83098852210847,
+                  -84.23023127449784,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.0,
+                "receipt_ros": 110.0,
+                "subscriber_ros": 110.0,
+                "session_id": "synthetic-fixture",
+                "sequence": 1,
+                "sdk_frame_id": 1,
+                "sdk_frame_id_raw": "1",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "VALID",
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_count": 1,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ],
+          [
+            "index",
+            {
+              "status": "EMPTY",
+              "detail": "",
+              "observation": null,
+              "local": null,
+              "frame": {
+                "finger": "index",
+                "status": "VALID",
+                "raw": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.0,
+                "receipt_ros": 110.0,
+                "subscriber_ros": 110.0,
+                "session_id": "synthetic-fixture",
+                "sequence": 1,
+                "sdk_frame_id": 1,
+                "sdk_frame_id_raw": "1",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "EMPTY",
+                "contact_shape": [
+                  0,
+                  3
+                ],
+                "contact_row": [],
+                "contact_count": 0,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ],
+          [
+            "thumb",
+            {
+              "status": "EMPTY",
+              "detail": "",
+              "observation": null,
+              "local": null,
+              "frame": {
+                "finger": "thumb",
+                "status": "VALID",
+                "raw": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.0,
+                "receipt_ros": 110.0,
+                "subscriber_ros": 110.0,
+                "session_id": "synthetic-fixture",
+                "sequence": 1,
+                "sdk_frame_id": 1,
+                "sdk_frame_id_raw": "1",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "EMPTY",
+                "contact_shape": [
+                  0,
+                  3
+                ],
+                "contact_row": [],
+                "contact_count": 0,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ]
+        ],
+        "configuration": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "pose_status": "VALID"
+      },
+      "feedback": {
+        "joint_names": [
+          "right_J1",
+          "right_J2",
+          "right_J3",
+          "right_J4",
+          "right_J5",
+          "right_J6",
+          "right_thumb_CMC_FE",
+          "right_thumb_CMC_AA",
+          "right_thumb_MCP_FE",
+          "right_thumb_MCP_AA",
+          "right_thumb_IP",
+          "right_index_MCP_FE",
+          "right_index_MCP_AA",
+          "right_index_PIP",
+          "right_index_DIP",
+          "right_middle_MCP_FE",
+          "right_middle_MCP_AA",
+          "right_middle_PIP",
+          "right_middle_DIP",
+          "right_ring_MCP_FE",
+          "right_ring_MCP_AA",
+          "right_ring_PIP",
+          "right_ring_DIP",
+          "right_pinky_CMC",
+          "right_pinky_MCP_FE",
+          "right_pinky_MCP_AA",
+          "right_pinky_PIP",
+          "right_pinky_DIP"
+        ],
+        "positions_rad": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "source_timestamp": 10.0,
+        "receive_timestamp": 10.0,
+        "source": "synthetic",
+        "velocities_rad_s": null
+      }
+    },
+    {
+      "delivered_at": 10.1,
+      "expected_event": "empty",
+      "snapshot": {
+        "evaluated_at": 10.1,
+        "fingers": [
+          [
+            "pinky",
+            {
+              "status": "EMPTY",
+              "detail": "",
+              "observation": null,
+              "local": null,
+              "frame": {
+                "finger": "pinky",
+                "status": "VALID",
+                "raw": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.1,
+                "receipt_ros": 110.1,
+                "subscriber_ros": 110.1,
+                "session_id": "synthetic-fixture",
+                "sequence": 2,
+                "sdk_frame_id": 2,
+                "sdk_frame_id_raw": "2",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "EMPTY",
+                "contact_shape": [
+                  0,
+                  3
+                ],
+                "contact_row": [],
+                "contact_count": 0,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ],
+          [
+            "ring",
+            {
+              "status": "EMPTY",
+              "detail": "",
+              "observation": null,
+              "local": null,
+              "frame": {
+                "finger": "ring",
+                "status": "VALID",
+                "raw": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.1,
+                "receipt_ros": 110.1,
+                "subscriber_ros": 110.1,
+                "session_id": "synthetic-fixture",
+                "sequence": 2,
+                "sdk_frame_id": 2,
+                "sdk_frame_id_raw": "2",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "EMPTY",
+                "contact_shape": [
+                  0,
+                  3
+                ],
+                "contact_row": [],
+                "contact_count": 0,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ],
+          [
+            "middle",
+            {
+              "status": "EMPTY",
+              "detail": "",
+              "observation": null,
+              "local": null,
+              "frame": {
+                "finger": "middle",
+                "status": "VALID",
+                "raw": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.1,
+                "receipt_ros": 110.1,
+                "subscriber_ros": 110.1,
+                "session_id": "synthetic-fixture",
+                "sequence": 2,
+                "sdk_frame_id": 2,
+                "sdk_frame_id_raw": "2",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "EMPTY",
+                "contact_shape": [
+                  0,
+                  3
+                ],
+                "contact_row": [],
+                "contact_count": 0,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ],
+          [
+            "index",
+            {
+              "status": "EMPTY",
+              "detail": "",
+              "observation": null,
+              "local": null,
+              "frame": {
+                "finger": "index",
+                "status": "VALID",
+                "raw": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.1,
+                "receipt_ros": 110.1,
+                "subscriber_ros": 110.1,
+                "session_id": "synthetic-fixture",
+                "sequence": 2,
+                "sdk_frame_id": 2,
+                "sdk_frame_id_raw": "2",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "EMPTY",
+                "contact_shape": [
+                  0,
+                  3
+                ],
+                "contact_row": [],
+                "contact_count": 0,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ],
+          [
+            "thumb",
+            {
+              "status": "EMPTY",
+              "detail": "",
+              "observation": null,
+              "local": null,
+              "frame": {
+                "finger": "thumb",
+                "status": "VALID",
+                "raw": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.1,
+                "receipt_ros": 110.1,
+                "subscriber_ros": 110.1,
+                "session_id": "synthetic-fixture",
+                "sequence": 2,
+                "sdk_frame_id": 2,
+                "sdk_frame_id_raw": "2",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "EMPTY",
+                "contact_shape": [
+                  0,
+                  3
+                ],
+                "contact_row": [],
+                "contact_count": 0,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ]
+        ],
+        "configuration": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "pose_status": "VALID"
+      },
+      "feedback": {
+        "joint_names": [
+          "right_J1",
+          "right_J2",
+          "right_J3",
+          "right_J4",
+          "right_J5",
+          "right_J6",
+          "right_thumb_CMC_FE",
+          "right_thumb_CMC_AA",
+          "right_thumb_MCP_FE",
+          "right_thumb_MCP_AA",
+          "right_thumb_IP",
+          "right_index_MCP_FE",
+          "right_index_MCP_AA",
+          "right_index_PIP",
+          "right_index_DIP",
+          "right_middle_MCP_FE",
+          "right_middle_MCP_AA",
+          "right_middle_PIP",
+          "right_middle_DIP",
+          "right_ring_MCP_FE",
+          "right_ring_MCP_AA",
+          "right_ring_PIP",
+          "right_ring_DIP",
+          "right_pinky_CMC",
+          "right_pinky_MCP_FE",
+          "right_pinky_MCP_AA",
+          "right_pinky_PIP",
+          "right_pinky_DIP"
+        ],
+        "positions_rad": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "source_timestamp": 10.1,
+        "receive_timestamp": 10.1,
+        "source": "synthetic",
+        "velocities_rad_s": null
+      }
+    },
+    {
+      "delivered_at": 10.2,
+      "expected_event": "contact",
+      "snapshot": {
+        "evaluated_at": 10.2,
+        "fingers": [
+          [
+            "pinky",
+            {
+              "status": "VALID",
+              "detail": "",
+              "observation": {
+                "finger": "pinky",
+                "position": [
+                  -0.3434722223090233,
+                  0.4181054573463465,
+                  -0.18772229233445675
+                ],
+                "normal": [
+                  0.6548940284889878,
+                  -0.6770606568888025,
+                  -0.3357121957015681
+                ],
+                "force": [
+                  -21.485601831774574,
+                  76.39917589426757,
+                  83.36104803826333
+                ],
+                "frame_id": "right_hand_flange",
+                "timestamp": 10.2,
+                "receipt_ros": 110.2,
+                "subscriber_ros": 110.2,
+                "session_id": "synthetic-fixture",
+                "sequence": 3,
+                "sdk_frame_id": 3,
+                "sdk_frame_id_raw": "3",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "contact_uv": [
+                  1.0,
+                  2.0
+                ],
+                "contact_count": 1,
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "raw_f6": [
+                  -93.78298902776648,
+                  8.89676001425093,
+                  66.12963120796225,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "force_indices": [
+                  0,
+                  1,
+                  2
+                ],
+                "geometry": {
+                  "profile": "synthetic_candidate",
+                  "source": "generated_fixture",
+                  "units": "native",
+                  "meters_per_unit": 0.001,
+                  "transform_s_to_e": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      1.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  ],
+                  "uv_to_col_row": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0
+                    ]
+                  ],
+                  "verification": "UNVERIFIED CANDIDATE",
+                  "evidence": [
+                    [
+                      "origin",
+                      "synthetic"
+                    ]
+                  ]
+                },
+                "pixel_row": 2,
+                "pixel_col": 1,
+                "joint_received": 10.2,
+                "joint_receipt_ros": 110.2,
+                "warnings": [],
+                "force_convention": "object_on_finger",
+                "force_convention_quality": "provisional; operator-observed direction and reasonable N units",
+                "timestamp_clock": "subscriber host monotonic"
+              },
+              "local": null,
+              "frame": {
+                "finger": "pinky",
+                "status": "VALID",
+                "raw": [
+                  -93.78298902776648,
+                  8.89676001425093,
+                  66.12963120796225,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.2,
+                "receipt_ros": 110.2,
+                "subscriber_ros": 110.2,
+                "session_id": "synthetic-fixture",
+                "sequence": 3,
+                "sdk_frame_id": 3,
+                "sdk_frame_id_raw": "3",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "VALID",
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_count": 1,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ],
+          [
+            "ring",
+            {
+              "status": "VALID",
+              "detail": "",
+              "observation": {
+                "finger": "ring",
+                "position": [
+                  -0.35209025999881144,
+                  0.3645299716672633,
+                  -0.19647990227816858
+                ],
+                "normal": [
+                  0.8464059771509451,
+                  0.5135056915352683,
+                  -0.14109864139685968
+                ],
+                "force": [
+                  -10.616606756593415,
+                  -22.332891794385827,
+                  3.828898372237582
+                ],
+                "frame_id": "right_hand_flange",
+                "timestamp": 10.2,
+                "receipt_ros": 110.2,
+                "subscriber_ros": 110.2,
+                "session_id": "synthetic-fixture",
+                "sequence": 3,
+                "sdk_frame_id": 3,
+                "sdk_frame_id_raw": "3",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "contact_uv": [
+                  1.0,
+                  2.0
+                ],
+                "contact_count": 1,
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "raw_f6": [
+                  6.8825621411625075,
+                  -23.61605327723625,
+                  -4.5872893574081175,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "force_indices": [
+                  0,
+                  1,
+                  2
+                ],
+                "geometry": {
+                  "profile": "synthetic_candidate",
+                  "source": "generated_fixture",
+                  "units": "native",
+                  "meters_per_unit": 0.001,
+                  "transform_s_to_e": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      1.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  ],
+                  "uv_to_col_row": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0
+                    ]
+                  ],
+                  "verification": "UNVERIFIED CANDIDATE",
+                  "evidence": [
+                    [
+                      "origin",
+                      "synthetic"
+                    ]
+                  ]
+                },
+                "pixel_row": 2,
+                "pixel_col": 1,
+                "joint_received": 10.2,
+                "joint_receipt_ros": 110.2,
+                "warnings": [],
+                "force_convention": "object_on_finger",
+                "force_convention_quality": "provisional; operator-observed direction and reasonable N units",
+                "timestamp_clock": "subscriber host monotonic"
+              },
+              "local": null,
+              "frame": {
+                "finger": "ring",
+                "status": "VALID",
+                "raw": [
+                  6.8825621411625075,
+                  -23.61605327723625,
+                  -4.5872893574081175,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.2,
+                "receipt_ros": 110.2,
+                "subscriber_ros": 110.2,
+                "session_id": "synthetic-fixture",
+                "sequence": 3,
+                "sdk_frame_id": 3,
+                "sdk_frame_id_raw": "3",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "VALID",
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_count": 1,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ],
+          [
+            "middle",
+            {
+              "status": "VALID",
+              "detail": "",
+              "observation": {
+                "finger": "middle",
+                "position": [
+                  -0.3379232328897491,
+                  0.38327440146569325,
+                  -0.24069404200032662
+                ],
+                "normal": [
+                  0.5315831525051155,
+                  0.0969628071257155,
+                  0.8414377968733187
+                ],
+                "force": [
+                  -1.0969366708904005,
+                  -48.40181831663797,
+                  -93.83217908715378
+                ],
+                "frame_id": "right_hand_flange",
+                "timestamp": 10.2,
+                "receipt_ros": 110.2,
+                "subscriber_ros": 110.2,
+                "session_id": "synthetic-fixture",
+                "sequence": 3,
+                "sdk_frame_id": 3,
+                "sdk_frame_id_raw": "3",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "contact_uv": [
+                  1.0,
+                  2.0
+                ],
+                "contact_count": 1,
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "raw_f6": [
+                  63.55319649748981,
+                  3.83098852210847,
+                  -84.23023127449784,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "force_indices": [
+                  0,
+                  1,
+                  2
+                ],
+                "geometry": {
+                  "profile": "synthetic_candidate",
+                  "source": "generated_fixture",
+                  "units": "native",
+                  "meters_per_unit": 0.001,
+                  "transform_s_to_e": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      1.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  ],
+                  "uv_to_col_row": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0
+                    ]
+                  ],
+                  "verification": "UNVERIFIED CANDIDATE",
+                  "evidence": [
+                    [
+                      "origin",
+                      "synthetic"
+                    ]
+                  ]
+                },
+                "pixel_row": 2,
+                "pixel_col": 1,
+                "joint_received": 10.2,
+                "joint_receipt_ros": 110.2,
+                "warnings": [],
+                "force_convention": "object_on_finger",
+                "force_convention_quality": "provisional; operator-observed direction and reasonable N units",
+                "timestamp_clock": "subscriber host monotonic"
+              },
+              "local": null,
+              "frame": {
+                "finger": "middle",
+                "status": "VALID",
+                "raw": [
+                  63.55319649748981,
+                  3.83098852210847,
+                  -84.23023127449784,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.2,
+                "receipt_ros": 110.2,
+                "subscriber_ros": 110.2,
+                "session_id": "synthetic-fixture",
+                "sequence": 3,
+                "sdk_frame_id": 3,
+                "sdk_frame_id_raw": "3",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "VALID",
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_count": 1,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ],
+          [
+            "index",
+            {
+              "status": "EMPTY",
+              "detail": "",
+              "observation": null,
+              "local": null,
+              "frame": {
+                "finger": "index",
+                "status": "VALID",
+                "raw": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.2,
+                "receipt_ros": 110.2,
+                "subscriber_ros": 110.2,
+                "session_id": "synthetic-fixture",
+                "sequence": 3,
+                "sdk_frame_id": 3,
+                "sdk_frame_id_raw": "3",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "EMPTY",
+                "contact_shape": [
+                  0,
+                  3
+                ],
+                "contact_row": [],
+                "contact_count": 0,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ],
+          [
+            "thumb",
+            {
+              "status": "EMPTY",
+              "detail": "",
+              "observation": null,
+              "local": null,
+              "frame": {
+                "finger": "thumb",
+                "status": "VALID",
+                "raw": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.2,
+                "receipt_ros": 110.2,
+                "subscriber_ros": 110.2,
+                "session_id": "synthetic-fixture",
+                "sequence": 3,
+                "sdk_frame_id": 3,
+                "sdk_frame_id_raw": "3",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "EMPTY",
+                "contact_shape": [
+                  0,
+                  3
+                ],
+                "contact_row": [],
+                "contact_count": 0,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ]
+        ],
+        "configuration": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "pose_status": "VALID"
+      },
+      "feedback": {
+        "joint_names": [
+          "right_J1",
+          "right_J2",
+          "right_J3",
+          "right_J4",
+          "right_J5",
+          "right_J6",
+          "right_thumb_CMC_FE",
+          "right_thumb_CMC_AA",
+          "right_thumb_MCP_FE",
+          "right_thumb_MCP_AA",
+          "right_thumb_IP",
+          "right_index_MCP_FE",
+          "right_index_MCP_AA",
+          "right_index_PIP",
+          "right_index_DIP",
+          "right_middle_MCP_FE",
+          "right_middle_MCP_AA",
+          "right_middle_PIP",
+          "right_middle_DIP",
+          "right_ring_MCP_FE",
+          "right_ring_MCP_AA",
+          "right_ring_PIP",
+          "right_ring_DIP",
+          "right_pinky_CMC",
+          "right_pinky_MCP_FE",
+          "right_pinky_MCP_AA",
+          "right_pinky_PIP",
+          "right_pinky_DIP"
+        ],
+        "positions_rad": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "source_timestamp": 10.2,
+        "receive_timestamp": 10.2,
+        "source": "synthetic",
+        "velocities_rad_s": null
+      }
+    },
+    {
+      "delivered_at": 10.3,
+      "expected_event": "invalid",
+      "snapshot": {
+        "evaluated_at": 10.3,
+        "fingers": [
+          [
+            "pinky",
+            {
+              "status": "INVALID",
+              "detail": "synthetic corrupted frame",
+              "observation": {
+                "finger": "pinky",
+                "position": [
+                  -0.3434722223090233,
+                  0.4181054573463465,
+                  -0.18772229233445675
+                ],
+                "normal": [
+                  0.6548940284889878,
+                  -0.6770606568888025,
+                  -0.3357121957015681
+                ],
+                "force": [
+                  -21.485601831774574,
+                  76.39917589426757,
+                  83.36104803826333
+                ],
+                "frame_id": "right_hand_flange",
+                "timestamp": 10.3,
+                "receipt_ros": 110.3,
+                "subscriber_ros": 110.3,
+                "session_id": "synthetic-fixture",
+                "sequence": 4,
+                "sdk_frame_id": 4,
+                "sdk_frame_id_raw": "4",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "contact_uv": [
+                  1.0,
+                  2.0
+                ],
+                "contact_count": 1,
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "raw_f6": [
+                  -93.78298902776648,
+                  8.89676001425093,
+                  66.12963120796225,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "force_indices": [
+                  0,
+                  1,
+                  2
+                ],
+                "geometry": {
+                  "profile": "synthetic_candidate",
+                  "source": "generated_fixture",
+                  "units": "native",
+                  "meters_per_unit": 0.001,
+                  "transform_s_to_e": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      1.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  ],
+                  "uv_to_col_row": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0
+                    ]
+                  ],
+                  "verification": "UNVERIFIED CANDIDATE",
+                  "evidence": [
+                    [
+                      "origin",
+                      "synthetic"
+                    ]
+                  ]
+                },
+                "pixel_row": 2,
+                "pixel_col": 1,
+                "joint_received": 10.3,
+                "joint_receipt_ros": 110.3,
+                "warnings": [],
+                "force_convention": "object_on_finger",
+                "force_convention_quality": "provisional; operator-observed direction and reasonable N units",
+                "timestamp_clock": "subscriber host monotonic"
+              },
+              "local": null,
+              "frame": {
+                "finger": "pinky",
+                "status": "VALID",
+                "raw": [
+                  -93.78298902776648,
+                  8.89676001425093,
+                  66.12963120796225,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.3,
+                "receipt_ros": 110.3,
+                "subscriber_ros": 110.3,
+                "session_id": "synthetic-fixture",
+                "sequence": 4,
+                "sdk_frame_id": 4,
+                "sdk_frame_id_raw": "4",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "VALID",
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_count": 1,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ],
+          [
+            "ring",
+            {
+              "status": "VALID",
+              "detail": "",
+              "observation": {
+                "finger": "ring",
+                "position": [
+                  -0.35209025999881144,
+                  0.3645299716672633,
+                  -0.19647990227816858
+                ],
+                "normal": [
+                  0.8464059771509451,
+                  0.5135056915352683,
+                  -0.14109864139685968
+                ],
+                "force": [
+                  -10.616606756593415,
+                  -22.332891794385827,
+                  3.828898372237582
+                ],
+                "frame_id": "right_hand_flange",
+                "timestamp": 10.3,
+                "receipt_ros": 110.3,
+                "subscriber_ros": 110.3,
+                "session_id": "synthetic-fixture",
+                "sequence": 4,
+                "sdk_frame_id": 4,
+                "sdk_frame_id_raw": "4",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "contact_uv": [
+                  1.0,
+                  2.0
+                ],
+                "contact_count": 1,
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "raw_f6": [
+                  6.8825621411625075,
+                  -23.61605327723625,
+                  -4.5872893574081175,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "force_indices": [
+                  0,
+                  1,
+                  2
+                ],
+                "geometry": {
+                  "profile": "synthetic_candidate",
+                  "source": "generated_fixture",
+                  "units": "native",
+                  "meters_per_unit": 0.001,
+                  "transform_s_to_e": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      1.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  ],
+                  "uv_to_col_row": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0
+                    ]
+                  ],
+                  "verification": "UNVERIFIED CANDIDATE",
+                  "evidence": [
+                    [
+                      "origin",
+                      "synthetic"
+                    ]
+                  ]
+                },
+                "pixel_row": 2,
+                "pixel_col": 1,
+                "joint_received": 10.3,
+                "joint_receipt_ros": 110.3,
+                "warnings": [],
+                "force_convention": "object_on_finger",
+                "force_convention_quality": "provisional; operator-observed direction and reasonable N units",
+                "timestamp_clock": "subscriber host monotonic"
+              },
+              "local": null,
+              "frame": {
+                "finger": "ring",
+                "status": "VALID",
+                "raw": [
+                  6.8825621411625075,
+                  -23.61605327723625,
+                  -4.5872893574081175,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.3,
+                "receipt_ros": 110.3,
+                "subscriber_ros": 110.3,
+                "session_id": "synthetic-fixture",
+                "sequence": 4,
+                "sdk_frame_id": 4,
+                "sdk_frame_id_raw": "4",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "VALID",
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_count": 1,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ],
+          [
+            "middle",
+            {
+              "status": "VALID",
+              "detail": "",
+              "observation": {
+                "finger": "middle",
+                "position": [
+                  -0.3379232328897491,
+                  0.38327440146569325,
+                  -0.24069404200032662
+                ],
+                "normal": [
+                  0.5315831525051155,
+                  0.0969628071257155,
+                  0.8414377968733187
+                ],
+                "force": [
+                  -1.0969366708904005,
+                  -48.40181831663797,
+                  -93.83217908715378
+                ],
+                "frame_id": "right_hand_flange",
+                "timestamp": 10.3,
+                "receipt_ros": 110.3,
+                "subscriber_ros": 110.3,
+                "session_id": "synthetic-fixture",
+                "sequence": 4,
+                "sdk_frame_id": 4,
+                "sdk_frame_id_raw": "4",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "contact_uv": [
+                  1.0,
+                  2.0
+                ],
+                "contact_count": 1,
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "raw_f6": [
+                  63.55319649748981,
+                  3.83098852210847,
+                  -84.23023127449784,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "force_indices": [
+                  0,
+                  1,
+                  2
+                ],
+                "geometry": {
+                  "profile": "synthetic_candidate",
+                  "source": "generated_fixture",
+                  "units": "native",
+                  "meters_per_unit": 0.001,
+                  "transform_s_to_e": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      1.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  ],
+                  "uv_to_col_row": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0
+                    ]
+                  ],
+                  "verification": "UNVERIFIED CANDIDATE",
+                  "evidence": [
+                    [
+                      "origin",
+                      "synthetic"
+                    ]
+                  ]
+                },
+                "pixel_row": 2,
+                "pixel_col": 1,
+                "joint_received": 10.3,
+                "joint_receipt_ros": 110.3,
+                "warnings": [],
+                "force_convention": "object_on_finger",
+                "force_convention_quality": "provisional; operator-observed direction and reasonable N units",
+                "timestamp_clock": "subscriber host monotonic"
+              },
+              "local": null,
+              "frame": {
+                "finger": "middle",
+                "status": "VALID",
+                "raw": [
+                  63.55319649748981,
+                  3.83098852210847,
+                  -84.23023127449784,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.3,
+                "receipt_ros": 110.3,
+                "subscriber_ros": 110.3,
+                "session_id": "synthetic-fixture",
+                "sequence": 4,
+                "sdk_frame_id": 4,
+                "sdk_frame_id_raw": "4",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "VALID",
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_count": 1,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ],
+          [
+            "index",
+            {
+              "status": "EMPTY",
+              "detail": "",
+              "observation": null,
+              "local": null,
+              "frame": {
+                "finger": "index",
+                "status": "VALID",
+                "raw": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.3,
+                "receipt_ros": 110.3,
+                "subscriber_ros": 110.3,
+                "session_id": "synthetic-fixture",
+                "sequence": 4,
+                "sdk_frame_id": 4,
+                "sdk_frame_id_raw": "4",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "EMPTY",
+                "contact_shape": [
+                  0,
+                  3
+                ],
+                "contact_row": [],
+                "contact_count": 0,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ],
+          [
+            "thumb",
+            {
+              "status": "EMPTY",
+              "detail": "",
+              "observation": null,
+              "local": null,
+              "frame": {
+                "finger": "thumb",
+                "status": "VALID",
+                "raw": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.3,
+                "receipt_ros": 110.3,
+                "subscriber_ros": 110.3,
+                "session_id": "synthetic-fixture",
+                "sequence": 4,
+                "sdk_frame_id": 4,
+                "sdk_frame_id_raw": "4",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "EMPTY",
+                "contact_shape": [
+                  0,
+                  3
+                ],
+                "contact_row": [],
+                "contact_count": 0,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ]
+        ],
+        "configuration": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "pose_status": "VALID"
+      },
+      "feedback": {
+        "joint_names": [
+          "right_J1",
+          "right_J2",
+          "right_J3",
+          "right_J4",
+          "right_J5",
+          "right_J6",
+          "right_thumb_CMC_FE",
+          "right_thumb_CMC_AA",
+          "right_thumb_MCP_FE",
+          "right_thumb_MCP_AA",
+          "right_thumb_IP",
+          "right_index_MCP_FE",
+          "right_index_MCP_AA",
+          "right_index_PIP",
+          "right_index_DIP",
+          "right_middle_MCP_FE",
+          "right_middle_MCP_AA",
+          "right_middle_PIP",
+          "right_middle_DIP",
+          "right_ring_MCP_FE",
+          "right_ring_MCP_AA",
+          "right_ring_PIP",
+          "right_ring_DIP",
+          "right_pinky_CMC",
+          "right_pinky_MCP_FE",
+          "right_pinky_MCP_AA",
+          "right_pinky_PIP",
+          "right_pinky_DIP"
+        ],
+        "positions_rad": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "source_timestamp": 10.3,
+        "receive_timestamp": 10.3,
+        "source": "synthetic",
+        "velocities_rad_s": null
+      }
+    },
+    {
+      "delivered_at": 10.4,
+      "expected_event": "reordered",
+      "snapshot": {
+        "evaluated_at": 10.4,
+        "fingers": [
+          [
+            "pinky",
+            {
+              "status": "VALID",
+              "detail": "",
+              "observation": {
+                "finger": "pinky",
+                "position": [
+                  -0.3434722223090233,
+                  0.4181054573463465,
+                  -0.18772229233445675
+                ],
+                "normal": [
+                  0.6548940284889878,
+                  -0.6770606568888025,
+                  -0.3357121957015681
+                ],
+                "force": [
+                  -21.485601831774574,
+                  76.39917589426757,
+                  83.36104803826333
+                ],
+                "frame_id": "right_hand_flange",
+                "timestamp": 10.4,
+                "receipt_ros": 110.4,
+                "subscriber_ros": 110.4,
+                "session_id": "synthetic-fixture",
+                "sequence": 2,
+                "sdk_frame_id": 2,
+                "sdk_frame_id_raw": "2",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "contact_uv": [
+                  1.0,
+                  2.0
+                ],
+                "contact_count": 1,
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "raw_f6": [
+                  -93.78298902776648,
+                  8.89676001425093,
+                  66.12963120796225,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "force_indices": [
+                  0,
+                  1,
+                  2
+                ],
+                "geometry": {
+                  "profile": "synthetic_candidate",
+                  "source": "generated_fixture",
+                  "units": "native",
+                  "meters_per_unit": 0.001,
+                  "transform_s_to_e": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      1.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  ],
+                  "uv_to_col_row": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0
+                    ]
+                  ],
+                  "verification": "UNVERIFIED CANDIDATE",
+                  "evidence": [
+                    [
+                      "origin",
+                      "synthetic"
+                    ]
+                  ]
+                },
+                "pixel_row": 2,
+                "pixel_col": 1,
+                "joint_received": 10.4,
+                "joint_receipt_ros": 110.4,
+                "warnings": [],
+                "force_convention": "object_on_finger",
+                "force_convention_quality": "provisional; operator-observed direction and reasonable N units",
+                "timestamp_clock": "subscriber host monotonic"
+              },
+              "local": null,
+              "frame": {
+                "finger": "pinky",
+                "status": "VALID",
+                "raw": [
+                  -93.78298902776648,
+                  8.89676001425093,
+                  66.12963120796225,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.4,
+                "receipt_ros": 110.4,
+                "subscriber_ros": 110.4,
+                "session_id": "synthetic-fixture",
+                "sequence": 2,
+                "sdk_frame_id": 2,
+                "sdk_frame_id_raw": "2",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "VALID",
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_count": 1,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ],
+          [
+            "ring",
+            {
+              "status": "VALID",
+              "detail": "",
+              "observation": {
+                "finger": "ring",
+                "position": [
+                  -0.35209025999881144,
+                  0.3645299716672633,
+                  -0.19647990227816858
+                ],
+                "normal": [
+                  0.8464059771509451,
+                  0.5135056915352683,
+                  -0.14109864139685968
+                ],
+                "force": [
+                  -10.616606756593415,
+                  -22.332891794385827,
+                  3.828898372237582
+                ],
+                "frame_id": "right_hand_flange",
+                "timestamp": 10.4,
+                "receipt_ros": 110.4,
+                "subscriber_ros": 110.4,
+                "session_id": "synthetic-fixture",
+                "sequence": 2,
+                "sdk_frame_id": 2,
+                "sdk_frame_id_raw": "2",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "contact_uv": [
+                  1.0,
+                  2.0
+                ],
+                "contact_count": 1,
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "raw_f6": [
+                  6.8825621411625075,
+                  -23.61605327723625,
+                  -4.5872893574081175,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "force_indices": [
+                  0,
+                  1,
+                  2
+                ],
+                "geometry": {
+                  "profile": "synthetic_candidate",
+                  "source": "generated_fixture",
+                  "units": "native",
+                  "meters_per_unit": 0.001,
+                  "transform_s_to_e": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      1.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  ],
+                  "uv_to_col_row": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0
+                    ]
+                  ],
+                  "verification": "UNVERIFIED CANDIDATE",
+                  "evidence": [
+                    [
+                      "origin",
+                      "synthetic"
+                    ]
+                  ]
+                },
+                "pixel_row": 2,
+                "pixel_col": 1,
+                "joint_received": 10.4,
+                "joint_receipt_ros": 110.4,
+                "warnings": [],
+                "force_convention": "object_on_finger",
+                "force_convention_quality": "provisional; operator-observed direction and reasonable N units",
+                "timestamp_clock": "subscriber host monotonic"
+              },
+              "local": null,
+              "frame": {
+                "finger": "ring",
+                "status": "VALID",
+                "raw": [
+                  6.8825621411625075,
+                  -23.61605327723625,
+                  -4.5872893574081175,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.4,
+                "receipt_ros": 110.4,
+                "subscriber_ros": 110.4,
+                "session_id": "synthetic-fixture",
+                "sequence": 2,
+                "sdk_frame_id": 2,
+                "sdk_frame_id_raw": "2",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "VALID",
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_count": 1,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ],
+          [
+            "middle",
+            {
+              "status": "VALID",
+              "detail": "",
+              "observation": {
+                "finger": "middle",
+                "position": [
+                  -0.3379232328897491,
+                  0.38327440146569325,
+                  -0.24069404200032662
+                ],
+                "normal": [
+                  0.5315831525051155,
+                  0.0969628071257155,
+                  0.8414377968733187
+                ],
+                "force": [
+                  -1.0969366708904005,
+                  -48.40181831663797,
+                  -93.83217908715378
+                ],
+                "frame_id": "right_hand_flange",
+                "timestamp": 10.4,
+                "receipt_ros": 110.4,
+                "subscriber_ros": 110.4,
+                "session_id": "synthetic-fixture",
+                "sequence": 2,
+                "sdk_frame_id": 2,
+                "sdk_frame_id_raw": "2",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "contact_uv": [
+                  1.0,
+                  2.0
+                ],
+                "contact_count": 1,
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "raw_f6": [
+                  63.55319649748981,
+                  3.83098852210847,
+                  -84.23023127449784,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "force_indices": [
+                  0,
+                  1,
+                  2
+                ],
+                "geometry": {
+                  "profile": "synthetic_candidate",
+                  "source": "generated_fixture",
+                  "units": "native",
+                  "meters_per_unit": 0.001,
+                  "transform_s_to_e": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      1.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  ],
+                  "uv_to_col_row": [
+                    [
+                      1.0,
+                      0.0,
+                      0.0
+                    ],
+                    [
+                      0.0,
+                      1.0,
+                      0.0
+                    ]
+                  ],
+                  "verification": "UNVERIFIED CANDIDATE",
+                  "evidence": [
+                    [
+                      "origin",
+                      "synthetic"
+                    ]
+                  ]
+                },
+                "pixel_row": 2,
+                "pixel_col": 1,
+                "joint_received": 10.4,
+                "joint_receipt_ros": 110.4,
+                "warnings": [],
+                "force_convention": "object_on_finger",
+                "force_convention_quality": "provisional; operator-observed direction and reasonable N units",
+                "timestamp_clock": "subscriber host monotonic"
+              },
+              "local": null,
+              "frame": {
+                "finger": "middle",
+                "status": "VALID",
+                "raw": [
+                  63.55319649748981,
+                  3.83098852210847,
+                  -84.23023127449784,
+                  123.0,
+                  -456.0,
+                  789.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.4,
+                "receipt_ros": 110.4,
+                "subscriber_ros": 110.4,
+                "session_id": "synthetic-fixture",
+                "sequence": 2,
+                "sdk_frame_id": 2,
+                "sdk_frame_id_raw": "2",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "VALID",
+                "contact_shape": [
+                  1,
+                  3
+                ],
+                "contact_row": [
+                  1.0,
+                  2.0,
+                  3.0
+                ],
+                "contact_count": 1,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ],
+          [
+            "index",
+            {
+              "status": "EMPTY",
+              "detail": "",
+              "observation": null,
+              "local": null,
+              "frame": {
+                "finger": "index",
+                "status": "VALID",
+                "raw": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.4,
+                "receipt_ros": 110.4,
+                "subscriber_ros": 110.4,
+                "session_id": "synthetic-fixture",
+                "sequence": 2,
+                "sdk_frame_id": 2,
+                "sdk_frame_id_raw": "2",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "EMPTY",
+                "contact_shape": [
+                  0,
+                  3
+                ],
+                "contact_row": [],
+                "contact_count": 0,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ],
+          [
+            "thumb",
+            {
+              "status": "EMPTY",
+              "detail": "",
+              "observation": null,
+              "local": null,
+              "frame": {
+                "finger": "thumb",
+                "status": "VALID",
+                "raw": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "shape": [
+                  6
+                ],
+                "error": "",
+                "received": 10.4,
+                "receipt_ros": 110.4,
+                "subscriber_ros": 110.4,
+                "session_id": "synthetic-fixture",
+                "sequence": 2,
+                "sdk_frame_id": 2,
+                "sdk_frame_id_raw": "2",
+                "sdk_timestamp": null,
+                "sdk_timestamp_repr": "unknown",
+                "sdk_timestamp_unit": "unknown",
+                "sdk_timestamp_epoch": "unknown",
+                "source_frame": "synthetic",
+                "warnings": [],
+                "contact_status": "EMPTY",
+                "contact_shape": [
+                  0,
+                  3
+                ],
+                "contact_row": [],
+                "contact_count": 0,
+                "contact_error": ""
+              },
+              "transport_status": "NO DATA",
+              "force_local": null,
+              "force_base": null,
+              "arrival_age": 0.0,
+              "receipt_age": null,
+              "pose_skew": null,
+              "source_position": null,
+              "source_normal": null
+            }
+          ]
+        ],
+        "configuration": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "pose_status": "VALID"
+      },
+      "feedback": {
+        "joint_names": [
+          "right_J1",
+          "right_J2",
+          "right_J3",
+          "right_J4",
+          "right_J5",
+          "right_J6",
+          "right_thumb_CMC_FE",
+          "right_thumb_CMC_AA",
+          "right_thumb_MCP_FE",
+          "right_thumb_MCP_AA",
+          "right_thumb_IP",
+          "right_index_MCP_FE",
+          "right_index_MCP_AA",
+          "right_index_PIP",
+          "right_index_DIP",
+          "right_middle_MCP_FE",
+          "right_middle_MCP_AA",
+          "right_middle_PIP",
+          "right_middle_DIP",
+          "right_ring_MCP_FE",
+          "right_ring_MCP_AA",
+          "right_ring_PIP",
+          "right_ring_DIP",
+          "right_pinky_CMC",
+          "right_pinky_MCP_FE",
+          "right_pinky_MCP_AA",
+          "right_pinky_PIP",
+          "right_pinky_DIP"
+        ],
+        "positions_rad": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "source_timestamp": 10.4,
+        "receive_timestamp": 10.4,
+        "source": "synthetic",
+        "velocities_rad_s": null
+      }
+    }
+  ]
+}

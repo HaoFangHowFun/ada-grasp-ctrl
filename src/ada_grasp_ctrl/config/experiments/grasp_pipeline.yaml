@@ -1,5 +1,8 @@
 # Local experimental CRX/Sharpa pipeline. Hardware requires explicit backend selection.
 schema_version: 1
+controller:
+  mode: baseline
+  hardware_enable: false
 environment: mock
 ros_domain_id: 88
 ros_python: /usr/bin/python3
@@ -18,6 +21,8 @@ seed: 4
 device: cuda:0
 # Applied only after selection; excluded from candidate IK/path filtering.
 above_object_clearance_m: 0.10
+above_object_open_hand: true
+# Used only when above_object_open_hand is false.
 above_object_hand_factor: 1.5
 # Finger arrival tolerance, radians; arm arrival tolerance remains 0.01 rad.
 hand_tolerance: 0.06

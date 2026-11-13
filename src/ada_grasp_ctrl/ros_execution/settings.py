@@ -41,12 +41,24 @@ def bridge_config(overrides: dict[str, Any] | None = None) -> dict[str, Any]:
         raise ValueError("Receiver config must be a mapping")
     config = dict(DEFAULTS)
     if overrides is not None:
-        unknown = set(overrides) - set(DEFAULTS)
+        unknown = set(overrides) - set(DEFAULTS) - {"side", "active_arms", "interpolation"}
         if unknown:
             raise ValueError(f"Unknown receiver settings: {sorted(unknown)}")
         config.update(overrides)
+    side = config.get("side", "right")
+    if side not in ("left", "right"):
+        raise ValueError("side must be left or right")
+    active = config.get("active_arms", [side])
+    if active not in (["left"], ["right"], ["left", "right"]) or side not in active:
+        raise ValueError("active_arms must include the selected side")
+    if overrides and "side" in overrides and "tip_frame" not in overrides:
+        config["tip_frame"] = f"{side}_hand_flange"
     if config["environment"] not in ("mock", "hardware"):
         raise ValueError("environment must be mock or hardware")
+    if "interpolation" in config and (
+        config["interpolation"] != "linear" or config["environment"] != "mock" or side != "right"
+    ):
+        raise ValueError("New linear interpolation requires the right mock backend")
     if not isinstance(config["hand_arrival_required"], bool):
         raise ValueError("hand_arrival_required must be boolean")
     for key, default in DEFAULTS.items():
@@ -57,9 +69,9 @@ def bridge_config(overrides: dict[str, Any] | None = None) -> dict[str, Any]:
             raise ValueError(f"{key} must be positive and finite")
     if config["rate_hz"] > 100 or config["force_limiter"] not in ("required", "disabled"):
         raise ValueError("Invalid command rate or limiter policy")
-    if config["reference_frame"] not in ("world", "right_base_link"):
+    if config["reference_frame"] not in ("world", f"{side}_base_link"):
         raise ValueError("reference_frame must be world or right_base_link")
-    if config["tip_frame"] not in ("right_hand_C_MC", "right_hand_flange", "right_fanuc_flange"):
+    if config["tip_frame"] not in (f"{side}_hand_C_MC", f"{side}_hand_flange", f"{side}_fanuc_flange"):
         raise ValueError("tip_frame must be the right palm or a right flange")
     config.update(mode="joint", path_verified=False)
     return config

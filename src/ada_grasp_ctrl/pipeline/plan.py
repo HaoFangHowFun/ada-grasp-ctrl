@@ -5,8 +5,16 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from ada_grasp_ctrl.experiments.right_ros_contract import JOINT_NAMES, CYCLE_PHASES, PHASE_SEQUENCES, finite_vector
+from ada_grasp_ctrl.experiments.right_ros_contract import (
+    JOINT_NAMES,
+    CYCLE_PHASES,
+    PHASE_SEQUENCES,
+    finite_vector,
+    side_names,
+)
 from ada_grasp_ctrl.ros_execution.motion import smoothstep
+from ada_grasp_ctrl.mpc.reference import linear_reference
+from ada_grasp_ctrl.mpc.contracts import controller_mode
 
 
 def validate_plan(plan: dict[str, Any]) -> None:
@@ -14,15 +22,35 @@ def validate_plan(plan: dict[str, Any]) -> None:
     if plan.get("schema_version") != 1 or plan.get("environment") not in ("mock", "hardware"):
         raise ValueError("Expected a schema-1 mock or hardware plan")
     phases = tuple(plan.get("phases", []))
-    if plan.get("joint_names") != list(JOINT_NAMES) or phases not in PHASE_SEQUENCES:
+    if plan.get("joint_names") != list(sum(side_names(plan.get("side", "right")), ())) or phases not in PHASE_SEQUENCES:
         raise ValueError("Plan joint order or phases differ")
+    if plan.get("receiver_settings", {}).get("side", "right") != plan.get("side", "right"):
+        raise ValueError("Plan side differs from receiver")
+    if "passive_positions_rad" in plan:
+        finite_vector(plan["passive_positions_rad"], 28, "passive_positions_rad")
+        if plan.get("receiver_settings", {}).get("active_arms") != ["left", "right"]:
+            raise ValueError("Passive state requires the dual-arm stack")
     base_phases = phases[1:] if phases[0] == "above_object" else phases
     if plan["environment"] == "hardware" and (
         base_phases != CYCLE_PHASES or plan.get("receiver_settings", {}).get("environment") != "hardware"
     ):
         raise ValueError("Hardware requires the complete cycle and matching receiver settings")
-    if plan.get("interpolation") != "quintic_smoothstep":
+    mode = controller_mode(
+        {
+            "environment": plan["environment"],
+            "side": plan.get("side", "right"),
+            "controller": {"mode": plan.get("controller_mode", "baseline")},
+        }
+    )
+    if plan.get("interpolation") not in ("quintic_smoothstep", "linear"):
         raise ValueError("Unsupported plan interpolation")
+    receiver_interpolation = plan.get("receiver_settings", {}).get("interpolation", "quintic_smoothstep")
+    if plan["interpolation"] != receiver_interpolation or (mode == "linear" and receiver_interpolation != "linear"):
+        raise ValueError("Preview/receiver interpolation differs from controller mode")
+    if plan["interpolation"] == "linear" and (
+        mode != "linear" or plan.get("receiver_settings", {}).get("interpolation") != "linear"
+    ):
+        raise ValueError("Linear preview requires the same explicit mock receiver mode")
     if len(plan.get("keyframes", [])) != len(phases) + 1 or len(plan.get("durations_s", [])) != len(phases):
         raise ValueError("Plan requires a measured start and all declared phase targets")
     for q in plan["keyframes"]:
@@ -36,7 +64,8 @@ def validate_plan(plan: dict[str, Any]) -> None:
             above.get("solver_success") is not True
             or above.get("frame_id") != "world"
             or above.get("axis") != "+Z"
-            or above.get("hand_policy") not in ("retain_selected_pregrasp", "extrapolate_grasp_to_pregrasp")
+            or above.get("hand_policy")
+            not in ("zero_joint_open", "retain_selected_pregrasp", "extrapolate_grasp_to_pregrasp")
             or above.get("used_for_candidate_selection") is not False
             or above.get("path_checked") is not False
             or above.get("collision_checked") is not False
@@ -67,7 +96,10 @@ def validate_plan(plan: dict[str, Any]) -> None:
             raise ValueError("Above-object endpoint must retain pregrasp XY and orientation")
         if above.get("positions") != plan["keyframes"][1]:
             raise ValueError("Above-object joints differ from preview")
-        if above["hand_policy"] == "retain_selected_pregrasp":
+        if above["hand_policy"] == "zero_joint_open":
+            if plan["keyframes"][1][6:] != [0.0] * 22:
+                raise ValueError("Above-object endpoint must open all fingers to zero")
+        elif above["hand_policy"] == "retain_selected_pregrasp":
             if plan["keyframes"][1][6:] != plan["keyframes"][2][6:]:
                 raise ValueError("Above-object endpoint must preserve pregrasp fingers")
         else:
@@ -161,13 +193,15 @@ def phase_progress(plan: dict[str, Any], index: int) -> float:
 
 
 def sample_plan(plan: dict[str, Any], progress: float) -> list[float]:
-    """Sample the receiver's nominal quintic command, including target settling periods."""
+    """Sample the reviewed Ada reference, including target settling periods."""
     if not math.isfinite(progress) or not 0 <= progress <= 100:
         raise ValueError("Progress must be between 0 and 100")
     elapsed = progress / 100 * (sum(plan["durations_s"]) + len(plan["durations_s"]) * plan["settle_time_s"])
     for index, duration in enumerate(plan["durations_s"]):
         if elapsed <= duration:
             a, b = plan["keyframes"][index : index + 2]
+            if plan.get("interpolation") == "linear":
+                return linear_reference(a, b, elapsed, duration)
             alpha = smoothstep(min(1.0, elapsed / duration))
             return [x + alpha * (y - x) for x, y in zip(a, b)]
         elapsed -= duration

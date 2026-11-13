@@ -15,7 +15,8 @@ from typing import Any, Callable
 import xml.etree.ElementTree as ET
 
 import numpy as np
-from ada_grasp_ctrl.ros_execution.model import ARM_NAMES, HAND_NAMES, Sample, named_positions
+from ada_grasp_ctrl.ros_execution.model import Sample, named_positions
+from ada_grasp_ctrl.experiments.right_ros_contract import side_names
 
 ARM_COMMAND = "/crx5ia/joint_targets"
 HAND_COMMAND = "/sharpa/right_hand/joint_command"
@@ -40,7 +41,7 @@ class RunLog:
             abort_reason=None,
             environment=config.get("environment"),
             ros_domain_id=os.getenv("ROS_DOMAIN_ID"),
-            joint_names={"arm": ARM_NAMES, "hand": HAND_NAMES},
+            joint_names=dict(zip(("arm", "hand"), side_names(config.get("side", "right")))),
             force_limiter=config.get("force_limiter"),
             sensors={},
             hardware_validated=False,
@@ -80,6 +81,33 @@ class RunLog:
 
 
 class Runtime:
+    @property
+    def side(self) -> str:
+        return self.c.get("side", "right")
+
+    @property
+    def hand_command(self) -> str:
+        return f"/sharpa/{self.side}_hand/joint_command"
+
+    @property
+    def manager(self) -> str:
+        return f"/crx5ia/{self.side}/controller_manager"
+
+    @property
+    def passive_side(self) -> str:
+        return "left" if self.side == "right" else "right"
+
+    def check_passive(self) -> None:
+        """Reject passive-side drift from the state used for selection and preview."""
+        if "passive_positions_rad" not in self.c:
+            return
+        from ada_grasp_ctrl.pipeline.plan import check_start
+
+        if not self.fresh():
+            raise RuntimeError("Dual-arm feedback expired")
+        actual = np.r_[self.feedback["passive_arm"].q, self.feedback["passive_hand"].q]
+        check_start(actual.tolist(), self.c["passive_positions_rad"])
+
     def __init__(self, c: dict[str, Any], log: RunLog) -> None:
         import rclpy
         from rclpy.node import Node
@@ -90,7 +118,8 @@ class Runtime:
 
         self.rclpy, self.JointState = rclpy, JointState
         self.c, self.log = c, log
-        self.node = Node("ada_right_arm_hand_runtime")
+        self.node = Node(f"ada_{self.side}_arm_hand_runtime")
+        arm_names, hand_names = side_names(self.side)
         self.feedback, self.stamps = {}, {}
         self.description = self.arm_description = None
         self.fault = None
@@ -103,31 +132,44 @@ class Runtime:
         self.controller_client = None
         transient = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         for group, topic, names in (
-            ("arm", "/crx5ia/right/joint_states", ARM_NAMES),
-            ("hand", "/sharpa/right_hand/joint_states", HAND_NAMES),
+            ("arm", f"/crx5ia/{self.side}/joint_states", arm_names),
+            ("hand", f"/sharpa/{self.side}_hand/joint_states", hand_names),
         ):
             self.node.create_subscription(
                 JointState, topic, lambda m, g=group, n=names: self.receive(g, n, m), qos_profile_sensor_data
             )
+        if "passive_positions_rad" in c:
+            for group, topic, names in (
+                ("passive_arm", f"/crx5ia/{self.passive_side}/joint_states", side_names(self.passive_side)[0]),
+                ("passive_hand", f"/sharpa/{self.passive_side}_hand/joint_states", side_names(self.passive_side)[1]),
+            ):
+                self.node.create_subscription(
+                    JointState, topic, lambda m, g=group, n=names: self.receive(g, n, m), qos_profile_sensor_data
+                )
         self.node.create_subscription(
             String, DESCRIPTION, lambda m: self.description_received("description", m.data), transient
         )
         self.node.create_subscription(
             String,
-            "/crx5ia/right/robot_description",
+            f"/crx5ia/{self.side}/robot_description",
             lambda m: self.description_received("arm_description", m.data),
             transient,
         )
         self.node.create_subscription(
             String, "/crx5ia/collision_force_limiter/state", lambda m: setattr(self, "limiter", m.data), transient
         )
-        self.node.create_subscription(String, "/sharpa/right_hand/control_state", self.receive_hand_state, transient)
         self.node.create_subscription(
-            WrenchStamped, "/crx5ia/right/force_torque_sensor_broadcaster/wrench", self.wrench, qos_profile_sensor_data
+            String, f"/sharpa/{self.side}_hand/control_state", self.receive_hand_state, transient
+        )
+        self.node.create_subscription(
+            WrenchStamped,
+            f"/crx5ia/{self.side}/force_torque_sensor_broadcaster/wrench",
+            self.wrench,
+            qos_profile_sensor_data,
         )
         for finger in ("thumb", "index", "middle", "ring", "pinky"):
             for suffix, msg_type in (("dist_force", Image), ("f6", Float64MultiArray)):
-                topic = f"/sharpa/right_hand/tactile/{finger}/{suffix}"
+                topic = f"/sharpa/{self.side}_hand/tactile/{finger}/{suffix}"
                 self.node.create_subscription(
                     msg_type, topic, lambda m, t=topic: self.tactile(t, m), qos_profile_sensor_data
                 )
@@ -198,7 +240,10 @@ class Runtime:
     def fresh(self) -> bool:
         now = time.monotonic()
         return all(
-            g in self.feedback and now - self.feedback[g].received < self.c["feedback_timeout"] for g in ("arm", "hand")
+            g in self.feedback and now - self.feedback[g].received < self.c["feedback_timeout"]
+            for g in (
+                ("arm", "hand", "passive_arm", "passive_hand") if "passive_positions_rad" in self.c else ("arm", "hand")
+            )
         )
 
     def call(self, client: Any, request: Any, timeout: float = 3.0) -> Any:
@@ -228,11 +273,11 @@ class Runtime:
     def preflight(self, execute: bool) -> None:
         self.wait(
             lambda: self.description is not None and self.arm_description is not None and self.fresh(),
-            "combined model, driver model and fresh right-arm/right-hand feedback",
+            f"combined model, driver model and fresh {self.side}-arm/{self.side}-hand feedback",
         )
-        hand = self.parameters("/sharpa/right_hand/hand_node", ["side", "backend", "read_only", "control_mode"])
-        if hand["side"] != "right":
-            raise RuntimeError("Hand driver is not configured for right side")
+        hand = self.parameters(f"/sharpa/{self.side}_hand/hand_node", ["side", "backend", "read_only", "control_mode"])
+        if hand["side"] != self.side:
+            raise RuntimeError(f"Hand driver is not configured for {self.side} side")
         plugins = [e.text for e in ET.fromstring(self.arm_description).findall("ros2_control/hardware/plugin")]
         mock = bool(plugins) and all(p == "mock_components/GenericSystem" for p in plugins)
         expected_plugin = (
@@ -263,8 +308,11 @@ class Runtime:
             if self.c["mode"] == "cartesian" and (not self.c["mount_verified"] or not self.c.get("mount_config")):
                 raise RuntimeError("Hardware Cartesian execution requires a verified mount_config")
         interp = self.parameters("/crx5ia/joint_interpolation", ["active_arms", "input_rate_hz", "method"])
-        if interp["active_arms"] != ["right"] or interp["input_rate_hz"] != self.c["rate_hz"]:
-            raise RuntimeError("Require right-only interpolator and matching input_rate_hz")
+        if (
+            interp["active_arms"] != self.c.get("active_arms", [self.side])
+            or interp["input_rate_hz"] != self.c["rate_hz"]
+        ):
+            raise RuntimeError("Require configured active_arms and matching input_rate_hz")
         self.log.result["driver_interfaces"]["interpolator"] = interp
         self.hand_mode = hand["control_mode"]
         self.require_hand_state = hand["backend"] == "sharpa_sdk" and self.hand_mode == "mit"
@@ -274,26 +322,29 @@ class Runtime:
             self.wait(lambda: self.limiter == "ARMED", "force limiter ARMED")
         from controller_manager_msgs.srv import ListControllers
 
-        self.controller_client = self.node.create_client(ListControllers, MANAGER + "/list_controllers")
+        self.controller_client = self.node.create_client(ListControllers, self.manager + "/list_controllers")
         self.verify_controllers(self.call(self.controller_client, ListControllers.Request()))
         self.wait(
-            lambda: all(self.receiver_present(t) for t in (ARM_COMMAND, HAND_COMMAND)),
-            "right-side command receiver discovery",
+            lambda: all(self.receiver_present(t) for t in (ARM_COMMAND, self.hand_command)),
+            f"{self.side}-side command receiver discovery",
         )
-        for topic in (ARM_COMMAND, HAND_COMMAND):
+        for topic in (ARM_COMMAND, self.hand_command):
             if self.node.count_publishers(topic):
                 raise RuntimeError(f"Another sender owns {topic}")
             if not self.receiver_present(topic):
                 raise RuntimeError(f"Expected driver command receiver: {topic}")
-        low = "/crx5ia/right/forward_position_controller/commands"
+        low = f"/crx5ia/{self.side}/forward_position_controller/commands"
         self.wait(lambda: bool(self.node.get_publishers_info_by_topic(low)), "interpolator output discovery")
         owners = self.node.get_publishers_info_by_topic(low)
         if len(owners) != 1 or owners[0].node_name != "joint_interpolation":
             raise RuntimeError("Unexpected direct arm command sender")
+        self.check_passive()
         self.readonly = False
 
     def receiver_present(self, topic: str) -> bool:
-        expected = ("joint_interpolation", "/crx5ia") if topic == ARM_COMMAND else ("hand_node", "/sharpa/right_hand")
+        expected = (
+            ("joint_interpolation", "/crx5ia") if topic == ARM_COMMAND else ("hand_node", f"/sharpa/{self.side}_hand")
+        )
         receivers = self.node.get_subscriptions_info_by_topic(topic)
         return sum((i.node_name, i.node_namespace) == expected for i in receivers) == 1
 
@@ -305,15 +356,16 @@ class Runtime:
                 raise RuntimeError(f"Arm controller not active: {name}")
 
     def watchdog(self) -> None:
+        self.check_passive()
         now = time.monotonic()
         if self.c["force_limiter"] == "required":
             if self.limiter != "ARMED" or self.node.count_publishers("/crx5ia/collision_force_limiter/state") != 1:
                 raise RuntimeError(f"Force limiter unavailable/not ARMED: {self.limiter}")
         if self.require_hand_state and (
-            self.hand_state != "normal" or self.node.count_publishers("/sharpa/right_hand/control_state") != 1
+            self.hand_state != "normal" or self.node.count_publishers(f"/sharpa/{self.side}_hand/control_state") != 1
         ):
             raise RuntimeError(f"Hand driver control state: {self.hand_state}")
-        for group, topic in (("arm", ARM_COMMAND), ("hand", HAND_COMMAND)):
+        for group, topic in (("arm", ARM_COMMAND), ("hand", self.hand_command)):
             if self.node.count_publishers(topic) != 1 or not self.receiver_present(topic):
                 raise RuntimeError(f"Command ownership/receiver changed: {topic}")
         from controller_manager_msgs.srv import ListControllers
@@ -338,7 +390,14 @@ class Runtime:
             return
         from controller_manager_msgs.srv import SwitchController
 
-        client = self.node.create_client(SwitchController, MANAGER + "/switch_controller")
+        managers = self.c.get("active_arms", [self.side]) if "passive_positions_rad" in self.c else [self.side]
+        for side in managers:
+            self._abort_arm(side, SwitchController)
+
+    def _abort_arm(self, side: str, service_type: Any) -> None:
+        """Stop all controlled arms after a dual-stack fault, without issuing a hand target."""
+        SwitchController = service_type
+        client = self.node.create_client(SwitchController, f"/crx5ia/{side}/controller_manager/switch_controller")
         request = SwitchController.Request(deactivate_controllers=["forward_position_controller"], strictness=1)
         request.timeout.sec = 2
         # Do not route stop spins through fault checks, which caused this abort.
@@ -358,5 +417,6 @@ class Runtime:
                 outcome["controller_deactivated"] = bool(future.done() and future.result().ok)
         except Exception as exc:
             outcome["error"] = str(exc)
+        self.log.result.setdefault("stops", {})[side] = outcome
         self.log.result["stop"] = outcome
         self.node.destroy_client(client)
