@@ -35,6 +35,7 @@ from ada_grasp_ctrl.ros_execution.review import check_reviewed_goal
 from ada_grasp_ctrl.experiments.right_ros_sender import load_packet
 from ada_grasp_ctrl.experiments.right_ros_contract import check_kinematics, kinematic_contract
 from ada_grasp_ctrl.pipeline.plan import check_start
+from ada_grasp_ctrl.pipeline import dynamic_lift
 from ada_grasp_ctrl.mpc.reference import linear_reference
 
 NAMES = ARM_NAMES + HAND_NAMES
@@ -44,12 +45,16 @@ class GoalCancelled(RuntimeError):
     pass
 
 
-def unpack_goal(request: Any, side: str = "right") -> tuple[np.ndarray, float, float]:
+def unpack_goal(request: Any, side: str = "right", *, allow_handoff: bool = False) -> tuple[np.ndarray, float, float]:
     """Reject unsupported trajectory semantics instead of silently ignoring them."""
     trajectory = request.trajectory
     if len(trajectory.points) != 1:
         raise ValueError("Exactly one target per goal; the client owns sequencing")
-    if trajectory.header.frame_id or trajectory.header.stamp.sec or trajectory.header.stamp.nanosec:
+    if (
+        (trajectory.header.frame_id and not allow_handoff)
+        or trajectory.header.stamp.sec
+        or trajectory.header.stamp.nanosec
+    ):
         raise ValueError("Joint goals must use an empty frame and immediate (zero) header stamp")
     if (
         request.multi_dof_trajectory.joint_names
@@ -110,6 +115,8 @@ class Bridge(Node):
 
             self.passive_observer = PassiveObserver(self.packet, args, Path(args.output_dir) / "mpc_passive")
         self.phase_index = 0
+        self.native_completed_at = 0.0
+        self.dynamic_handoff = None
         if config["environment"] == "hardware" and self.packet is None:
             raise ValueError("Hardware receiver requires an explicitly reviewed pipeline packet")
         self.lock = threading.Lock()
@@ -128,16 +135,49 @@ class Bridge(Node):
             f"Passive receiver ready: {action_name(self.side)}. No target or command publisher until a client goal."
         )
 
+    def reviewed_request(self, request: Any) -> tuple[np.ndarray, float, float, dict | None]:
+        """Validate either the original goal or the narrowly scoped derived handoff."""
+        handoff = dynamic_lift.decode(request.trajectory.header.frame_id)
+        allowed = dynamic_lift.eligible(
+            self.mpc_mode, self.packet or {}, bool(getattr(self, "native_completed_at", 0.0))
+        )
+        if handoff is not None and not allowed:
+            raise ValueError("Dynamic lift requires receiver-confirmed native completion")
+        target, duration, extra = unpack_goal(request, self.side, allow_handoff=handoff is not None)
+        if self.packet is not None:
+            if extra:
+                raise ValueError("Reviewed goals cannot override arrival timeout")
+            if handoff is not None:
+                dynamic_lift.check_goal(self.packet, handoff, self.phase_index, target.tolist(), duration, self.config)
+                dynamic_lift.validate_snapshot(
+                    handoff["snapshot"], self.config["feedback_timeout"], after=self.native_completed_at
+                )
+                if handoff["snapshot"]["captured_at"] > time.monotonic():
+                    raise ValueError("Future handoff capture timestamp")
+                cached = getattr(self, "dynamic_handoff", None)
+                phase = self.packet["targets"][self.phase_index]["phase"]
+                if (cached is not None and handoff != cached) or (phase != "lift" and cached is None):
+                    raise ValueError("Dynamic handoff changed or Lift not completed")
+            else:
+                if allowed and self.packet["targets"][self.phase_index]["phase"] in (
+                    "lift",
+                    "hold",
+                    "release",
+                    "return",
+                ):
+                    raise ValueError("Post-MPC goals require a dynamic lift review")
+                check_reviewed_goal(self.packet, self.phase_index, target.tolist(), duration, self.config)
+        return target, duration, extra, handoff
+
     def accept_goal(self, request: Any) -> GoalResponse:
         try:
-            target, duration, extra = unpack_goal(request, self.side)
+            target, duration, extra, handoff = Bridge.reviewed_request(self, request)
             if self.packet is not None:
                 if load_packet(self.packet_path) != self.packet:
                     raise ValueError("Reviewed packet changed")
                 if extra:
                     raise ValueError("Reviewed goals cannot override arrival timeout")
-                check_reviewed_goal(self.packet, self.phase_index, target.tolist(), duration, self.config)
-        except (ValueError, TypeError, AttributeError) as error:
+        except (ValueError, TypeError, AttributeError, KeyError, IndexError) as error:
             self.get_logger().warning(f"Rejecting invalid target: {error}")
             return GoalResponse.REJECT
         with self.lock:
@@ -151,10 +191,9 @@ class Bridge(Node):
         log, rt = None, None
         result = FollowJointTrajectory.Result()
         try:
-            target, duration, extra = unpack_goal(handle.request, self.side)
+            target, duration, extra, handoff = Bridge.reviewed_request(self, handle.request)
             runtime_config = dict(self.config)
             if self.packet is not None:
-                check_reviewed_goal(self.packet, self.phase_index, target.tolist(), duration, self.config)
                 runtime_config["operator_reviewed_joint_goal"] = True
                 plan = self.packet["reviewed_plan"]
                 if "passive_positions_rad" in plan:
@@ -185,7 +224,30 @@ class Bridge(Node):
                 raise RuntimeError("Feedback expired during goal validation")
             start = np.r_[rt.feedback["arm"].q, rt.feedback["hand"].q]
             require_hand = self.config.get("hand_arrival_required", True)
-            if self.packet is not None:
+            phase = self.packet["targets"][self.phase_index]["phase"] if self.packet else None
+            if handoff is not None:
+                if phase == "lift":
+                    dynamic_lift.compute(
+                        self.args.mpc_python,
+                        self.packet_path,
+                        handoff["snapshot"],
+                        log.path,
+                        lambda: rt.spin(0.01),
+                        expected=handoff,
+                    )
+                    if not rt.fresh() or abs(rt.feedback["arm"].received - rt.feedback["hand"].received) > 0.15:
+                        raise ValueError("Stale/incoherent receiver handoff feedback")
+                    start = np.r_[rt.feedback["arm"].q, rt.feedback["hand"].q]
+                    dynamic_lift.check_handoff_start(start.tolist(), handoff["segments"][phase]["start"], log.event)
+                    log.event("dynamic_lift_review", **handoff)
+                else:
+                    check_start(
+                        start.tolist(),
+                        handoff["segments"][phase]["start"],
+                        hand_tolerance=self.config["hand_tolerance"],
+                        ignore_hand_error=not require_hand,
+                    )
+            elif self.packet is not None:
                 check_start(
                     start.tolist(),
                     self.packet["reviewed_plan"]["keyframes"][self.phase_index],
@@ -203,6 +265,7 @@ class Bridge(Node):
                 log.result.update(final_state="DONE", task_completed=True, **outcome)
                 result.error_code = result.SUCCESSFUL
                 result.error_string = "Ours native_complete: grasp+squeeze episode; no automatic next motion"
+                self.native_completed_at = time.monotonic()
                 self.phase_index += 2
                 handle.succeed()
                 return result
@@ -229,6 +292,8 @@ class Bridge(Node):
             drift = actual - start if require_hand or self.phase_index == 0 else actual[:6] - start[:6]
             if np.max(np.abs(drift)) > min(self.config["arm_tolerance"], self.config["hand_tolerance"]):
                 raise RuntimeError("Robot moved during goal validation; resend using current feedback")
+            if handoff is not None and phase == "lift":
+                dynamic_lift.check_handoff_start(actual.tolist(), handoff["segments"][phase]["start"], log.event)
             start = actual.copy()
             required = minimum_duration(start, target, self.config, model, include_hand=require_hand)
             if duration + 1e-6 < required:
@@ -252,7 +317,7 @@ class Bridge(Node):
             linear_guard = None
             if self.config.get("interpolation") == "linear":
                 from ada_grasp_ctrl.mpc.contracts import JointFeedback, MPCProposal
-                from ada_grasp_ctrl.mpc.streaming import GuardedStream
+                from ada_grasp_ctrl.mpc.baseline_stream import BaselineStream as GuardedStream
 
                 linear_guard = GuardedStream(
                     tuple(model.limits["arm"][0]) + tuple(model.limits["hand"][0]),
@@ -351,6 +416,8 @@ class Bridge(Node):
                 hand_arrival_required=require_hand,
                 hand_within_tolerance=bool(np.max(np.abs(error[6:])) <= self.config["hand_tolerance"]),
             )
+            if handoff is not None:
+                self.dynamic_handoff = handoff
             self.phase_index += 1
             handle.succeed()
         except Exception as error:

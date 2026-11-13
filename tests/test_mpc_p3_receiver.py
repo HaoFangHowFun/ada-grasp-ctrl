@@ -65,6 +65,8 @@ class P3ReceiverTests(unittest.TestCase):
             group = "arm" if "crx" in topic else "hand"
 
             def publish(msg):
+                if fault == "publish_" + group and len(sent) >= 2:
+                    raise RuntimeError("synthetic " + group + " publish failure")
                 sent.append((group, serialize_message(msg)))
                 rt.feedback[group].q = np.asarray(msg.position)
 
@@ -152,13 +154,23 @@ class P3ReceiverTests(unittest.TestCase):
             result = bridge.Bridge.execute_goal(instance, handle)
         return result, sent, proposals, instance, rt, handle, records
 
-    def test_passive_failure_cannot_change_baseline_command_bytes(self):
+    def test_passive_failure_cannot_change_baseline_command_fields(self):
         baseline = self.run_receiver("linear")
         passive = self.run_receiver("mpc_passive")
         self.assertEqual(baseline[0].error_code, 0)
         self.assertEqual(passive[0].error_code, 0)
         self.assertGreater(len(baseline[1]), 0)
-        self.assertEqual(baseline[1], passive[1])
+        from rclpy.serialization import deserialize_message
+        from sensor_msgs.msg import JointState
+
+        self.assertEqual(len(baseline[1]), len(passive[1]))
+        for (group_a, raw_a), (group_b, raw_b) in zip(baseline[1], passive[1]):
+            self.assertEqual(group_a, group_b)
+            a, b = deserialize_message(raw_a, JointState), deserialize_message(raw_b, JointState)
+            # CDR padding is unspecified; compare every field and exact numeric bytes.
+            self.assertEqual(a, b)
+            for field in ("position", "velocity", "effort"):
+                self.assertEqual(getattr(a, field).tobytes(), getattr(b, field).tobytes())
         self.assertEqual(passive[2], [])
         passive[3].passive_observer.observe.assert_called()
 
@@ -172,13 +184,28 @@ class P3ReceiverTests(unittest.TestCase):
         self.assertFalse(instance.stopping.is_set())
         rt.abort.assert_not_called()
         commands = [r[1]["q_100Hz"] for r in records if r[0] == "mpc_command"]
-        for a, b in zip(commands, commands[1:]):
-            self.assertLessEqual(max(abs(x - y) for x, y in zip(a, b)), 0.004 + 1e-9)
+        for kind, row in records:
+            if kind == "mpc_command":
+                alpha = min(1.0, max(0.0, (row["sampled_at"] - row["segment_started"]) / 0.1))
+                np.testing.assert_allclose(
+                    row["q_100Hz"],
+                    (1 - alpha) * np.asarray(row["q_segment_start"]) + alpha * np.asarray(row["q_mpc"]),
+                    atol=1e-14,
+                )
+                self.assertEqual(row["q_100Hz"], row["q_last_published"])
+        self.assertTrue(commands)
+        from sensor_msgs.msg import JointState
+        from rclpy.serialization import deserialize_message
+
+        for arm, hand in zip(sent[::2], sent[1::2]):
+            a, h = deserialize_message(arm[1], JointState), deserialize_message(hand[1], JointState)
+            self.assertEqual(a.header.stamp, h.header.stamp)
+            self.assertEqual(a.name + h.name, list(instance.names))
 
     def test_faults_never_advance_to_lift(self):
-        for fault in ("timeout", "solver", "duplicate", "cancel", "stale"):
+        for fault in ("timeout", "solver", "duplicate", "cancel", "stale", "publish_arm", "publish_hand"):
             with self.subTest(fault=fault):
-                result, sent, _, instance, rt, handle, _ = self.run_receiver("mpc_active", fault)
+                result, sent, _, instance, rt, handle, records = self.run_receiver("mpc_active", fault)
                 self.assertNotEqual(result.error_code, 0)
                 self.assertEqual(instance.phase_index, 0)
                 self.assertTrue(instance.stopping.is_set())
@@ -186,6 +213,86 @@ class P3ReceiverTests(unittest.TestCase):
                 handle.succeed.assert_not_called()
                 if fault in ("duplicate", "cancel", "stale"):
                     self.assertEqual(sent, [])
+                if fault.startswith("publish_"):
+                    failures = [row for kind, row in records if kind == "mpc_publish_failed"]
+                    self.assertEqual(len(failures), 1)
+                    good = [row for kind, row in records if kind == "mpc_command"]
+                    self.assertEqual(failures[0]["q_last_published"], good[-1]["q_last_published"])
+                    self.assertEqual(failures[0]["published_groups"], ["arm"] if fault == "publish_hand" else [])
+                    self.assertEqual(len(sent), 3 if fault == "publish_hand" else 2)
+
+    def test_receiver_fault_reaches_sender_without_squeeze_or_lift(self):
+        import rclpy
+        import rclpy.action
+        from sensor_msgs.msg import JointState
+        from std_msgs.msg import String
+        from ada_grasp_ctrl.experiments import right_ros_sender as sender
+        from ada_grasp_ctrl.experiments.right_ros_contract import JOINT_NAMES
+        from ada_grasp_ctrl.ros_execution.settings import bridge_config
+
+        for fault in ("publish_hand", "timeout", "solver", "cancel"):
+            result = self.run_receiver("mpc_active", fault)[0]
+            config = bridge_config()
+            packet = dict(
+                kind="ada_right_joint_targets",
+                environment="mock",
+                side="right",
+                kinematics={},
+                source=dict(model_sha256="fixture"),
+                targets=[dict(phase=p, positions=[0.005] * 28) for p in ("grasp", "squeeze", "lift")],
+                reviewed_plan=dict(
+                    phases=["grasp", "squeeze", "lift"],
+                    durations_s=[1.0, 1.0, 1.0],
+                    keyframes=[[0.0] * 28] * 4,
+                    receiver_settings=config,
+                ),
+            )
+            args = NS(
+                environment="mock",
+                controller_mode="mpc_active",
+                minimum_duration=2.0,
+                startup_timeout=1.0,
+                result_margin=1.0,
+                **{
+                    k: config[k]
+                    for k in ("arm_speed", "hand_speed", "arm_acceleration", "hand_acceleration", "feedback_timeout")
+                },
+            )
+
+            def future(value):
+                return NS(done=lambda: True, result=lambda: value)
+
+            response = NS(status=6, result=result)
+            client = Mock()
+            client.server_is_ready.return_value = True
+            client.send_goal_async.return_value = future(NS(accepted=True, get_result_async=lambda: future(response)))
+            node = Mock()
+            node.get_clock.return_value.now.return_value.nanoseconds = 10**10
+
+            def subscribe(cls, topic, callback, qos):
+                if cls is String:
+                    callback(String(data="fixture"))
+                else:
+                    names = JOINT_NAMES[:6] if "crx" in topic else JOINT_NAMES[6:]
+                    msg = JointState(name=list(names), position=[0.0] * len(names))
+                    msg.header.stamp.sec = 10
+                    callback(msg)
+
+            node.create_subscription.side_effect = subscribe
+            with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+                stack.enter_context(patch.dict("os.environ", ROS_DOMAIN_ID="199"))
+                stack.enter_context(patch.object(rclpy, "init"))
+                stack.enter_context(patch.object(rclpy, "try_shutdown"))
+                stack.enter_context(patch.object(rclpy, "create_node", return_value=node))
+                stack.enter_context(patch.object(rclpy.action, "ActionClient", return_value=client))
+                stack.enter_context(patch.object(sender, "check_kinematics"))
+                stack.enter_context(patch.object(sender, "kinematic_contract"))
+                stack.enter_context(patch("builtins.print"))
+                report = dict(phases=[])
+                with self.assertRaisesRegex(RuntimeError, "grasp:"):
+                    sender.execute(packet, args, Path(tmp), report)
+                self.assertEqual(report["phases"][0]["message"], result.error_string)
+            self.assertEqual(client.send_goal_async.call_count, 1)
 
 
 if __name__ == "__main__":

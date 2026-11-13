@@ -180,6 +180,8 @@ def main() -> int:
                 "--environment",
                 packet["environment"],
                 *options,
+                "--mpc-python",
+                args.mpc_python,
             ]
             for key in ("arm_speed", "hand_speed", "arm_acceleration", "hand_acceleration"):
                 command += ["--" + key.replace("_", "-"), str(config[key])]

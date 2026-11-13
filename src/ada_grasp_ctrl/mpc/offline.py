@@ -18,6 +18,7 @@ from .native import NativeMPC
 from .orchestration import StageOrchestrator
 from .reference import linear_reference
 from .streaming import GuardedStream
+from .baseline_stream import BaselineStream
 
 
 def mujoco_contact_source(scene: Path) -> Callable[[float, JointFeedback], ContactObservation]:
@@ -181,16 +182,22 @@ def run_packet(
         "simulation_contact_semantics": "kinematic_mj_forward_fixture" if simulation_scene else None,
     }
     try:
-        stream = GuardedStream(tuple(limits[0]), tuple(limits[1]), tuple(runner.robot.doa_max_vel), config=config)
+        stream = BaselineStream(tuple(limits[0]), tuple(limits[1]), tuple(runner.robot.doa_max_vel), config=config)
         stream.start(JointFeedback(tuple(JOINT_NAMES), q, now, now, "offline_lagged_mock"), now, owner="baseline")
         for phase_index, phase in enumerate(plan["phases"]):
             orchestrator.enter(phase, previous_arrived=phase_index > 0)
             active = mode == "mpc_active" and phase in ("grasp", "squeeze")
             owner = "mpc_mock" if active else "baseline"
             if owner != stream.owner:
-                stream.ownership.release(stream.owner)
-                stream.ownership.claim(owner)
-                stream.owner = owner
+                stream.stop("phase ownership handoff")
+                stream = (
+                    GuardedStream(config=config)
+                    if active
+                    else BaselineStream(
+                        tuple(limits[0]), tuple(limits[1]), tuple(runner.robot.doa_max_vel), config=config
+                    )
+                )
+                stream.start(JointFeedback(tuple(JOINT_NAMES), q, now, now, "offline_lagged_mock"), now, owner=owner)
             began, start, settled = now, q, None
             duration = plan["durations_s"][phase_index]
             target = tuple(plan["keyframes"][phase_index + 1])
@@ -229,7 +236,7 @@ def run_packet(
                     if proposal is not None:
                         if proposal.diagnostics.get("termination") == "native_complete":
                             # Run the executor safety checks before acknowledging completion.
-                            stream.tick(now, feedback)
+                            stream.check(now, feedback)
                             result["native_termination"] = proposal.diagnostics
                             break
                         stream.accept(proposal, now)
@@ -254,6 +261,8 @@ def run_packet(
                             "proposal_executed": active,
                         }
                     )
+                    if active:
+                        stream.published(command, now)
                     q = tuple(a + 0.25 * (b - a) for a, b in zip(q, command))
                 if active:
                     # Grasp/squeeze label the reference segments, not Ours policy stages.

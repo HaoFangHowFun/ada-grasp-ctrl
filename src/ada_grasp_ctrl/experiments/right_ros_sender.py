@@ -251,6 +251,8 @@ def execute(packet: dict[str, Any], args: argparse.Namespace, root: Path, report
         (root / "live_model.urdf").write_text(description[0])
         event("model_verified", source_model_sha256=packet["source"]["model_sha256"])
         native_completed = False
+        native_completed_at = 0.0
+        handoff = None
         for index, target in enumerate(packet["targets"]):
             if getattr(args, "controller_mode", "linear") == "mpc_active" and target["phase"] == "squeeze":
                 if not native_completed:
@@ -261,6 +263,48 @@ def execute(packet: dict[str, Any], args: argparse.Namespace, root: Path, report
             if not fresh() or faults:
                 raise RuntimeError("Feedback/model invalid before next phase")
             phase = target["phase"]
+            from ada_grasp_ctrl.pipeline import dynamic_lift
+
+            if phase == "lift" and dynamic_lift.eligible(
+                getattr(args, "controller_mode", "linear"), packet, native_completed
+            ):
+                wait(
+                    lambda: fresh() and all(states[g][1] > native_completed_at for g in ("arm", "hand")),
+                    args.startup_timeout,
+                    True,
+                )
+                snapshot = dict(
+                    joint_names=list(joint_names),
+                    positions=states["arm"][0] + states["hand"][0],
+                    captured_at=time.monotonic(),
+                    received_at={g: states[g][1] for g in ("arm", "hand")},
+                    header_stamps={g: stamps[g] for g in ("arm", "hand")},
+                    source="same_host_receipt_aligned",
+                    topics={"arm": "/crx5ia/right/joint_states", "hand": "/sharpa/right_hand/joint_states"},
+                )
+                dynamic_lift.validate_snapshot(snapshot, args.feedback_timeout, after=native_completed_at)
+                if any(node.count_publishers(topic) != 1 for topic in snapshot["topics"].values()):
+                    raise RuntimeError("Dynamic lift feedback source absent/ambiguous")
+
+                def planning_spin() -> None:
+                    rclpy.spin_once(node, timeout_sec=0.01)
+                    if interrupt_requested:
+                        raise KeyboardInterrupt
+                    if faults or not fresh():
+                        raise RuntimeError("Feedback/model invalid during dynamic lift planning")
+
+                handoff = dynamic_lift.compute(
+                    args.mpc_python,
+                    Path(args.targets),
+                    snapshot,
+                    root,
+                    planning_spin,
+                )
+                event("dynamic_lift_review", **handoff)
+            if handoff is not None:
+                if not fresh() or faults or abs(states["arm"][1] - states["hand"][1]) > 0.15:
+                    raise RuntimeError("Stale/incoherent feedback after dynamic lift planning")
+                target = dict(target, positions=handoff["segments"][phase]["positions"])
             start = states["arm"][0] + states["hand"][0]
             duration = motion_duration(start, target["positions"], args)
             measured_duration = duration
@@ -268,21 +312,40 @@ def execute(packet: dict[str, Any], args: argparse.Namespace, root: Path, report
                 from ada_grasp_ctrl.pipeline.plan import check_start
 
                 plan = packet["reviewed_plan"]
-                check_start(
-                    start,
-                    plan["keyframes"][index],
-                    hand_tolerance=plan["receiver_settings"]["hand_tolerance"] if index > 0 else 0.02,
-                    ignore_hand_error=index > 0 and not plan["receiver_settings"].get("hand_arrival_required", True),
-                )
+                if handoff is not None:
+                    segment = handoff["segments"][phase]
+                    if phase == "lift":
+                        dynamic_lift.check_handoff_start(start, segment["start"], event)
+                    else:
+                        check_start(
+                            start,
+                            segment["start"],
+                            hand_tolerance=plan["receiver_settings"]["hand_tolerance"],
+                            ignore_hand_error=not plan["receiver_settings"].get("hand_arrival_required", True),
+                        )
+                else:
+                    check_start(
+                        start,
+                        plan["keyframes"][index],
+                        hand_tolerance=plan["receiver_settings"]["hand_tolerance"] if index > 0 else 0.02,
+                        ignore_hand_error=index > 0
+                        and not plan["receiver_settings"].get("hand_arrival_required", True),
+                    )
                 for key in ("arm_speed", "hand_speed", "arm_acceleration", "hand_acceleration"):
                     if getattr(args, key) != plan["receiver_settings"][key]:
                         raise ValueError("Sender limits differ from reviewed plan")
-                duration = plan["durations_s"][index]
+                duration = handoff["segments"][phase]["duration_s"] if handoff else plan["durations_s"][index]
+                if handoff:
+                    dynamic_lift.check_goal(
+                        packet, handoff, index, target["positions"], duration, plan["receiver_settings"]
+                    )
             secs = int(duration)
             point = JointTrajectoryPoint(
                 positions=target["positions"], time_from_start=Duration(sec=secs, nanosec=int((duration - secs) * 1e9))
             )
             goal = FollowJointTrajectory.Goal(trajectory=JointTrajectory(joint_names=list(joint_names), points=[point]))
+            if handoff is not None:
+                goal.trajectory.header.frame_id = dynamic_lift.PREFIX + json.dumps(handoff, allow_nan=False)
             event("goal_sent", phase=phase, positions=target["positions"], duration=duration)
             print(f"Ada sending {phase}: 28 named joints, {duration:.2f} s", flush=True)
 
@@ -329,6 +392,7 @@ def execute(packet: dict[str, Any], args: argparse.Namespace, root: Path, report
                 if not response.result.error_string.startswith("Ours native_complete:"):
                     raise RuntimeError("Receiver did not acknowledge native completion; no lift")
                 native_completed = True
+                native_completed_at = time.monotonic()
             if phase == "lift":
                 report["lift_motion_completed"] = True
             if phase in ("hold", "release", "return"):
@@ -369,6 +433,7 @@ def main() -> int:
     parser.add_argument("--targets", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--mpc-python", default=str(resolve_external_root("data") / ".conda/bin/python"))
     parser.add_argument("--controller-mode", choices=("linear", "mpc_passive", "mpc_active"), default="linear")
     parser.add_argument("--environment", choices=("mock", "hardware"), default="mock")
     for name, value in (

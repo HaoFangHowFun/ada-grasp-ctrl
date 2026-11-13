@@ -10,6 +10,7 @@ from ada_grasp_ctrl.experiments.right_ros_contract import JOINT_NAMES, PHASES
 from ada_grasp_ctrl.mpc.contracts import JointFeedback, MPCProposal, controller_mode
 from ada_grasp_ctrl.mpc.orchestration import StageOrchestrator
 from ada_grasp_ctrl.mpc.reference import LinearReference, linear_reference
+from ada_grasp_ctrl.mpc.baseline_stream import BaselineStream
 from ada_grasp_ctrl.mpc.streaming import CommandOwnership, GuardedStream
 from ada_grasp_ctrl.pipeline.plan import sample_plan, validate_plan
 from ada_grasp_ctrl.ros_execution.settings import bridge_config
@@ -25,7 +26,7 @@ def proposal(now: float, q: tuple = (0.1,) * 28) -> MPCProposal:
 
 
 def stream() -> GuardedStream:
-    return GuardedStream((-1.0,) * 28, (1.0,) * 28, (2.0,) * 28)
+    return GuardedStream()
 
 
 class ReferenceAndModeTests(unittest.TestCase):
@@ -141,9 +142,9 @@ class StageTests(unittest.TestCase):
             self.assertTrue(runner.failed)
 
 
-class GuardedStreamTests(unittest.TestCase):
+class BaselineStreamTests(unittest.TestCase):
     def test_rate_and_all_limits_under_target_reversals(self):
-        guard = stream()
+        guard = BaselineStream((-1.0,) * 28, (1.0,) * 28, (2.0,) * 28)
         guard.start(feedback(0), 0)
         guard.accept(proposal(0), 0)
         previous, old_velocity = np.zeros(28), np.zeros(28)
@@ -163,6 +164,8 @@ class GuardedStreamTests(unittest.TestCase):
                 count += 1
         self.assertEqual(count, 200)
 
+
+class GuardedStreamTests(unittest.TestCase):
     def test_duplicate_target_does_not_refresh_age(self):
         guard = stream()
         guard.start(feedback(0), 0)
@@ -172,15 +175,13 @@ class GuardedStreamTests(unittest.TestCase):
         self.assertFalse(guard.running)
 
     def test_faults_silence_commands(self):
-        for fault in ("stale", "contact", "cancel", "dds", "stall", "limit", "solver", "reorder"):
+        for fault in ("stale", "contact", "cancel", "dds", "stall", "solver", "reorder"):
             guard = stream()
             guard.start(feedback(0), 0)
             guard.accept(proposal(0), 0)
             with self.assertRaises(ValueError):
                 if fault == "contact":
                     guard.accept(replace(proposal(0.01), valid=False), 0.01)
-                elif fault == "limit":
-                    guard.accept(proposal(0.01, (2.0,) * 28), 0.01)
                 elif fault == "solver":
                     guard.accept(replace(proposal(0.01), solve_duration_s=0.11), 0.01)
                 else:
@@ -199,11 +200,11 @@ class GuardedStreamTests(unittest.TestCase):
     def test_single_writer_and_hardware_rejection(self):
         owner = CommandOwnership()
         owner.claim("baseline")
-        guard = GuardedStream((-1.0,) * 28, (1.0,) * 28, (2.0,) * 28, ownership=owner)
+        guard = GuardedStream(ownership=owner)
         with self.assertRaises(ValueError):
             guard.start(feedback(0), 0)
         with self.assertRaises(ValueError):
-            GuardedStream((-1.0,) * 28, (1.0,) * 28, (2.0,) * 28, config={"environment": "hardware"})
+            GuardedStream(config={"environment": "hardware"})
 
 
 if __name__ == "__main__":

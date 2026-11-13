@@ -1,7 +1,11 @@
 # P3：操作到實機前的交接
 
+> 2026-11-13 更新：MPC active 傳送層已改為線性插值；離線／mock 通過，但 CRX 下游位置限制與斷流停止保障尚有 commissioning blocker。實機使用前請先閱讀 [重構結果與保護稽核](mpc-guardedstream-linear-results-2026-11-13.md)。下列舊操作指令不代表新版本已完成實機資格驗證。
+
 軟體已接線並完成離線／mock 驗證；本次沒有啟動、連接或命令實機。實機 read-only 與 active 試驗由操作者執行。
 原本 `script/run_grasp_pipeline.py` 的預設成功流程保持不變。
+
+> Dynamic Lift 更新：實機 `mpc_active` 完成後以新鮮實測起點建立世界 +Z **15 公分** Lift，保留實測手形與原起點容差。實作、測試與直接操作指令見 [動態 Lift 結果](mpc-p3-dynamic-lift-results-2026-11-13.md)。
 
 ## 模式與入口
 
@@ -71,7 +75,7 @@ export PYTHONPATH="$PWD/src:$PYTHONPATH"
 
 終端要求輸入 `mpc_active`。它會先執行原本 above_object／pregrasp，再由 Ours 控制 Grasp＋Squeeze。
 原始條件仍是走完 native reference 且正常力總和 **>15 N**；budget 仍是 reference 長度的兩倍。
-成功後才跳過獨立 squeeze action，接回 lift／hold／release／return。lift 前仍保留既有起點／安全檢查；若 MPC 終點偏離 reviewed lift 起點，就停止並回報，不能把 native completion 當成 lift 路徑已驗證。
+成功後才跳過獨立 squeeze action，依新鮮實測姿態重建世界 +Z 15 公分 Lift，並同步銜接 hold／release／return。Sender 與 receiver 驗證同一份動態計畫，保留原本起點容差；若規劃後的實測姿態仍超差或驗證失敗，停止並記錄差值。
 
 Ctrl+C 取消目前 action；timeout、solver rejection、過期資料或 ownership 問題都停止，不會自動 lift 或重新開始。
 沿用既有 Runtime abort：停用 arm controller，手部保留既有 backend timeout policy；這不是新的急停機制。

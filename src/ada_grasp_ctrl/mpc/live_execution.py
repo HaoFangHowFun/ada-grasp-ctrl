@@ -96,6 +96,7 @@ def run_active(rt, model, packet: dict, args, log, handle) -> dict:
     from ada_grasp_ctrl.ros_execution.runtime import ARM_COMMAND
     from control_msgs.action import FollowJointTrajectory
     from trajectory_msgs.msg import JointTrajectoryPoint
+    from ada_grasp_ctrl.ros_execution.mpc_stream import publish_pair
 
     if packet["environment"] == "hardware" and not (args.hardware_enable and args.operator_confirmed):
         raise ValueError("Active hardware requires explicit enable and operator confirmation")
@@ -126,9 +127,6 @@ def run_active(rt, model, packet: dict, args, log, handle) -> dict:
         rt.wait(lambda: all(p.get_subscription_count() >= 1 for p in rt.pubs.values()), "MPC command discovery")
         config = {k: v for k, v in rt.c.items() if k not in ("mode", "path_verified", "operator_reviewed_joint_goal")}
         guard = GuardedStream(
-            tuple(model.limits["arm"][0]) + tuple(model.limits["hand"][0]),
-            tuple(model.limits["arm"][1]) + tuple(model.limits["hand"][1]),
-            tuple(model.limits["arm"][2]) + tuple(model.limits["hand"][2]),
             config=config,
             hardware_enabled=args.hardware_enable,
         )
@@ -151,7 +149,7 @@ def run_active(rt, model, packet: dict, args, log, handle) -> dict:
                     fresh(received.computed_at, received.computed_at, now, 0.25)
                     if received.solve_duration_s > 0.1:
                         raise ValueError("MPC completion deadline missed")
-                    guard.tick(now, fb)
+                    guard.check(now, fb)
                     log.event("native_complete", diagnostics=received.diagnostics)
                     return dict(
                         termination="native_complete",
@@ -164,10 +162,7 @@ def run_active(rt, model, packet: dict, args, log, handle) -> dict:
                 next_solve = now + 0.1
             command = guard.tick(now, fb)
             if command is not None:
-                for group, sl in (("arm", slice(0, 6)), ("hand", slice(6, 28))):
-                    msg = rt.JointState(name=list(JOINT_NAMES[sl]), position=list(command[sl]))
-                    msg.header.stamp = rt.node.get_clock().now().to_msg()
-                    rt.pubs[group].publish(msg)
+                publish_pair(rt, guard, command, log)
                 log.event(
                     "mpc_command",
                     joint_names=list(JOINT_NAMES),
@@ -176,6 +171,12 @@ def run_active(rt, model, packet: dict, args, log, handle) -> dict:
                     feedback_age_s=now - fb.source_timestamp,
                     owner="existing_receiver",
                     q_mpc=guard.target.positions_rad,
+                    q_segment_start=guard.q_start,
+                    segment_started=guard.segment_started,
+                    proposal_computed_at=guard.target.computed_at,
+                    q_last_published=guard.q_last_published,
+                    sampled_at=now,
+                    published_at=guard.last_published_at,
                 )
             if now >= next_feedback:
                 handle.publish_feedback(
@@ -186,6 +187,11 @@ def run_active(rt, model, packet: dict, args, log, handle) -> dict:
                     )
                 )
                 next_feedback = now + 0.1
+    except Exception as error:
+        if guard is not None:
+            guard.stop(str(error))
+        log.event("mpc_stop", reason=str(error), q_last_published=guard.q_last_published if guard else None)
+        raise
     finally:
         if guard is not None and guard.running:
             guard.stop("MPC episode closed")

@@ -10,6 +10,46 @@ from ada_grasp_ctrl.experiments.right_ros_contract import JOINT_NAMES
 from ada_grasp_ctrl.mpc.contracts import JointFeedback, MPCProposal, fresh
 from ada_grasp_ctrl.mpc.streaming import GuardedStream
 from .settings import bridge_config, validate_domain
+from ada_grasp_ctrl.mpc.contracts import named_vector
+
+
+def publish_pair(rt: Any, guard: GuardedStream, command: tuple[float, ...], log: Any) -> None:
+    """Prepare one canonical pair, commit only after both local publishes return.
+
+    ROS has no atomic two-topic send or physical-delivery acknowledgment. A
+    partial send is fatal: preserve the previous complete pair, log the sent
+    half, and let the existing receiver/transport abort without retries.
+    """
+    sent = []
+    try:
+        command = named_vector(JOINT_NAMES, command)
+        if (
+            not guard.running
+            or guard.ownership.owner != guard.owner
+            or guard.pending is None
+            or command != guard.pending[1]
+        ):
+            raise ValueError("No matching pending command for publication")
+        stamp = rt.node.get_clock().now().to_msg()
+        messages = {}
+        for group, sl in (("arm", slice(0, 6)), ("hand", slice(6, 28))):
+            message = rt.JointState(name=list(JOINT_NAMES[sl]), position=list(command[sl]))
+            message.header.stamp = stamp
+            messages[group] = message
+        for group in ("arm", "hand"):
+            rt.pubs[group].publish(messages[group])
+            sent.append(group)
+        guard.published(command, time.monotonic())
+    except Exception as error:
+        guard.stop("Paired publication failed: " + str(error))
+        log.event(
+            "mpc_publish_failed",
+            reason=guard.fault,
+            published_groups=sent,
+            q_attempted=command,
+            q_last_published=guard.q_last_published,
+        )
+        raise RuntimeError(guard.fault) from error
 
 
 class ROSMockStream:
@@ -17,7 +57,7 @@ class ROSMockStream:
 
     Construction rejects hardware before creating a ROS node. Opening reuses
     backend/plugin/model/controller/force-limiter checks. Every publication runs
-    the existing watchdog and the additional discrete command limits.
+    the existing watchdog and the MPC freshness and publication checks.
     """
 
     def __init__(self, config: dict | None, log: Any, *, domain: int) -> None:
@@ -40,7 +80,6 @@ class ROSMockStream:
     def open(self) -> JointFeedback:
         """Complete read-only preflights before acquiring command-topic ownership."""
         from .runtime import Runtime, ARM_COMMAND
-        from .model import Model
         from dual_sharpa_wave.qos import hand_qos
 
         self.runtime = rt = Runtime(self.config, self.log)
@@ -48,11 +87,7 @@ class ROSMockStream:
             rt.preflight(True)
             if any("bridge" in name for name, _ in rt.node.get_node_names_and_namespaces()):
                 raise ValueError("Legacy action receiver must be stopped before MPC ownership")
-            model = Model(rt.description, self.config)
             self.guard = GuardedStream(
-                tuple(model.limits["arm"][0]) + tuple(model.limits["hand"][0]),
-                tuple(model.limits["arm"][1]) + tuple(model.limits["hand"][1]),
-                tuple(model.limits["arm"][2]) + tuple(model.limits["hand"][2]),
                 config={k: v for k, v in self.config.items() if k not in ("mode", "path_verified")},
             )
             rt.pubs = {
@@ -117,7 +152,7 @@ class ROSMockStream:
                     fresh(proposal.computed_at, proposal.computed_at, now, 0.25)
                     if proposal.solve_duration_s > 0.1:
                         raise ValueError("MPC completion deadline missed")
-                    self.guard.tick(now, self.feedback())
+                    self.guard.check(now, self.feedback())
                     self.completed = True
                     self.close("native_complete")
                     return None
@@ -125,10 +160,7 @@ class ROSMockStream:
             feedback = self.feedback()
             command = self.guard.tick(now, feedback)
             if command is not None:
-                for group, sl in (("arm", slice(0, 6)), ("hand", slice(6, 28))):
-                    msg = rt.JointState(name=list(JOINT_NAMES[sl]), position=list(command[sl]))
-                    msg.header.stamp = rt.node.get_clock().now().to_msg()
-                    rt.pubs[group].publish(msg)
+                publish_pair(rt, self.guard, command, self.log)
                 self.published += 1
                 self.log.event(
                     "mpc_publish",
@@ -137,6 +169,12 @@ class ROSMockStream:
                     measured_q=feedback.positions_rad,
                     feedback_age_s=now - feedback.source_timestamp,
                     q_mpc=self.guard.target.positions_rad,
+                    q_segment_start=self.guard.q_start,
+                    segment_started=self.guard.segment_started,
+                    proposal_computed_at=self.guard.target.computed_at,
+                    q_last_published=self.guard.q_last_published,
+                    sampled_at=now,
+                    published_at=self.guard.last_published_at,
                     dropped_ticks=self.guard.dropped_ticks,
                 )
             return command

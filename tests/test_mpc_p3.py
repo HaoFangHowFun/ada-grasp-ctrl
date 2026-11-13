@@ -69,10 +69,9 @@ class P3CompatibilityTests(unittest.TestCase):
                 self.assertIn("All sensed contacts are ambiguous", result.reasons[0])
 
     def test_hardware_stream_requires_opt_in(self):
-        limits = ((-3.0,) * 28, (3.0,) * 28, (1.0,) * 28)
         with self.assertRaisesRegex(ValueError, "explicit enable"):
-            GuardedStream(*limits, config={"environment": "hardware"})
-        stream = GuardedStream(*limits, config={"environment": "hardware"}, hardware_enabled=True)
+            GuardedStream(config={"environment": "hardware"})
+        stream = GuardedStream(config={"environment": "hardware"}, hardware_enabled=True)
         self.assertFalse(stream.running)
 
 
