@@ -34,8 +34,11 @@ class ReferenceAndModeTests(unittest.TestCase):
         self.assertEqual(controller_mode({"environment": "hardware"}), "baseline")
         for mode in ("linear", "mpc_passive", "mpc_active"):
             self.assertEqual(controller_mode({"environment": "mock"}, mode), mode)
-            with self.assertRaises(ValueError):
-                controller_mode({"environment": "hardware"}, mode)
+            if mode == "mpc_active":
+                self.assertEqual(controller_mode({"environment": "hardware"}, mode), mode)
+            else:
+                with self.assertRaises(ValueError):
+                    controller_mode({"environment": "hardware"}, mode)
         with self.assertRaises(ValueError):
             controller_mode({"controller": {"hardware_enable": True}})
 

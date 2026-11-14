@@ -1,4 +1,4 @@
-# Local experimental CRX/Sharpa pipeline. Hardware requires explicit backend selection.
+# Local experimental CRX/Sharpa pipeline. Real active runs require the explicit CLI mode token.
 schema_version: 1
 controller:
   mode: baseline
@@ -32,3 +32,12 @@ lift_height_m: 0.05
 # After lift arrival, stream the same target, open the hand, then return the arm.
 complete_cycle: true
 hold_s: 5.0
+
+# Applied only by the explicit live --controller-mode mpc_active choice.
+active_hardware:
+  environment: hardware
+  ros_domain_id: 87
+  mpc_python: .conda/bin/python
+  mpc_package_share: /home/hao-fang/ws_fanuc/install/dual_sharpa_wave/share/dual_sharpa_wave
+  calibration_acceptance: src/ada_grasp_ctrl/config/experiments/fixed_camera_acceptance_2026-11-13.json
+  active_output_root: output/grasp_pipeline

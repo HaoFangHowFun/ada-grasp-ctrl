@@ -37,3 +37,10 @@ repeat_normal_tolerance_deg: 2.0
 min_reference_points: 3
 min_repeat_captures: 2
 repeat_region_separation_m: 0.05
+
+# Automatic active mode: full calibrated RGB field; height/depth/cluster filters still apply.
+# May be narrowed to [x0, y0, x1, y1] for this fixed camera without a runtime prompt.
+automatic_workspace_roi: full_valid_camera
+
+# Retain clusters whose 5th-percentile signed table height is at most 5 cm; select the largest.
+automatic_table_lower_height_m: 0.05

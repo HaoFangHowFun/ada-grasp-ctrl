@@ -1,8 +1,11 @@
-"""One entry point across Ada, ROS and DexLearn environments, with a terminal execution gate."""
+"""One entry point across Ada, ROS and DexLearn environments, with explicit active-mode authorization."""
 
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+from datetime import datetime, timezone
+import uuid
 import json
 import os
 from pathlib import Path
@@ -37,15 +40,45 @@ class Processes:
         self.children: list[subprocess.Popen] = []
         self.streams: list[Any] = []
         self.services: list[subprocess.Popen] = []
+        self.monitors: list[subprocess.Popen] = []
 
-    def start(self, command: list[str], label: str, *, ros: bool = False, service: bool = False) -> subprocess.Popen:
+    def event(self, stage: str, state: str, **data: Any) -> None:
+        """Persist same-host monotonic timing and an atomic observational status."""
+        row = dict(stage=stage, state=state, time=time.monotonic(), wall_time_s=time.time(), **data)
+        with (self.root / "timings.jsonl").open("a") as stream:
+            stream.write(json.dumps(row, allow_nan=False) + "\n")
+        temporary = self.root / "pipeline_status.tmp"
+        temporary.write_text(json.dumps(row, allow_nan=False))
+        temporary.replace(self.root / "pipeline_status.json")
+
+    @contextmanager
+    def stage(self, name: str):
+        """Measure orchestration without changing motion timing."""
+        began = time.monotonic()
+        self.event(name, "running")
+        try:
+            yield
+        except BaseException:
+            self.event(name, "failed", duration_s=time.monotonic() - began)
+            raise
+        else:
+            duration = time.monotonic() - began
+            self.event(name, "completed", duration_s=duration)
+            print(f"[{name}] {duration:.3f} s", flush=True)
+
+    def start(
+        self, command: list[str], label: str, *, ros: bool = False, service: bool = False, monitor: bool = False
+    ) -> subprocess.Popen:
         """Start a logged child with source-checkout imports and explicit ROS setup."""
         env = os.environ.copy()
         env.pop("PYTHONHOME", None)
         env["PYTHONPATH"] = str(project_root() / "src")
         env["ROS_DOMAIN_ID"] = str(self.config["ros_domain_id"])
         env["MUJOCO_GL"] = "egl"
-        env["OMP_NUM_THREADS"] = "4"
+        env["OMP_NUM_THREADS"] = "1" if monitor else "4"
+        if monitor:
+            env.update(OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1", NUMEXPR_NUM_THREADS="1")
+            command = ["/usr/bin/nice", "-n", "10", *command]
         if ros:
             env["PATH"] = "/usr/bin:/bin:" + env.get("PATH", "")
             command = [
@@ -74,7 +107,9 @@ class Processes:
         self.streams.append(stream)
         child = subprocess.Popen(command, env=env, stdout=stream, stderr=subprocess.STDOUT, start_new_session=True)
         self.children.append(child)
-        if service:
+        if monitor:
+            self.monitors.append(child)
+        elif service:
             self.services.append(child)
         return child
 
@@ -85,7 +120,10 @@ class Processes:
 
     def run(self, command: list[str], label: str, *, ros: bool = False, timeout: float = 900) -> None:
         """Run a bounded stage; never hide a failed child or continue to sending."""
-        print(f"[{label}] running", flush=True)
+        with self.stage(label):
+            self._run(command, label, ros=ros, timeout=timeout)
+
+    def _run(self, command: list[str], label: str, *, ros: bool, timeout: float) -> None:
         child = self.start(command, label, ros=ros)
         deadline = time.monotonic() + timeout
         while child.poll() is None:
@@ -94,11 +132,15 @@ class Processes:
                 raise TimeoutError(f"{label} timed out; inspect {self.root / (label + '.log')}")
             time.sleep(0.1)
         if child.returncode:
-            raise RuntimeError(f"{label} exited {child.returncode}; inspect {self.root / (label + '.log')}")
+            log = self.root / (label + ".log")
+            detail = log.read_text(errors="replace")[-2000:].strip()
+            raise RuntimeError(f"{label} exited {child.returncode}; inspect {log}\n{detail}")
 
-    def close(self) -> None:
+    def close(self, *, keep_monitors: bool = False) -> None:
         """Cancel active sender first, then stop only this run's services."""
         for child in reversed(self.children):
+            if keep_monitors and child in self.monitors:
+                continue
             if child.poll() is None:
                 child.send_signal(signal.SIGINT)
                 try:
@@ -185,8 +227,13 @@ def perceive(
         str(plane),
         "--output-root",
         str(object_root),
-        "--allow-unaccepted",
     ]
+    if getattr(args, "automatic_active", False):
+        command += ["--automatic-single-object"]
+        if config.get("calibration_acceptance"):
+            command += ["--calibration-acceptance", str(resolve_from_root(config["calibration_acceptance"]))]
+    else:
+        command += ["--allow-unaccepted"]
     if roi is not None:
         command += ["--roi", *map(str, roi)]
     if cluster is not None:
@@ -226,8 +273,9 @@ def perceive(
         str(config["seed"]),
         "--device",
         config["device"],
-        "--allow-unaccepted",
     ]
+    if not getattr(args, "automatic_active", False):
+        command += ["--allow-unaccepted"]
     for field in ("checkpoint", "training_config", "metadata"):
         command += ["--" + field.replace("_", "-"), str(verify_reference(reference.payload[field]))]
     processes.run(command, f"group{group['group']}_inference")
@@ -240,6 +288,7 @@ def run(args: argparse.Namespace, config: dict, root: Path, report: dict, proces
         raise ValueError("Expected schema-1 pipeline config")
     validate_domain(config.get("environment"), config.get("ros_domain_id"))
     selected_mode = controller_mode(config)
+    automatic = getattr(args, "automatic_active", False)
     if args.start_mock and config["environment"] != "mock":
         raise ValueError("--start-mock cannot be combined with hardware mode")
     if args.reuse_candidates and args.mode != "replay":
@@ -249,6 +298,48 @@ def run(args: argparse.Namespace, config: dict, root: Path, report: dict, proces
             probe.settimeout(0.5)
             if probe.connect_ex(("127.0.0.1", 8089)) == 0:
                 raise RuntimeError("Port 8089 is occupied; close the previous preview before starting this run")
+    if automatic:
+        write_json(root / "dashboard_config.json", config)
+        with processes.stage("viewer_initialization"):
+            monitor = processes.start(
+                [
+                    sys.executable,
+                    "-m",
+                    "ada_grasp_ctrl.pipeline.viewer",
+                    "--summary",
+                    str(root / "integration_summary.json"),
+                    "--status",
+                    str(root / "viewer_state.json"),
+                    "--pipeline-status",
+                    str(root / "pipeline_status.json"),
+                    "--dashboard-config",
+                    str(root / "dashboard_config.json"),
+                ],
+                "viewer",
+                monitor=True,
+            )
+            deadline = time.monotonic() + 15
+            while not (root / "viewer_state.json").exists():
+                if monitor.poll() is not None:
+                    raise RuntimeError("Viewer failed to bind port 8089; inspect viewer.log")
+                processes.check_services()
+                if time.monotonic() > deadline:
+                    raise TimeoutError("Viewer did not bind port 8089; inspect viewer.log")
+                time.sleep(0.05)
+        print("PREVIEW_URL=http://localhost:8089", flush=True)
+        from ada_grasp_ctrl.experiments.fixed_camera import load_plane, verify_calibration_acceptance
+
+        plane_path = resolve_from_root(config["table_plane"])
+        if config.get("calibration_acceptance"):
+            verify_calibration_acceptance(plane_path, resolve_from_root(config["calibration_acceptance"]))
+        else:
+            load_plane(plane_path, require_accepted=True)
+        processes.run(
+            [config["ros_python"], "-m", "ada_grasp_ctrl.pipeline.ros_probe", "--active-readiness"],
+            "receiver_probe",
+            ros=True,
+            timeout=60,
+        )
     ros_python = config["ros_python"]
     if args.start_mock:
         processes.run([ros_python, "-m", "ada_grasp_ctrl.pipeline.ros_probe", "--empty-domain"], "probe", ros=True)
@@ -329,30 +420,33 @@ def run(args: argparse.Namespace, config: dict, root: Path, report: dict, proces
             output_root=str(selection),
         )
         print(f"[group{group_id}] selecting candidates", flush=True)
-        summary = select_candidates(select_args, selection)
+        with processes.stage("selection_" + str(group_id)):
+            summary = select_candidates(select_args, selection)
         row = {"group": group_id, "label": group["label"], "runs": [str(selection)], **summary}
         one = destination / "selection_index.json"
         write_json(one, [row])
         entry = load_entries(one)[0]
-        row["contact_sheets"] = contact_sheets(entry, destination / "images")
+        if not automatic:
+            row["contact_sheets"] = contact_sheets(entry, destination / "images")
         if entry["keyframes"] is not None:
             try:
-                row["packet_path"] = str(
-                    export_selection(
-                        entry,
-                        state,
-                        destination / "export",
-                        lift_height_m=config.get("lift_height_m", 0.0),
-                        complete_cycle=config.get("complete_cycle", False),
-                        hold_s=config.get("hold_s", 5.0),
-                        above_object_clearance_m=config.get("above_object_clearance_m", 0.0),
-                        above_object_hand_factor=config.get("above_object_hand_factor", 1.0),
-                        above_object_open_hand=config.get("above_object_open_hand", False),
-                        hand_tolerance=config.get("hand_tolerance"),
-                        hand_arrival_required=config.get("hand_arrival_required", True),
-                        controller_mode=selected_mode,
+                with processes.stage("planning_export"):
+                    row["packet_path"] = str(
+                        export_selection(
+                            entry,
+                            state,
+                            destination / "export",
+                            lift_height_m=config.get("lift_height_m", 0.0),
+                            complete_cycle=config.get("complete_cycle", False),
+                            hold_s=config.get("hold_s", 5.0),
+                            above_object_clearance_m=config.get("above_object_clearance_m", 0.0),
+                            above_object_hand_factor=config.get("above_object_hand_factor", 1.0),
+                            above_object_open_hand=config.get("above_object_open_hand", False),
+                            hand_tolerance=config.get("hand_tolerance"),
+                            hand_arrival_required=config.get("hand_arrival_required", True),
+                            controller_mode=selected_mode,
+                        )
                     )
-                )
             except (LiftTargetError, AboveObjectTargetError) as error:
                 row["execution_error"] = str(error)
                 stage = "above_object_target" if isinstance(error, AboveObjectTargetError) else "lift_target"
@@ -367,7 +461,8 @@ def run(args: argparse.Namespace, config: dict, root: Path, report: dict, proces
                     stream.write(json.dumps(failure) + "\n")
                 print(f"[group{group_id}] {error}", flush=True)
         rows.append(row)
-        write_json(root / "integration_summary.json", rows)
+        write_json(root / "integration_summary.tmp", rows)
+        (root / "integration_summary.tmp").replace(root / "integration_summary.json")
         write_json(root / "run_report.json", report)
         print(
             f"[group{group_id}] {summary['feasible_candidates']}/{summary['candidates']} feasible; "
@@ -378,46 +473,54 @@ def run(args: argparse.Namespace, config: dict, root: Path, report: dict, proces
     if args.export_only:
         return
     status = root / "viewer_state.json"
-    processes.start(
-        [
-            sys.executable,
-            "-m",
-            "ada_grasp_ctrl.pipeline.viewer",
-            "--summary",
-            str(root / "integration_summary.json"),
-            "--status",
-            str(status),
-        ]
-        + ([] if args.preview_only else ["--enter-gate"]),
-        "viewer",
-        service=True,
-    )
-    deadline = time.monotonic() + 60
-    while not status.exists():
-        processes.check_services()
-        if time.monotonic() > deadline:
-            raise TimeoutError("Viewer did not become ready on port 8089")
-        time.sleep(0.1)
-    report["status"] = "preview_only" if args.preview_only else "awaiting_enter"
-    write_json(root / "run_report.json", report)
-    print("PREVIEW_URL=http://localhost:8089", flush=True)
-    print(f"Execution environment: {config['environment']} | ROS domain: {config['ros_domain_id']}", flush=True)
-    if args.preview_only:
-        print("Preview-only mode; no execution gate. Ctrl+C closes this run.", flush=True)
-        while True:
+    if automatic:
+        row = rows[0]
+    else:
+        processes.start(
+            [
+                sys.executable,
+                "-m",
+                "ada_grasp_ctrl.pipeline.viewer",
+                "--summary",
+                str(root / "integration_summary.json"),
+                "--status",
+                str(status),
+            ]
+            + ([] if args.preview_only else ["--enter-gate"]),
+            "viewer",
+            service=True,
+        )
+        deadline = time.monotonic() + 60
+        while not status.exists():
             processes.check_services()
-            time.sleep(0.2)
-    if not wait_for_enter(processes):
-        report["status"] = "canceled_before_execution"
-        return
-    displayed = read_json(status)
-    row = next(r for r in rows if r["group"] == displayed["group"])
+            if time.monotonic() > deadline:
+                raise TimeoutError("Viewer did not become ready on port 8089")
+            time.sleep(0.1)
+        report["status"] = "preview_only" if args.preview_only else "awaiting_enter"
+        write_json(root / "run_report.json", report)
+        print("PREVIEW_URL=http://localhost:8089", flush=True)
+        print(f"Execution environment: {config['environment']} | ROS domain: {config['ros_domain_id']}", flush=True)
+        if args.preview_only:
+            print("Preview-only mode; no execution gate. Ctrl+C closes this run.", flush=True)
+            while True:
+                processes.check_services()
+                time.sleep(0.2)
+        if not wait_for_enter(processes):
+            report["status"] = "canceled_before_execution"
+            return
+        displayed = read_json(status)
+        row = next(r for r in rows if r["group"] == displayed["group"])
     if not row.get("packet_path"):
         raise ValueError(row.get("execution_error", "The displayed dataset has no feasible candidate"))
     packet = load_packet(Path(row["packet_path"]))
-    if displayed["selection_sha256"] != packet["source"]["references"][packet["source"]["selection_path"]]:
+    if (
+        not automatic
+        and displayed["selection_sha256"] != packet["source"]["references"][packet["source"]["selection_path"]]
+    ):
         raise ValueError("Displayed selection changed")
-    if selected_mode in ("mpc_passive", "mpc_active"):
+    if not automatic and selected_mode in ("mpc_passive", "mpc_active"):
+        if selected_mode == "mpc_active" and config["environment"] == "hardware":
+            raise ValueError("Hardware mpc_active requires an explicit live CLI authorization; no offline fallback")
         # Phase 2 uses a separate offline mock plant, with no live actuator publisher.
         # The reviewed packet remains the sole source of stage endpoints/ordering.
         from ada_grasp_ctrl.mpc.offline import run_packet
@@ -434,10 +537,11 @@ def run(args: argparse.Namespace, config: dict, root: Path, report: dict, proces
         return
     actual = read_json(snapshot("before_execute"))
     check_start(actual["full_positions_rad"], packet["reviewed_plan"]["keyframes"][0])
-    if read_json(status) != displayed:
+    if not automatic and read_json(status) != displayed:
         raise ValueError("Displayed dataset changed during confirmation; rerun before execution")
-    processes.run([ros_python, "-m", "ada_grasp_ctrl.pipeline.ros_probe"], "receiver_probe", ros=True)
-    if read_json(status) != displayed:
+    if not automatic:
+        processes.run([ros_python, "-m", "ada_grasp_ctrl.pipeline.ros_probe"], "receiver_probe", ros=True)
+    if not automatic and read_json(status) != displayed:
         raise ValueError("Displayed dataset changed before receiver startup; rerun before execution")
     receiver_config = root / "receiver_config.yaml"
     receiver_config.write_text(
@@ -452,6 +556,23 @@ def run(args: argparse.Namespace, config: dict, root: Path, report: dict, proces
             }
         )
     )
+    receiver_options = []
+    sender_options = []
+    if automatic:
+        common = ["--controller-mode", "mpc_active", "--mpc-python", str(resolve_from_root(config["mpc_python"]))]
+        receiver_options = common + [
+            "--hardware-enable",
+            "--operator-confirmed",
+            "--mpc-model-report",
+            str(model_report),
+            "--mpc-package-share",
+            str(resolve_from_root(config["mpc_package_share"])),
+            "--dynamic-lift-plan",
+            str(root / "sender/dynamic-lift-result.json"),
+        ]
+        sender_options = list(common)
+        for key in ("arm_speed", "hand_speed", "arm_acceleration", "hand_acceleration", "feedback_timeout"):
+            sender_options += ["--" + key.replace("_", "-"), str(packet["reviewed_plan"]["receiver_settings"][key])]
     processes.start(
         [
             ros_python,
@@ -463,7 +584,8 @@ def run(args: argparse.Namespace, config: dict, root: Path, report: dict, proces
             row["packet_path"],
             "--output-dir",
             str(root / "receiver"),
-        ],
+        ]
+        + receiver_options,
         "receiver",
         ros=True,
         service=True,
@@ -482,7 +604,8 @@ def run(args: argparse.Namespace, config: dict, root: Path, report: dict, proces
             "--execute",
             "--environment",
             config["environment"],
-        ],
+        ]
+        + sender_options,
         "sender",
         ros=True,
         timeout=1000,
@@ -490,13 +613,59 @@ def run(args: argparse.Namespace, config: dict, root: Path, report: dict, proces
     report.update(status="completed", execution=read_json(root / "sender/run_report.json"))
 
 
+def configure_active(args: argparse.Namespace, config: dict) -> None:
+    """Derive run-local authorization only from the explicit real-active CLI choice."""
+    args.automatic_active = bool(
+        args.controller_mode == "mpc_active"
+        and args.mode == "live"
+        and not (args.offline_packet or args.export_only or args.preview_only)
+        and args.environment != "mock"
+    )
+    if args.automatic_active:
+        if args.start_mock or args.reuse_candidates or args.roi is not None or args.cluster is not None:
+            raise ValueError("Automatic active mode requires live capture and configured ROI; no mock/manual selection")
+        if args.tactile_replay or args.mpc_scene:
+            raise ValueError("Automatic hardware cannot use offline tactile or simulation inputs")
+        active = config.get("active_hardware", {})
+        if active.get("environment") != "hardware":
+            raise ValueError("Configure active_hardware.environment=hardware for explicit live mpc_active")
+        config.update(active)
+        if not config.get("complete_cycle") or (args.lift_height_m is not None and args.lift_height_m != 0.15):
+            raise ValueError("Automatic active requires complete cycle and world +Z 0.15 m Lift")
+        config["lift_height_m"] = 0.15
+        for key in ("mpc_python", "mpc_package_share", "ros_setup", "workspace_setup", "model_report"):
+            if not config.get(key) or not resolve_from_root(config[key]).exists():
+                raise ValueError("Missing active hardware dependency: " + key)
+        config.setdefault("controller", {})["hardware_enable"] = True
+        if args.output_root is None:
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%fZ")
+            args.output_root = str(
+                resolve_from_root(config.get("active_output_root", "output/grasp_pipeline"))
+                / ("active_" + stamp + "_" + uuid.uuid4().hex[:8])
+            )
+    elif (
+        (args.controller_mode or config.get("controller", {}).get("mode")) == "mpc_active"
+        and (args.environment or config.get("environment")) == "hardware"
+        and not (args.export_only or args.preview_only or args.offline_packet)
+    ):
+        raise ValueError("Hardware active execution requires explicit --controller-mode mpc_active in live mode")
+    if args.output_root is None:
+        raise ValueError("--output-root is required outside automatic live mpc_active")
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run a fresh experimental pipeline; EOF never approves robot motion."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="src/ada_grasp_ctrl/config/experiments/grasp_pipeline.yaml")
-    parser.add_argument("--output-root", required=True)
+    parser.add_argument(
+        "--output-root", help="New run directory; automatic timestamped directory for explicit live mpc_active"
+    )
     parser.add_argument("--mode", choices=("replay", "live"), default="live")
-    parser.add_argument("--controller-mode", choices=MODES, help="Controller selection; baseline is unchanged")
+    parser.add_argument(
+        "--controller-mode",
+        choices=MODES,
+        help="Explicit live mpc_active authorizes one real run without further prompts; other defaults unchanged",
+    )
     parser.add_argument("--offline-packet", help="Run an existing reviewed mock packet without camera/viewer/ROS")
     parser.add_argument("--tactile-replay", help="Versioned tactile replay for offline MPC")
     parser.add_argument("--mpc-scene", help="Explicit MuJoCo scene for offline kinematic contact fixtures")
@@ -535,7 +704,7 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--export-only", action="store_true", help="Produce artifacts without viewer or execution")
     mode.add_argument("--preview-only", action="store_true", help="Keep 8089 open without accepting execution")
     args = parser.parse_args(argv)
-    root = resolve_from_root(args.output_root, "output")
+    root = None
     processes = None
     created = False
     report = {
@@ -549,6 +718,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         config_path = resolve_from_root(args.config)
         config = yaml.safe_load(config_path.read_text())
+        configure_active(args, config)
+        root = resolve_from_root(args.output_root, "output")
         if args.environment is not None:
             config["environment"] = args.environment
         selected_mode = controller_mode(config, args.controller_mode)
@@ -557,7 +728,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.ros_domain_id is not None:
             config["ros_domain_id"] = args.ros_domain_id
         elif config.get("environment") == "hardware":
-            config["ros_domain_id"] = validate_domain("hardware", os.environ.get("ROS_DOMAIN_ID"))
+            config["ros_domain_id"] = validate_domain(
+                "hardware",
+                os.environ.get("ROS_DOMAIN_ID", config.get("ros_domain_id") if args.automatic_active else None),
+            )
         report["environment"] = config.get("environment")
         if args.lift_height_m is not None:
             config["lift_height_m"] = args.lift_height_m
@@ -571,6 +745,7 @@ def main(argv: list[str] | None = None) -> int:
             config["hand_tolerance"] = args.hand_tolerance_rad
         root.mkdir(parents=True, exist_ok=False)
         created = True
+        print(f"RUN_OUTPUT={root}", flush=True)
         write_json(
             root / "run_manifest.yaml",
             {
@@ -580,9 +755,10 @@ def main(argv: list[str] | None = None) -> int:
                 "config": config,
                 "config_sha256": file_hash(config_path),
                 "started_s": time.time(),
+                "hardware_operator_confirmed": args.automatic_active,
                 "code_sha256": {
                     str(p): file_hash(p)
-                    for folder in ("pipeline", "ros_execution")
+                    for folder in ("pipeline", "ros_execution", "experiments", "mpc")
                     for p in sorted((project_root() / "src/ada_grasp_ctrl" / folder).glob("*.py"))
                 },
             },
@@ -613,7 +789,18 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     finally:
         if processes is not None:
-            processes.close()
+            with processes.stage("cleanup"):
+                processes.close(keep_monitors=getattr(args, "automatic_active", False))
+            processes.event("pipeline", report["status"], reason=report.get("reason"))
+            if getattr(args, "automatic_active", False):
+                try:
+                    if any(child.poll() is None for child in processes.monitors):
+                        print("Final dashboard status available for 5 seconds; Ctrl+C closes it.", flush=True)
+                        time.sleep(5)
+                except KeyboardInterrupt:
+                    pass
+                finally:
+                    processes.close()
         if created:
             write_json(root / "run_report.json", report)
 

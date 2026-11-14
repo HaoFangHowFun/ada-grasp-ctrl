@@ -1,4 +1,4 @@
-"""Capture the current object, preview on 8089, then run one Enter-gated grasp cycle."""
+"""Capture and run a grasp cycle; explicit live mpc_active needs no extra prompt."""
 
 from pathlib import Path
 import os

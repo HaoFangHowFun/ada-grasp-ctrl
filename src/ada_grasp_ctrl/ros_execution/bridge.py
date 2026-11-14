@@ -156,6 +156,10 @@ class Bridge(Node):
                     raise ValueError("Future handoff capture timestamp")
                 cached = getattr(self, "dynamic_handoff", None)
                 phase = self.packet["targets"][self.phase_index]["phase"]
+                if phase == "lift":
+                    dynamic_lift.check_trusted_plan(
+                        handoff, getattr(self.args, "dynamic_lift_plan", None), time.monotonic()
+                    )
                 if (cached is not None and handoff != cached) or (phase != "lift" and cached is None):
                     raise ValueError("Dynamic handoff changed or Lift not completed")
             else:
@@ -177,7 +181,7 @@ class Bridge(Node):
                     raise ValueError("Reviewed packet changed")
                 if extra:
                     raise ValueError("Reviewed goals cannot override arrival timeout")
-        except (ValueError, TypeError, AttributeError, KeyError, IndexError) as error:
+        except (ValueError, TypeError, AttributeError, KeyError, IndexError, OSError) as error:
             self.get_logger().warning(f"Rejecting invalid target: {error}")
             return GoalResponse.REJECT
         with self.lock:
@@ -188,6 +192,7 @@ class Bridge(Node):
 
     def execute_goal(self, handle: Any) -> FollowJointTrajectory.Result:
         """Run one caller-provided target, returning actual feedback and outcome."""
+        goal_started = time.monotonic()
         log, rt = None, None
         result = FollowJointTrajectory.Result()
         try:
@@ -200,7 +205,13 @@ class Bridge(Node):
                     runtime_config["passive_positions_rad"] = plan["passive_positions_rad"]
             log = RunLog(self.args.output_dir, self.config, self.args)
             log.result["operation"] = "external_joint_target"
-            log.event("goal_received", joint_names=self.names, target=target.tolist(), duration=duration)
+            log.event(
+                "goal_received",
+                phase=self.packet["targets"][self.phase_index]["phase"] if self.packet else None,
+                joint_names=self.names,
+                target=target.tolist(),
+                duration=duration,
+            )
             rt = Runtime(runtime_config, log)
             original_spin = rt.spin
 
@@ -227,13 +238,9 @@ class Bridge(Node):
             phase = self.packet["targets"][self.phase_index]["phase"] if self.packet else None
             if handoff is not None:
                 if phase == "lift":
-                    dynamic_lift.compute(
-                        self.args.mpc_python,
-                        self.packet_path,
-                        handoff["snapshot"],
-                        log.path,
-                        lambda: rt.spin(0.01),
-                        expected=handoff,
+                    rt.spin(0.01)  # Retain cancellation and fresh feedback processing.
+                    dynamic_lift.check_trusted_plan(
+                        handoff, getattr(self.args, "dynamic_lift_plan", None), time.monotonic()
                     )
                     if not rt.fresh() or abs(rt.feedback["arm"].received - rt.feedback["hand"].received) > 0.15:
                         raise ValueError("Stale/incoherent receiver handoff feedback")
@@ -293,6 +300,9 @@ class Bridge(Node):
             if np.max(np.abs(drift)) > min(self.config["arm_tolerance"], self.config["hand_tolerance"]):
                 raise RuntimeError("Robot moved during goal validation; resend using current feedback")
             if handoff is not None and phase == "lift":
+                dynamic_lift.check_trusted_plan(
+                    handoff, getattr(self.args, "dynamic_lift_plan", None), time.monotonic()
+                )
                 dynamic_lift.check_handoff_start(actual.tolist(), handoff["segments"][phase]["start"], log.event)
             start = actual.copy()
             required = minimum_duration(start, target, self.config, model, include_hand=require_hand)
@@ -330,6 +340,7 @@ class Bridge(Node):
                     began,
                     owner="baseline",
                 )
+            first_command = True
             log.event("transition", state="EXECUTING")
             while True:
                 rt.spin(0.002)
@@ -369,6 +380,9 @@ class Bridge(Node):
                         msg.position.extend(rt.c["passive_positions_rad"][:6])
                     msg.header.stamp = rt.node.get_clock().now().to_msg()
                     rt.pubs[group].publish(msg)
+                if first_command:
+                    log.event("first_command", phase=phase, goal_validation_s=now - goal_started)
+                    first_command = False
                 if passive_feed is not None:
                     try:
                         measured, tactile = passive_feed.sample()
@@ -440,6 +454,7 @@ class Bridge(Node):
             if rt:
                 rt.node.destroy_node()
             if log:
+                log.event("action_finished", duration_s=time.monotonic() - goal_started)
                 log.finish()
             with self.lock:
                 self.busy = False
@@ -450,8 +465,11 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, help="Optional YAML overrides for Ada receiver defaults")
     parser.add_argument("--output-dir", help="Log root; defaults to the Ada output root / ros_bridge/receiver")
-    parser.add_argument("--targets", type=Path, help="Exact packet approved by the pipeline's terminal Enter")
+    parser.add_argument(
+        "--targets", type=Path, help="Exact packet authorized by explicit active CLI or the legacy terminal gate"
+    )
     parser.add_argument("--controller-mode", choices=("linear", "mpc_passive", "mpc_active"), default="linear")
+    parser.add_argument("--dynamic-lift-plan", help="Same-run trusted sender dynamic-lift-result.json")
     parser.add_argument("--hardware-enable", action="store_true")
     parser.add_argument("--operator-confirmed", action="store_true")
     parser.add_argument("--mpc-python", default=str(resolve_external_root("data") / ".conda/bin/python"))
@@ -479,6 +497,8 @@ def main(argv: list[str] | None = None) -> None:
     args.config = str(args.config) if args.config else None
     if args.targets:
         args.targets = str(resolve_external_root("data", args.targets))
+    if args.dynamic_lift_plan:
+        args.dynamic_lift_plan = str(resolve_external_root("data", args.dynamic_lift_plan))
     rclpy.init(args=[], signal_handler_options=SignalHandlerOptions.NO)
     node = Bridge(config, args)
     executor = MultiThreadedExecutor(num_threads=2)

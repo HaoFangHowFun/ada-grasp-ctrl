@@ -1,5 +1,56 @@
 # 即時抓取、抬升、鬆手與返回
 
+## Task 1：單命令實機 MPC
+
+在已啟動固定相機與右側 CRX／Sharpa drivers 的工作站執行：
+
+```bash
+python script/run_grasp_pipeline.py --controller-mode mpc_active
+```
+
+若系統只有 `python3`，用 `python3` 執行同一入口即可；入口會切換到專案的 Ada 環境。
+明確的 `--controller-mode mpc_active` 是**本次**實機動作授權，無額外 Enter、ROI 視窗或網頁確認。
+8089 在準備開始時啟動並嘗試開啟瀏覽器；Task 2 加上完整 CRX／Sharpa 實測姿態、五指力與階段顯示。
+只顯示外觀網格，不顯示碰撞網格。關閉網頁不影響執行；Ctrl+C 仍取消目前 action 並關閉本次啟動的程序。
+顯示意義與排錯見 [8089 即時監看操作說明](task2-dashboard-operator.md)。
+
+`grasp_pipeline.yaml` 的 `active_hardware` 區段只適用這個明確的 live active 執行，設定硬體、
+ROS domain 87、native Python 與服務路徑；`--ros-domain-id` 優先於 `ROS_DOMAIN_ID`，再使用該區段設定。
+每次自動建立 `output/grasp_pipeline/active_<UTC timestamp>_<unique suffix>`，也可指定新的 `--output-root`。
+其餘 baseline／linear／passive／mock／replay／preview-only／export-only 流程不取得這個自動實機授權。
+
+自動擷取使用 `fixed_camera.yaml` 的 `automatic_workspace_roi`（預設完整有效 RGB 範圍，亦可設定固定像素框），
+沿用既有桌面高度、voxel 與 clustering。保留高度第 5 百分位數距桌面不超過 **5 公分**的 cluster，
+再選有效點數最多者；沒有符合者回報 `NO_OBJECT_DETECTED`。設定為 `automatic_table_lower_height_m: 0.05`。
+這只是靠近桌面的近似判斷；物體下緣被遮住可能遭排除，物件也可能分裂或合併，並非語意分割。
+不在每次執行重做桌面／外參校正。2026-11-13 操作者確認既有兩者均已驗證，
+`fixed_camera_acceptance_2026-11-13.json` 保存這次確認及精確檔案雜湊，原始檔案不被改寫。
+
+MPC `native_complete` 後取得新的六軸＋22 指關節實測狀態，只由 sender 規劃一次 world +Z **0.15 m** Lift，
+保留當下末端方向與手指角度，並檢查關節限制與已知機器人／桌面路徑。
+Receiver 比對受控 sender 的本次計畫、hash、階段、時效與新鮮起點，不重跑 IK／路徑抽樣。
+Lift 起點手臂容差仍為 0.01 rad、手指 0.02 rad；後續沿用既有到位政策、5 秒 Hold、開手與返回。
+既有軌跡插值／速度、10 Hz MPC、100 Hz streaming、原始 15 N 完成條件均未改動。
+
+排錯：
+
+- 8089 被占用：關閉占用它的舊 viewer，再重新啟動；不連接別次執行的服務。
+- 無符合物件或選錯物件：查看本次 `grouplive/object/clusters.json` 與 RGB，整理工作區或修改固定 ROI。
+  自動模式不接受 `--roi`／`--cluster`；需要手動除錯時使用明確的 preview／export 工作流程。
+- 校正 hash 不符：確認設定是否指向經驗證的檔案；不要直接修改 hash 來掩蓋未驗證的幾何變動。
+- 缺少 driver／tactile publisher／服務：依既有部署方式啟動，確認 ROS domain；launcher 不啟動或更改實體 drivers。
+- Lift 過期、起點變動或不可行：本次中止；不要放寬容差或套用舊 squeeze 起點。
+- 日誌：終端印出 `RUN_OUTPUT`；`timings.jsonl` 是準備階段與 cleanup，`sender/events.jsonl` 是 action 等待、
+  native completion acknowledgement、fresh snapshot、planner 完成與 goal submission；
+  `receiver/*/events.jsonl` 是實際 native completion、goal received、first command 與 action finished。
+  `sender/dynamic-lift-result.json` 的 `geometry_s` 記錄 worker 內的來源載入與規劃時間。
+
+詳見 [Task 1 實作與驗證結果](task1-one-command-real-mpc-results-2026-11-13.md)。
+
+## 既有 baseline 與手動預覽流程
+
+以下說明保留原本的非自動 active 工作流程（包括 5 cm 名目 Lift 與 Enter gate）。
+
 入口：`script/run_grasp_pipeline.py`。預設使用當下相機資料，執行一次完整流程：
 
 **擷取點雲 → 套用 calibration → 選物體 → 推論與候選篩選 → 六格圖片 → 8089 預覽 → 終端 Enter → above_object → pregrasp → grasp → squeeze → lift → hold → release → return。**

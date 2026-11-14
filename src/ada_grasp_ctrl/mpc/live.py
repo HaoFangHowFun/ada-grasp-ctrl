@@ -154,6 +154,8 @@ def main() -> int:
         "--output-dir",
         str(output / "receiver"),
         *options,
+        "--dynamic-lift-plan",
+        str(output / "sender/dynamic-lift-result.json"),
         "--mpc-python",
         args.mpc_python,
         "--mpc-model-report",

@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "operator_confirmed": true,
+  "confirmed_on": "2026-11-13",
+  "basis": "Operator explicitly confirmed in the Task 1 implementation session that both the table plane and camera extrinsics had already been verified. This records that attestation; no new independent measurement was performed by the agent.",
+  "plane_sha256": "b4787da11c452c7b7b2de952b387b331040ea2867fee20dd0ce838d4a0f5c852",
+  "extrinsics_sha256": "77f66ac38eea55774538f45f0b9c748bbc0106caea909e30f6141fcd6e4e99b5"
+}

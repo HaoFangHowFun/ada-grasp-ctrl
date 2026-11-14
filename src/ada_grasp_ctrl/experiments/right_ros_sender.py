@@ -156,7 +156,14 @@ def execute(packet: dict[str, Any], args: argparse.Namespace, root: Path, report
     interrupt_requested = False
 
     def event(kind: str, **data: Any) -> None:
-        events.write(json.dumps({"time": time.monotonic(), "kind": kind, **data}, allow_nan=False) + "\n")
+        events.write(
+            json.dumps({"time": time.monotonic(), "wall_time_s": time.time(), "kind": kind, **data}, allow_nan=False)
+            + "\n"
+        )
+        if kind in ("goal_sent", "result", "native_complete_ack", "lift_snapshot", "lift_planning_started"):
+            temporary = root / "progress.tmp"
+            temporary.write_text(json.dumps(dict(kind=kind, phase=data.get("phase", "lift"))))
+            temporary.replace(root / "progress.json")
 
     def receive(group: str, expected: tuple[str, ...], msg: Any) -> None:
         if (
@@ -293,6 +300,13 @@ def execute(packet: dict[str, Any], args: argparse.Namespace, root: Path, report
                     if faults or not fresh():
                         raise RuntimeError("Feedback/model invalid during dynamic lift planning")
 
+                event(
+                    "lift_snapshot",
+                    captured_at=snapshot["captured_at"],
+                    since_native_complete_s=time.monotonic() - native_completed_at,
+                )
+                event("lift_planning_started")
+                planning_began = time.monotonic()
                 handoff = dynamic_lift.compute(
                     args.mpc_python,
                     Path(args.targets),
@@ -300,6 +314,7 @@ def execute(packet: dict[str, Any], args: argparse.Namespace, root: Path, report
                     root,
                     planning_spin,
                 )
+                event("lift_planner_complete", duration_s=time.monotonic() - planning_began)
                 event("dynamic_lift_review", **handoff)
             if handoff is not None:
                 if not fresh() or faults or abs(states["arm"][1] - states["hand"][1]) > 0.15:
@@ -346,6 +361,7 @@ def execute(packet: dict[str, Any], args: argparse.Namespace, root: Path, report
             goal = FollowJointTrajectory.Goal(trajectory=JointTrajectory(joint_names=list(joint_names), points=[point]))
             if handoff is not None:
                 goal.trajectory.header.frame_id = dynamic_lift.PREFIX + json.dumps(handoff, allow_nan=False)
+            goal_started = time.monotonic()
             event("goal_sent", phase=phase, positions=target["positions"], duration=duration)
             print(f"Ada sending {phase}: 28 named joints, {duration:.2f} s", flush=True)
 
@@ -383,6 +399,7 @@ def execute(packet: dict[str, Any], args: argparse.Namespace, root: Path, report
                 "status": response.status,
                 "error_code": response.result.error_code,
                 "message": response.result.error_string,
+                "action_wait_s": time.monotonic() - goal_started,
             }
             report["phases"].append(entry)
             event("result", **entry)
@@ -393,6 +410,7 @@ def execute(packet: dict[str, Any], args: argparse.Namespace, root: Path, report
                     raise RuntimeError("Receiver did not acknowledge native completion; no lift")
                 native_completed = True
                 native_completed_at = time.monotonic()
+                event("native_complete_ack", phase="grasp", native_completed_at=native_completed_at)
             if phase == "lift":
                 report["lift_motion_completed"] = True
             if phase in ("hold", "release", "return"):

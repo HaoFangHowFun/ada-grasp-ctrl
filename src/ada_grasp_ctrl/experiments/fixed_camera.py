@@ -90,6 +90,24 @@ def load_plane(path: Path, require_accepted: bool = False) -> dict:
     return plane
 
 
+def verify_calibration_acceptance(plane_path: Path, acceptance_path: Path) -> dict:
+    """Verify an explicit operator attestation against unchanged calibration files."""
+    acceptance = read_json(acceptance_path)
+    plane = load_plane(plane_path)
+    extrinsics = plane["extrinsics"]
+    if (
+        acceptance.get("schema_version") != 1
+        or acceptance.get("operator_confirmed") is not True
+        or not acceptance.get("basis")
+        or plane.get("quality_passed") is not True
+        or acceptance.get("plane_sha256") != file_hash(plane_path)
+        or acceptance.get("extrinsics_sha256") != extrinsics["sha256"]
+        or file_hash(resolve_from_root(extrinsics["path"])) != extrinsics["sha256"]
+    ):
+        raise ValueError("Calibration acceptance missing, changed, or not quality-passed")
+    return dict(path=str(acceptance_path), sha256=file_hash(acceptance_path), **acceptance)
+
+
 def choose_roi(arrays: dict, supplied: list[int] | None) -> list[int]:
     """Use explicit ROI coordinates or a single manual RGB selection window."""
     if supplied is not None:
@@ -247,15 +265,40 @@ def extract_object(
     roi: list[int] | None,
     cluster_id: int | None,
     allow_unaccepted: bool,
+    *,
+    automatic: bool = False,
+    calibration_acceptance: Path | None = None,
 ) -> dict:
     """Extract one explicitly selected connected object above the full measured plane."""
+    if automatic and (allow_unaccepted or roi is not None or cluster_id is not None):
+        raise ValueError("Automatic extraction forbids manual ROI/cluster and unaccepted calibration")
     arrays, metadata = load_snapshot(snapshot)
-    plane = load_plane(plane_path, require_accepted=not allow_unaccepted)
+    acceptance = None
+    if automatic and calibration_acceptance is not None:
+        acceptance = verify_calibration_acceptance(plane_path, calibration_acceptance)
+    plane = load_plane(plane_path, require_accepted=not allow_unaccepted and acceptance is None)
     if plane["extrinsics"]["sha256"] != metadata["extrinsics"]["sha256"] or plane["serial"] != metadata["serial"]:
         raise ValueError("Object capture and table must share camera and calibration")
     if not allow_unaccepted and metadata["capture_stamp_s"] <= plane["capture_stamp_s"]:
         raise ValueError("Object capture must be newer than the accepted empty-table capture")
-    roi = choose_roi(arrays, roi)
+    if automatic:
+        if acceptance is None and plane["extrinsics"].get("independently_verified") is not True:
+            raise ValueError("Automatic extraction requires accepted camera/world calibration")
+        if not np.allclose(rigid(metadata["T_world_color"]), rigid(plane["T_world_color"]), atol=1e-8, rtol=0):
+            raise ValueError("Camera transform differs from accepted table calibration")
+        points = np.asarray(arrays["points_world_m"])
+        if points.ndim != 2 or points.shape[1] != 3 or not np.isfinite(points).all():
+            raise ValueError("INVALID_OBJECT_CLOUD: expected finite world XYZ")
+        if len(points) < config["min_points"]:
+            raise ValueError("INSUFFICIENT_OBJECT_CLOUD: too few valid camera points")
+        roi = config.get("automatic_workspace_roi")
+        if roi == "full_valid_camera":
+            height, width = arrays["rgb"].shape[:2]
+            roi = [0, 0, width, height]
+        if not isinstance(roi, list) or len(roi) != 4:
+            raise ValueError("Configure automatic_workspace_roi for the calibrated fixed camera")
+    else:
+        roi = choose_roi(arrays, roi)
     selected, pixels = select_points(arrays, metadata, roi)
     heights = signed_height(arrays["points_world_m"][selected], plane)
     selected = selected[(heights > config["object_min_height_m"]) & (heights < config["object_max_height_m"])]
@@ -265,6 +308,14 @@ def extract_object(
         config["object_cluster_radius_m"],
         config["object_min_points"],
     )
+    lower_heights = [
+        float(np.percentile(signed_height(arrays["points_world_m"][selected[g]], plane), 5)) for g in groups
+    ]
+    table_limit = config.get("automatic_table_lower_height_m", 0.05)
+    eligible = [i for i, height in enumerate(lower_heights) if height <= table_limit]
+    if automatic:
+        # Existing clusters are ordered by descending point count, with deterministic ties.
+        cluster_id = eligible[0] if eligible else None
     write_json(
         output / "clusters.json",
         {
@@ -272,12 +323,17 @@ def extract_object(
                 dict(
                     id=i,
                     point_count=len(g),
+                    lower_height_p05_m=lower_heights[i],
+                    table_eligible=i in eligible,
+                    selected=automatic and i == cluster_id,
                     centroid_world_m=arrays["points_world_m"][selected[g]].mean(axis=0).tolist(),
                 )
                 for i, g in enumerate(groups)
             ]
         },
     )
+    if automatic and cluster_id is None:
+        raise ValueError(f"NO_OBJECT_DETECTED: no cluster has 5th-percentile height <= {table_limit:g} m above table")
     if not groups:
         raise ValueError("No object cluster above table in selected ROI")
     if cluster_id is None and len(groups) != 1:
@@ -304,13 +360,15 @@ def extract_object(
         snapshot_sha256=metadata["snapshot_sha256"],
         plane_path=str(plane_path),
         plane_sha256=file_hash(plane_path),
-        table_status=plane["status"],
+        table_status="accepted" if acceptance else plane["status"],
+        calibration_acceptance=acceptance,
         roi=roi,
         serial=metadata["serial"],
         extrinsics=metadata["extrinsics"],
         capture_stamp_s=metadata["capture_stamp_s"],
         point_count=len(indices),
         cluster_id=cluster_id,
+        extraction_policy="largest_table_cluster" if automatic else "manual",
         object_sha256=file_hash(output / "object.npz"),
         config=config,
     )
@@ -334,7 +392,15 @@ def main(argv: list[str] | None = None) -> int:
         "--allow-unaccepted", action="store_true", help="Object preview only; records unaccepted status"
     )
     parser.add_argument("--roi", nargs=4, type=int, metavar=("X0", "Y0", "X1", "Y1"))
+    parser.add_argument(
+        "--calibration-acceptance", help="Hash-bound operator verification record for automatic capture"
+    )
     parser.add_argument("--cluster", type=int)
+    parser.add_argument(
+        "--automatic-single-object",
+        action="store_true",
+        help="Use configured ROI and select the largest cluster near the table",
+    )
     parser.add_argument("--duration", type=float, default=0)
     args = parser.parse_args(argv)
     output = None
@@ -412,6 +478,10 @@ def main(argv: list[str] | None = None) -> int:
                 args.roi,
                 args.cluster,
                 args.allow_unaccepted,
+                automatic=args.automatic_single_object,
+                calibration_acceptance=resolve_from_root(args.calibration_acceptance)
+                if args.calibration_acceptance
+                else None,
             )
         rejected = result.get("quality_passed") is False
         write_json(

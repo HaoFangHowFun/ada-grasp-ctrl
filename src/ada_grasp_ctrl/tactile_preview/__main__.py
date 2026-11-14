@@ -20,16 +20,23 @@ from .data import select_force
 class RosProcess:
     """Bounded stdout consumer for the same-host ROS Python 3.12 subprocess."""
 
-    def __init__(self, python: str, joint_topic: str) -> None:
+    def __init__(
+        self,
+        python: str,
+        joint_topic: str,
+        *,
+        command: list[str] | None = None,
+        environment: dict[str, str] | None = None,
+    ) -> None:
         self.lock = threading.Lock()
         self.packet: dict[str, Any] = {}
         self.error = "Waiting for ROS reader"
         self.received = 0.0
-        env = os.environ.copy()
+        env = os.environ.copy() if environment is None else dict(environment)
         source = str(resolve_from_root("src"))
         env["PYTHONPATH"] = source + os.pathsep + env.get("PYTHONPATH", "")
         self.process = subprocess.Popen(
-            [python, "-m", "ada_grasp_ctrl.tactile_preview.ros_reader", "--joint-topic", joint_topic],
+            command or [python, "-m", "ada_grasp_ctrl.tactile_preview.ros_reader", "--joint-topic", joint_topic],
             stdout=subprocess.PIPE,
             text=True,
             env=env,

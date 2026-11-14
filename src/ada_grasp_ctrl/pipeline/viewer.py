@@ -2,6 +2,9 @@
 
 import argparse
 import json
+import threading
+import time
+import webbrowser
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +16,40 @@ from ada_grasp_ctrl.grasp_selection.preview import transform_points
 from ada_grasp_ctrl.experiments.crx_sharpa_right_model import pose_matrix
 
 
+def serve_status(status: Path, ready: Path, summary: Path) -> None:
+    """Start the existing Viser viewer immediately; browser clients never authorize motion."""
+    import viser
+
+    server = viser.ViserServer(host="127.0.0.1", port=8089, label="Right CRX + Sharpa · Active grasp")
+    if server.get_port() != 8089:
+        server.stop()
+        raise RuntimeError("Port 8089 is occupied; refusing an unrelated viewer")
+    try:
+        banner = server.gui.add_markdown("**Preparing active grasp** · Observational viewer")
+        details = server.gui.add_markdown("Waiting for preparation status…")
+        ready.write_text(json.dumps(dict(port=8089, observational=True)))
+        threading.Thread(target=webbrowser.open, args=("http://localhost:8089",), daemon=True).start()
+        while True:
+            if status.exists():
+                current = read_json(status)
+                banner.content = f"**{current['stage']}** · {current['state']}"
+                if current.get("reason"):
+                    banner.content += "\n\n" + current["reason"]
+            progress = status.parent / "sender/progress.json"
+            if progress.exists():
+                current = read_json(progress)
+                details.content = f"Execution: **{current['phase']}** · {current['kind']}"
+            elif summary.exists():
+                rows = json.loads(summary.read_text())
+                details.content = "\n\n".join(
+                    f"Selected: **{r['selected_candidate_id']}** · {r['feasible_candidates']} feasible candidates"
+                    for r in rows
+                )
+            time.sleep(0.25)
+    finally:
+        server.stop()
+
+
 def main(argv: list[str] | None = None) -> int:
     """Serve selected entries and record which dataset is currently displayed."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -21,7 +58,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--enter-gate", action="store_true", help="The owning pipeline is awaiting terminal confirmation"
     )
+    parser.add_argument("--pipeline-status", type=Path, help="Automatic observational status; no preview gate")
+    parser.add_argument("--dashboard-config", type=Path, help="Read-only live dashboard configuration from this run")
     args = parser.parse_args(argv)
+    if args.pipeline_status and args.dashboard_config:
+        from .dashboard import serve_dashboard
+
+        serve_dashboard(args.pipeline_status, args.status, args.dashboard_config)
+        return 0
+    if args.pipeline_status:
+        serve_status(args.pipeline_status, args.status, args.summary)
+        return 0
     rows = json.loads(args.summary.read_text())
     entries = load_entries(args.summary)
     for row, entry in zip(rows, entries):

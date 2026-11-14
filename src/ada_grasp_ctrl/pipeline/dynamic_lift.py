@@ -181,6 +181,26 @@ def check_goal(packet: dict, handoff: dict, index: int, positions: list, duratio
     return segment
 
 
+def check_trusted_plan(handoff: dict, path: str | Path | None, now: float) -> None:
+    """Accept only the controlled sender's persisted plan, never a self-asserted hash.
+
+    The runner chooses this same-run path before starting either process. This is
+    a local trusted-planner boundary, not authentication against a compromised host.
+    No FK, IK or geometry sampling is performed here.
+    """
+    if path is None:
+        raise ValueError("Dynamic lift requires the runner's --dynamic-lift-plan path")
+    reply = json.loads(Path(path).read_text())
+    if reply.get("ok") is not True or reply.get("handoff") != handoff:
+        raise ValueError("Dynamic lift differs from controlled sender plan")
+    age = now - handoff["snapshot"]["captured_at"]
+    if not math.isfinite(age) or not 0 <= age <= 20.0:
+        raise ValueError("Dynamic lift plan expired or has future capture time")
+    validation = handoff.get("validation", {})
+    if validation.get("joint_limits") is not True or validation.get("sampled_known_geometry") is not True:
+        raise ValueError("Dynamic lift lacks successful planner feasibility checks")
+
+
 def compute(
     python: str,
     packet_path: Path,
@@ -192,13 +212,15 @@ def compute(
 ) -> dict:
     """Run read-only native geometry with bounded lifetime while ROS keeps receiving.
 
-    Receiver independently recomputes the same review; the transmitted hash alone
-    is not considered validation. Cancellation terminates only this owned process.
+    Only the sender invokes this planner. The receiver checks the persisted result
+    and fresh actual start. Cancellation terminates only this owned process.
     """
     from ada_grasp_ctrl.paths import project_root
 
     request = root / "dynamic-lift-request.json"
     output = root / "dynamic-lift-result.json"
+    if output.exists() or request.exists():
+        raise ValueError("Dynamic lift output must belong to a fresh planning invocation")
     request.write_text(json.dumps(snapshot, allow_nan=False))
     env = os.environ.copy()
     env.pop("PYTHONHOME", None)
@@ -233,7 +255,7 @@ def compute(
             if not reply["ok"]:
                 raise ValueError("Dynamic lift: " + reply["reason"])
             if expected is not None and reply["handoff"] != expected:
-                raise ValueError("Receiver independent dynamic review differs from sender")
+                raise ValueError("Dynamic review differs from expected offline fixture")
             return reply["handoff"]
         finally:
             if process.poll() is None:
@@ -255,12 +277,15 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     try:
+        began = time.monotonic()
         with redirect_stdout(sys.stderr):
             result = build_handoff(load_packet(args.targets), json.loads(args.snapshot.read_text()))
-        reply: dict[str, Any] = dict(ok=True, handoff=result)
+        reply: dict[str, Any] = dict(ok=True, handoff=result, geometry_s=time.monotonic() - began)
     except Exception as error:
         reply = dict(ok=False, reason=str(error))
-    args.output.write_text(json.dumps(reply, indent=2, allow_nan=False) + "\n")
+    temporary = args.output.with_suffix(".tmp")
+    temporary.write_text(json.dumps(reply, indent=2, allow_nan=False) + "\n")
+    temporary.replace(args.output)
 
 
 if __name__ == "__main__":

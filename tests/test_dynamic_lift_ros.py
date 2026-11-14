@@ -27,6 +27,11 @@ class DynamicROSTests(unittest.TestCase):
         cls.path = Path(os.environ["ADA_DYNAMIC_LIFT_PACKET"])
         cls.packet = load_packet(cls.path)
         cls.handoff = json.loads(Path(os.environ["ADA_DYNAMIC_LIFT_REVIEW"]).read_text())
+        from ada_grasp_ctrl.pipeline import dynamic_lift
+
+        # Rebase only synthetic receipt clocks; all recorded measured joint values stay intact.
+        cls.handoff["snapshot"].update(captured_at=100.0, received_at=dict(arm=99.99, hand=99.98))
+        cls.handoff["review_id"] = dynamic_lift.fingerprint({k: v for k, v in cls.handoff.items() if k != "review_id"})
 
     def request(self, handoff=None):
         from builtin_interfaces.msg import Duration
@@ -80,6 +85,17 @@ class DynamicROSTests(unittest.TestCase):
         if fault == "native":
             instance.native_completed_at = 0.0
         request = self.request()
+        if fault == "expired":
+            clock[0] = 121.0
+        if fault == "phase":
+            instance.phase_index += 1
+        if fault == "tampered":
+            from ada_grasp_ctrl.pipeline import dynamic_lift
+
+            changed = deepcopy(self.handoff)
+            changed["segments"]["lift"]["positions"][0] += 0.02
+            changed["review_id"] = dynamic_lift.fingerprint({k: v for k, v in changed.items() if k != "review_id"})
+            request = self.request(changed)
         if fault == "review":
             request.trajectory.header.frame_id = ""
         handle = Mock(request=request, is_cancel_requested=fault == "cancel")
@@ -122,14 +138,13 @@ class DynamicROSTests(unittest.TestCase):
         )
         model = NS(limits={g: ([-5.0] * n, [5.0] * n, [1.0] * n) for g, n in (("arm", 6), ("hand", 22))}, check=Mock())
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
-            instance.args = NS(output_dir=tmp, mpc_python="unused")
+            plan_path = Path(tmp) / "trusted-plan.json"
+            trusted = deepcopy(self.handoff)
+            if fault == "path":
+                trusted["validation"]["sampled_known_geometry"] = False
+            plan_path.write_text(json.dumps(dict(ok=True, handoff=trusted)))
+            instance.args = NS(output_dir=tmp, mpc_python="unused", dynamic_lift_plan=str(plan_path))
             log = NS(path=Path(tmp), result={}, finish=Mock(), event=lambda kind, **kw: records.append((kind, kw)))
-
-            def compute(*args, **kwargs):
-                args[4]()  # Run the receiver's real cancellation check.
-                if fault == "path":
-                    raise ValueError("invalid path")
-                return self.handoff
 
             for name, value in (
                 ("Runtime", lambda *a: rt),
@@ -140,10 +155,13 @@ class DynamicROSTests(unittest.TestCase):
                 ("kinematic_contract", Mock()),
             ):
                 stack.enter_context(patch.object(bridge, name, value))
-            stack.enter_context(patch.object(bridge.dynamic_lift, "compute", compute))
+            planner = stack.enter_context(
+                patch.object(bridge.dynamic_lift, "compute", side_effect=AssertionError("Receiver must not plan again"))
+            )
             stack.enter_context(patch.object(bridge.time, "monotonic", lambda: clock[0]))
             accepted = bridge.Bridge.accept_goal(instance, request)
             result = bridge.Bridge.execute_goal(instance, handle) if accepted == bridge.GoalResponse.ACCEPT else None
+            planner.assert_not_called()
         return accepted, result, sent, records, instance
 
     def test_receiver_accepts_new_start_and_holds_hand(self):
@@ -160,7 +178,7 @@ class DynamicROSTests(unittest.TestCase):
         self.assertTrue(any(kind == "dynamic_start_check" for kind, _ in records))
 
     def test_receiver_rejections_never_publish(self):
-        for fault in ("native", "review", "start", "path", "cancel", "stale"):
+        for fault in ("native", "review", "start", "path", "cancel", "stale", "expired", "phase", "tampered"):
             with self.subTest(fault=fault):
                 _, result, sent, _, _ = self.receiver(fault)
                 self.assertEqual(sent, [])

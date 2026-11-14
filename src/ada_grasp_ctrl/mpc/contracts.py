@@ -75,13 +75,14 @@ class MPCProposal:
 
 
 def controller_mode(config: dict, override: str | None = None) -> str:
-    """Preserve legacy defaults and prohibit new modes on physical hardware."""
+    """Validate mode identity; only the launcher/receiver can authorize hardware motion."""
     mode = override or config.get("controller", {}).get("mode", "baseline")
     if mode not in MODES:
         raise ValueError(f"Unknown controller mode: {mode}")
-    if config.get("controller", {}).get("hardware_enable", False) is not False:
-        raise ValueError("Phase 2 hardware enablement is disabled")
-    if mode != "baseline" and config.get("environment", "mock") != "mock":
+    real_active = mode == "mpc_active" and config.get("environment") == "hardware"
+    if config.get("controller", {}).get("hardware_enable", False) is not False and not real_active:
+        raise ValueError("Hardware enablement is limited to explicit real mpc_active")
+    if mode != "baseline" and config.get("environment", "mock") != "mock" and not real_active:
         raise ValueError("Phase 2 controller modes are offline/mock-only")
     if mode != "baseline" and config.get("side", "right") != "right":
         raise ValueError("Phase 2 is right-side only")
