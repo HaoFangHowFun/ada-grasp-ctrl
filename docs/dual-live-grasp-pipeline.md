@@ -88,6 +88,12 @@ A recorded action completion is not evidence that the object was held or lifted.
 
 ## Configuration and records
 
+The additive [unified grasp contract](unified-grasp-contract-handoff.md) defines
+versioned candidate/selected-plan data and explicit legacy adapters for future
+selector, time-scaling and executor work. Its `available_arms` and `active_arms`
+are distinct; a both-arm data record does not enable both-arm execution. Current
+selection, motion-plan and ROS-packet serializations remain unchanged.
+
 `src/ada_grasp_ctrl/config/experiments/dual_grasp_pipeline.yaml` inherits the existing grasp pipeline's
 motion/camera settings, adds the portable dual-robot snapshot and explicit model references, and
 defaults to automatic side selection. The current calibrated camera extrinsics and table file are
