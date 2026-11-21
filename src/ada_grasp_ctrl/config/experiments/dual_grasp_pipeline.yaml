@@ -3,6 +3,14 @@ base_config: src/ada_grasp_ctrl/config/experiments/grasp_pipeline.yaml
 environment: hardware
 robot_snapshot: output/dual_arm/phase1_20261111/commit_snapshot
 enabled_arms: [left, right]
+# Explicit example preference, used only with --selector hierarchical; not a learned prior.
+# left_full labels mirrored right_full output, not an independently trained model.
+hierarchical_selector:
+  prior:
+    schema_version: 1
+    kind: ranking
+    ranking: [right_full, left_full]
+  supported_modes: [right_full, left_full]
 mirroring:
   plane_normal_world: [0, 1, 0]
   plane_point: object_point_cloud_centroid

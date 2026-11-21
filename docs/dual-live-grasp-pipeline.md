@@ -2,8 +2,9 @@
 
 Entry: `script/run_dual_grasp_pipeline.py`. Each invocation captures the current fixed camera,
 lets the operator select the current object, runs fresh right-full inference on the original and
-reflected object clouds, selects one feasible side/candidate by the existing weighted CRX joint
-displacement cost, previews the full cycle, and executes after terminal Enter.
+reflected object clouds, selects one feasible side/candidate, previews the full cycle, and executes
+after terminal Enter. The default legacy selector uses the existing weighted CRX joint displacement
+cost across eligible sides. An explicit hierarchical option uses configured mode priority first.
 There is no fixed object, saved candidate, ROI, or object pose in the default workflow. The pear
 capture used during development is test evidence only. The checkpoint/config/metadata references
 identify the model, not an object to replay.
@@ -60,6 +61,59 @@ Default `--arms auto` enables both inference branches and selects one side autom
 and model. Both modes still require the two-side launch. Selection failure sends no motion.
 `--export-only` prepares the selected plan without a viewer or execution; `--preview-only` displays
 it without an Enter gate. Neither is a prerequisite for normal hardware use.
+
+## Optional hierarchical selection
+
+`--selector legacy` is the default and retains the existing selection algorithm.
+Use `--selector hierarchical` to call the existing mode-priority selector. The
+`hierarchical_selector` block in `dual_grasp_pipeline.yaml` supplies its ranking:
+
+```yaml
+hierarchical_selector:
+  prior:
+    schema_version: 1
+    kind: ranking
+    ranking: [right_full, left_full]
+  supported_modes: [right_full, left_full]
+```
+
+This is an editable example preference, not a learned Human Prior or a claim that
+the right hand is universally better. The first feasible mode wins even when
+another mode has lower effort; within that mode the existing effort/ID/seed order
+is retained. Reverse `ranking` to prefer left. The CLI flag is required: YAML alone
+does not activate hierarchical selection. Unknown modes, duplicates, non-ranking
+priors and disagreement between ranking and supported modes fail before capture.
+
+For a separately configured mock capture/dual-stack source:
+
+```bash
+export ROS_DOMAIN_ID=88
+export ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
+python3 script/run_dual_grasp_pipeline.py \
+  --environment mock --ros-domain-id 88 --selector hierarchical \
+  --output-root output/dual_grasp/hierarchical_new_run --export-only
+```
+
+This command still requires fresh capture and state sources; it does not create
+mock drivers or fabricate an object. Use a new output root each time. `--arms left`
+or `--arms right` restricts both inference and selection to that side. An unavailable
+ranked mode appears as an empty candidate set; no extra inference branch runs.
+
+Both modes use only the existing **right_full checkpoint**. `left_full` labels
+right_full inference on the reflected cloud followed by the established pose/joint
+mirror. Canonical provenance records `source_model_mode: right_full` and
+`generation_method: mirrored_right_full` for left candidates. There is no separate
+trained left model, multimode inference, simultaneous dual grasp or Human Prior call.
+
+Hierarchical runs add `canonical_candidates.json`, `hierarchical_selection.json`
+and, on selection, `grasp_plan.json`. The full hierarchical report is also embedded
+in the root `selection.json`, which the existing exporter includes in its hashed
+references. The canonical plan remains data-only with both readiness flags false.
+The selected legacy payload and normal single-side packet/export/preview/Enter
+checks are retained. `NO_FEASIBLE_GRASP` saves the trace and exits without targets,
+viewer or motion sender/receiver. See the [integration handoff](dual-hierarchical-selector-handoff.md)
+for synthetic examples, exact test commands and validation limits. This option has
+not been physically validated; the standalone right-full entry is unchanged.
 
 ## Execution
 

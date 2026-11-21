@@ -21,6 +21,7 @@ from .runner import Processes, perceive, wait_for_enter
 from .dual_inference import infer_live_sides
 from .dual_scene import live_scene
 from .dual_artifacts import export_dual_selection
+from .dual_selection import selector_settings, select_live_hierarchical
 from .plan import check_start
 
 
@@ -74,13 +75,25 @@ def run(args: argparse.Namespace, config: dict, root: Path, processes: Processes
         resolve_from_root(config["robot_snapshot"]), state, read_json(resolve_from_root(config["table_plane"]))
     )
     print("Selecting across enabled arms: " + ", ".join(config["enabled_arms"]), flush=True)
-    selection = select_candidates(robot, sim, rows, config["enabled_arms"], state["full_positions_rad"])
+    if args.selector == "hierarchical":
+        selection, batch, audit = select_live_hierarchical(
+            robot, sim, rows, config["enabled_arms"], state["full_positions_rad"], config["hierarchical_selector"]
+        )
+        write_json(root / "canonical_candidates.json", batch)
+        write_json(root / "hierarchical_selection.json", audit)
+        if audit["plan"] is not None:
+            write_json(root / "grasp_plan.json", audit["plan"])
+        report.update(selector="hierarchical", selection_status=audit["status"], selected_mode=audit["selected_mode"])
+    else:
+        selection = select_candidates(robot, sim, rows, config["enabled_arms"], state["full_positions_rad"])
     selection["geometry_note"] = (
         "Measured table and both robots; partial object cloud is not a verified collision solid"
     )
     write_json(root / "selection.json", selection)
     if selection["selected"] is None:
         report.update(status="no_feasible_candidate")
+        if args.selector == "hierarchical":
+            print("NO_FEASIBLE_GRASP: see hierarchical_selection.json for the mode trace", flush=True)
         return
     selected = selection["selected"]
     report.update(
@@ -183,6 +196,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--environment", choices=("hardware", "mock"))
     parser.add_argument("--ros-domain-id", type=int)
     parser.add_argument("--arms", choices=("auto", "left", "right"), default="auto")
+    parser.add_argument("--selector", choices=("legacy", "hierarchical"), default="legacy")
     parser.add_argument("--roi", nargs=4, type=int)
     parser.add_argument("--cluster", type=int)
     mode = parser.add_mutually_exclusive_group()
@@ -201,6 +215,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.arms != "auto":
             config["enabled_arms"] = [args.arms]
         enabled_set(config["enabled_arms"])
+        if args.selector == "hierarchical":
+            selector_settings(config.get("hierarchical_selector"))
         root.mkdir(parents=True, exist_ok=False)
         created = True
         (root / "effective_config.yaml").write_text(yaml.safe_dump(config))
