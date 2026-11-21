@@ -335,8 +335,16 @@ class Bridge(Node):
                     tuple(model.limits["arm"][2]) + tuple(model.limits["hand"][2]),
                     config={k: v for k, v in self.config.items() if k not in ("mode", "path_verified")},
                 )
+                # A fresh sample may precede loop startup; retain its real receive
+                # times so the first tick does not falsely look like a regression.
                 linear_guard.start(
-                    JointFeedback(tuple(self.names), tuple(start), began, began, "mock_reviewed_start"),
+                    JointFeedback(
+                        tuple(self.names),
+                        tuple(start),
+                        min(rt.feedback[g].received for g in ("arm", "hand")),
+                        max(rt.feedback[g].received for g in ("arm", "hand")),
+                        "mock_reviewed_start",
+                    ),
                     began,
                     owner="baseline",
                 )

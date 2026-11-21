@@ -94,6 +94,11 @@ selector, time-scaling and executor work. Its `available_arms` and `active_arms`
 are distinct; a both-arm data record does not enable both-arm execution. Current
 selection, motion-plan and ROS-packet serializations remain unchanged.
 
+The separate [shared ROS mock executor](shared-mock-executor-handoff.md) consumes
+the unified plan's active arms and shared timing schedule for isolated mock tests.
+It does not replace this live entry or enable dual-active physical operation;
+domain 87 remains reserved for the existing hardware workflow.
+
 `src/ada_grasp_ctrl/config/experiments/dual_grasp_pipeline.yaml` inherits the existing grasp pipeline's
 motion/camera settings, adds the portable dual-robot snapshot and explicit model references, and
 defaults to automatic side selection. The current calibrated camera extrinsics and table file are

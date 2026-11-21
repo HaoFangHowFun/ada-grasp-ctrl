@@ -14,7 +14,7 @@ import numpy as np
 
 @unittest.skipUnless(importlib.util.find_spec("rclpy"), "Requires sourced ROS Python")
 class P3ReceiverTests(unittest.TestCase):
-    def run_receiver(self, mode, fault=None):
+    def run_receiver(self, mode, fault=None, *, aged_linear_feedback=False):
         from builtin_interfaces.msg import Duration, Time
         from control_msgs.action import FollowJointTrajectory
         from sensor_msgs.msg import JointState
@@ -27,6 +27,9 @@ class P3ReceiverTests(unittest.TestCase):
 
         clock, sent, proposals, records = [10.0], [], [], []
         config = bridge_config()
+        if aged_linear_feedback:
+            config["interpolation"] = "linear"
+        feedback_age = 0.02 if aged_linear_feedback else 0.0
         config["settle_time"] = 0.02
         names = tuple(bridge.NAMES)
         model = NS(limits={g: ([-3.0] * n, [3.0] * n, [1.0] * n) for g, n in (("arm", 6), ("hand", 22))}, check=Mock())
@@ -48,7 +51,7 @@ class P3ReceiverTests(unittest.TestCase):
             preflight=Mock(),
             watchdog=Mock(),
         )
-        rt.feedback = {g: NS(q=np.zeros(n), received=clock[0]) for g, n in (("arm", 6), ("hand", 22))}
+        rt.feedback = {g: NS(q=np.zeros(n), received=clock[0] - feedback_age) for g, n in (("arm", 6), ("hand", 22))}
         rt.fresh = lambda: fault != "stale"
 
         def spin(seconds):
@@ -56,7 +59,7 @@ class P3ReceiverTests(unittest.TestCase):
                 handle.is_cancel_requested = True
             clock[0] += 0.01
             for row in rt.feedback.values():
-                row.received = clock[0]
+                row.received = clock[0] - feedback_age
 
         rt.spin = spin
         rt.wait = lambda predicate, label: self.assertTrue(predicate(), label)
@@ -153,6 +156,14 @@ class P3ReceiverTests(unittest.TestCase):
             stack.enter_context(patch.object(bridge.time, "monotonic", lambda: clock[0]))
             result = bridge.Bridge.execute_goal(instance, handle)
         return result, sent, proposals, instance, rt, handle, records
+
+    def test_linear_start_accepts_fresh_feedback_received_before_loop_start(self):
+        result, sent, _, instance, rt, handle, _ = self.run_receiver("linear", aged_linear_feedback=True)
+        self.assertEqual(result.error_code, 0, result.error_string)
+        self.assertGreater(len(sent), 0)
+        self.assertEqual(instance.phase_index, 1)
+        rt.abort.assert_not_called()
+        handle.succeed.assert_called_once()
 
     def test_passive_failure_cannot_change_baseline_command_fields(self):
         baseline = self.run_receiver("linear")
