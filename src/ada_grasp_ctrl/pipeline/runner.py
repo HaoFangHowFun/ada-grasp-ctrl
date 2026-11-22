@@ -19,6 +19,7 @@ from typing import Any
 
 import yaml
 
+from ada_grasp_ctrl.calibration import DEFAULT_CALIBRATION
 from ada_grasp_ctrl.experiments.right_ros_sender import load_packet
 from ada_grasp_ctrl.grasp_selection.adapters.dexlearn import file_hash, load_candidates, read_json, verify_reference
 from ada_grasp_ctrl.grasp_selection.cli import run as select_candidates, write_json
@@ -191,7 +192,7 @@ def perceive(
                 "--config",
                 str(resolve_from_root(config["camera_config"])),
                 "--extrinsics",
-                str(resolve_from_root(config["extrinsics"])),
+                str(resolve_from_root(config.get("extrinsics") or DEFAULT_CALIBRATION)),
                 "--output-root",
                 str(snapshot),
             ],

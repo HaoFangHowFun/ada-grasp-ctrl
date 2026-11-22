@@ -1,5 +1,6 @@
 """Geometry and artifact regressions for passive fixed-camera calibration."""
 
+import importlib.util
 import json
 from pathlib import Path
 import tempfile
@@ -104,6 +105,29 @@ class FixedCameraTests(unittest.TestCase):
         np.testing.assert_array_equal(roi_mask(pixels, [10, 20, 20, 30], 640, 480), [True, True, False, False])
         with self.assertRaises(ValueError):
             roi_mask(pixels, [-1, 0, 100, 100], 640, 480)
+
+    @unittest.skipUnless(importlib.util.find_spec("cv2"), "Projection runs in system camera Python with OpenCV")
+    def test_master_extrinsics_preserve_live_640_intrinsics(self):
+        from ada_grasp_ctrl.calibration import DEFAULT_CALIBRATION
+        from ada_grasp_ctrl.experiments.fixed_camera_geometry import project_color
+        from ada_grasp_ctrl.paths import resolve_from_root
+
+        data = json.loads(resolve_from_root(DEFAULT_CALIBRATION).read_text())
+        info = dict(
+            width=640, height=480, distortion_model="plumb_bob", k=[400, 0, 320, 0, 410, 240, 0, 0, 1], d=[0.0] * 5
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "master.json"
+            for focal in (900, 9999):
+                data["authoritative"]["camera"]["color_intrinsics_at_calibrated_resolution"]["K"] = [
+                    [focal, 0, 640],
+                    [0, focal, 360],
+                    [0, 0, 1],
+                ]
+                path.write_text(json.dumps(data))
+                matrix, _ = load_extrinsics(path)
+                world = transform([[0.1, 0.05, 1.0]], matrix)
+                np.testing.assert_allclose(project_color(transform(world, np.linalg.inv(matrix)), info), [[360, 260.5]])
 
     def test_cluster_separation(self):
         rng = np.random.default_rng(0)

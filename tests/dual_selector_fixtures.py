@@ -130,6 +130,9 @@ class LiveFixture:
                 (dual_runner, "Processes", lambda *args: self),
                 (dual_runner, "perceive", self.perceive),
                 (dual_runner, "live_scene", lambda *args: (self.robot, self.sim)),
+                # This analytical robot deliberately has no physical fixed-frame tree.
+                # Real calibrated snapshot geometry is covered by test_unified_calibration.
+                (dual_runner, "calibrated_snapshot", lambda source, *args: Path(source)),
                 (dual_runner, "wait_for_enter", lambda processes: False),
                 (dual_artifacts, "SideAdapter", AnalyticalSide),
                 (approach, "HandGeometry", AnalyticalGeometry),

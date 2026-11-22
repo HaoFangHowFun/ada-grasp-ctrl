@@ -155,9 +155,19 @@ domain 87 remains reserved for the existing hardware workflow.
 
 `src/ada_grasp_ctrl/config/experiments/dual_grasp_pipeline.yaml` inherits the existing grasp pipeline's
 motion/camera settings, adds the portable dual-robot snapshot and explicit model references, and
-defaults to automatic side selection. The current calibrated camera extrinsics and table file are
-inherited. The stored robot snapshot must match the live world/base/mount/joint geometry; both
-branches are checked before execution. No camera-to-world transform is applied twice.
+defaults to automatic side selection. Camera capture defaults to the installed unified calibration
+JSON. Each invocation copies the source `robot_snapshot` into its new run directory and replaces
+the base and hand-mount fixed origins with absolute values from that same JSON. The effective
+config points FK, IK, collision checks, preview and export to this calibrated snapshot; the source
+snapshot is preserved. Both branches retain the existing checks before execution. No camera-to-world
+transform is applied twice.
+
+The inherited table plane now uses the 2026-11-22 empty-table capture fitted with the master JSON.
+After confirming a table-only change, the operator requested applying this result; the automatic
+right pipeline uses the corresponding new operator confirmation record. Existing calibration checks
+pass with the recorded new captures. Old table/acceptance artifacts remain available for replay.
+See the [unified calibration handoff](unified-calibration-handoff.md) for paths, frame mappings,
+validation results and the existing table recalibration procedure.
 
 Records include `capture/`, `object/`, `inference_left/`, `inference_right/`, `candidates.json`,
 `state/robot_state.json`, `selection.json`, `export/targets.json`, `export/motion_plan.json`,

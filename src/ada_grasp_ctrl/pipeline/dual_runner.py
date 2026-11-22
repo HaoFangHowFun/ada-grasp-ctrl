@@ -11,6 +11,7 @@ import time
 
 import yaml
 
+from ada_grasp_ctrl.calibration import DEFAULT_CALIBRATION, calibrated_snapshot
 from ada_grasp_ctrl.paths import resolve_from_root
 from ada_grasp_ctrl.grasp_selection.adapters.dexlearn import read_json, file_hash
 from ada_grasp_ctrl.grasp_selection.cli import write_json
@@ -219,6 +220,11 @@ def main(argv: list[str] | None = None) -> int:
             selector_settings(config.get("hierarchical_selector"))
         root.mkdir(parents=True, exist_ok=False)
         created = True
+        config["robot_snapshot"] = str(
+            calibrated_snapshot(
+                config["robot_snapshot"], root / "robot_snapshot", config.get("extrinsics") or DEFAULT_CALIBRATION
+            )
+        )
         (root / "effective_config.yaml").write_text(yaml.safe_dump(config))
         (root / "run_manifest.yaml").write_text(yaml.safe_dump(dict(arguments=vars(args), config=config, mode="live")))
         processes = Processes(config, root)

@@ -50,7 +50,7 @@ Clear a visible table patch manually, then capture and fit:
 
 ```bash
 /usr/bin/python3 -m ada_grasp_ctrl.experiments.fixed_camera capture \
-  --extrinsics /home/hao-fang/hugs-workspace/agent_tasks/camera_extrinsics_20261107_640x480.json \
+  --extrinsics src/ada_grasp_ctrl/config/calibration/dual_system_calibration.json \
   --output-root output/fixed_camera/my_empty_table
 
 /usr/bin/python3 -m ada_grasp_ctrl.experiments.fixed_camera fit \
@@ -69,9 +69,14 @@ tilt and clustering. Defaults are not a guarantee of D415 accuracy.
 
 The capture path uses metric PointCloud2 XYZ directly, without reprojecting depth through intrinsics. It checks the
 live serial, RGB/depth CameraInfo, image dimensions and frames; rejects stale, unsynchronized, low-coverage or invalid
-data; transforms depth-optical points through internal TF to color optical, then through JSON `T_world_cam` once.
+data; transforms depth-optical points through internal TF to color optical, then through the master JSON's
+`authoritative.camera.T_leftbase_color_optical.matrix_4x4` once. Legacy `T_world_cam` files remain readable for replay.
 It does not additionally apply world TF. `T_flange_board` is unused. Color projection uses live CameraInfo and supports
 plumb-bob/rational distortion.
+
+The master calibration was measured at 1280x720; the driver remains 640x480 and uses live CameraInfo, not the stored
+1280x720 intrinsics. Old table planes and acceptance records remain tied to their original calibration hashes.
+See the [unified calibration handoff](unified-calibration-handoff.md) before reusing a historical plane.
 
 Snapshots retain raw cloud/image/CameraInfo CDRs, unfiltered XYZ, filtered camera/world XYZ, RGB, transforms, timestamps,
 frames, intrinsics, calibration hashes, serial and valid fraction. Loading verifies the NPZ hash and camera/world

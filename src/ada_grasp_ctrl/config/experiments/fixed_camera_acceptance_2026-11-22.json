@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "operator_confirmed": true,
+  "confirmed_on": "2026-11-22",
+  "basis": "After receiving the new table fit preview and three quality-passed capture/fit results, the operator confirmed that only the table changed and explicitly requested applying the new table while retaining the existing camera-to-left-base calibration. This records that operator confirmation; no independent world-reference measurements were supplied or claimed.",
+  "plane_sha256": "1873ee8424a67ed67f4c95759bbcc303c81cc8620bca7b4715e3e551982c07cd",
+  "extrinsics_sha256": "479b031ec8212166e707334b987a646d8470fe1d76d2430dedf05919b600deca",
+  "review_report": "output/fixed_camera/table_recalibration_20261122T231227_977817Z/calibration_review.json"
+}

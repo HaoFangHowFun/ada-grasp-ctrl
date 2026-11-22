@@ -44,6 +44,15 @@ def transform(points: np.ndarray, matrix: np.ndarray) -> np.ndarray:
 def load_extrinsics(path: Path) -> tuple[np.ndarray, dict]:
     """Read the supplied color-optical-to-world calibration and provenance."""
     data = json.loads(path.read_text())
+    if "authoritative" in data:
+        from ada_grasp_ctrl.calibration import load_calibration
+
+        calibration = load_calibration(path)
+        return calibration["camera"], {
+            **calibration["provenance"],
+            "declared_frame": "world = left CRX base_link; camera = color optical frame",
+            "independently_verified": False,
+        }
     matrix = rigid(data["T_world_cam"], "T_world_cam")
     if data.get("converged") is False:
         raise ValueError("Extrinsics solver did not converge")

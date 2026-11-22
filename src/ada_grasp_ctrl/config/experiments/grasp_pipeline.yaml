@@ -13,8 +13,10 @@ dexlearn_root: /home/hao-fang/hugs-workspace/HUGS-DexLearn
 model_report: output/regression/crx-sharpa-right-preview-x080-y070-config-v1/preview_report.json
 gallery: output/fixed_camera/five_objects_gallery/manifest.json
 camera_config: src/ada_grasp_ctrl/config/experiments/fixed_camera.yaml
-extrinsics: /home/hao-fang/hugs-workspace/agent_tasks/camera_extrinsics_20261107_640x480.json
-table_plane: output/fixed_camera/table_recalibration_20261110_213933/fit/table_plane.json
+# Null uses the installed master JSON path defined in ada_grasp_ctrl.calibration.
+# Explicit legacy extrinsics remain supported for historical replay/tests.
+extrinsics: null
+table_plane: output/fixed_camera/table_recalibration_20261122T231227_977817Z/fit/table_plane.json
 inference_reference: output/fixed_camera/green_pear_grasps_20261109_v1/candidates.json
 samples: 8
 seed: 4
@@ -39,5 +41,5 @@ active_hardware:
   ros_domain_id: 87
   mpc_python: .conda/bin/python
   mpc_package_share: /home/hao-fang/ws_fanuc/install/dual_sharpa_wave/share/dual_sharpa_wave
-  calibration_acceptance: src/ada_grasp_ctrl/config/experiments/fixed_camera_acceptance_2026-11-13.json
+  calibration_acceptance: src/ada_grasp_ctrl/config/experiments/fixed_camera_acceptance_2026-11-22.json
   active_output_root: output/grasp_pipeline
