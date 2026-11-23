@@ -14,6 +14,19 @@ identify the model, not an object to replay.
 Use a ROS terminal and keep the launch running. Replace an existing single-side launch before
 starting this stack; it owns both devices and the fixed camera.
 
+First generate the ROS hand-mount YAML from the same master calibration used by Ada.
+Run this in the Ada terminal, choosing a new output path if it already exists:
+
+```bash
+cd /home/hao-fang/hugs-workspace/ada-grasp-ctrl
+PYTHONPATH="$PWD/src" .conda/bin/python -m ada_grasp_ctrl.calibration \
+  --output output/calibration/ros_mounts_20261122/hand_mounts.yaml
+```
+
+The exporter records the source JSON path/hash and does not start ROS. If the pipeline uses
+custom `extrinsics`, pass that same master JSON with `--calibration`. Regenerate after changing
+the calibration. In the ROS terminal, pass this file explicitly:
+
 ```bash
 source /opt/ros/jazzy/setup.bash
 source /home/hao-fang/ws_fanuc/install/setup.bash
@@ -22,6 +35,7 @@ export PYTHONPATH="/opt/sharpa-wave-sdk/python${PYTHONPATH:+:$PYTHONPATH}"
 export LD_LIBRARY_PATH="/opt/sharpa-wave-sdk/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 ros2 launch bimanual_manipulation bimanual_system.launch.py \
+  hand_mounts:=/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/calibration/ros_mounts_20261122/hand_mounts.yaml \
   crx_mock:=false sharpa_backend:=sharpa_sdk \
   mit_kp_ratio:=1.0 mit_kd_ratio:=1.0 \
   method:=quintic input_rate_hz:=100.0 \
@@ -33,6 +47,14 @@ ros2 launch bimanual_manipulation bimanual_system.launch.py \
 This launch configures writable hardware and enables hand motors. It does not run a grasp.
 The existing force limiter settings remain in force. The single-side right grasp entry remains
 `script/run_grasp_pipeline.py`; it retains its right-only interpolator requirement.
+
+If initial-state capture reports `ROS/source kinematics differ: left_hand_flange.xyz`
+(or another hand-flange XYZ/RPY field), compare the reported source and ROS values.
+The ROS launch defaults to preview mounts unless `hand_mounts` is supplied, whereas Ada applies
+the master calibration. Stop the existing launch in its operator terminal and restart it with
+the generated YAML; changing a file alone does not reload the running model. Both arms' base
+transforms must also match the calibration; this exporter only supplies hand mounts. Keep the
+kinematics check enabled, including for `--export-only`, and retry with a fresh pipeline output root.
 
 ## Capture and grasp a new object
 
@@ -139,6 +161,25 @@ checks. A partial object cloud is not treated as a verified collision solid. Abo
 return retain endpoint IK and joint-space interpolation without adding continuous-path planning.
 The preview and packet are hash-bound, including the selected side and both starting states.
 A recorded action completion is not evidence that the object was held or lifted.
+
+The dual-live config allows `endpoint_inward_offset_m: 0.1` for above-object and lift IK.
+Both endpoints first try the original vertical target. If that local solve fails, the planner
+tries increasing horizontal radii (at most 1 cm apart) and a deterministic angular fan on the
+active-base side, accepting the first sampled feasible target within 10 cm. Each proposed endpoint
+must be no farther from the active arm's calibrated base in XY than the original endpoint.
+The selected grasp, wrist target orientation, 10 cm hand-to-object overhead clearance and 5 cm
+post-grasp lift height are retained. IK still requires position error at most 1 mm and orientation
+error at most 0.01 rad; these tolerances also apply to the shifted targets. Exhausting the bounded
+search still fails without selecting another grasp or applying a rejected solve.
+
+Set `endpoint_inward_offset_m: 0.0` in a custom dual config to restore strictly vertical endpoints.
+Older configs without this key retain that behavior. Each enabled endpoint records
+`horizontal_adjustment` with its world-XY offset, active base, bound and trial diagnostics.
+Preview and sender validation require the declared displacement and unchanged height/orientation;
+old records without this metadata remain strictly vertical. This is endpoint IK, not continuous
+collision-checked motion planning. The recorded-scene regression at
+`output/dual_live/inward_offset_replay_20261122_v1/run_report.json` exports the original `right:c0000`
+with 10 cm above-object and 3 cm lift offsets; it does not represent a fresh capture or hardware execution.
 
 ## Configuration and records
 

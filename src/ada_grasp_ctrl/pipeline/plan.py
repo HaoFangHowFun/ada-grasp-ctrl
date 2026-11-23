@@ -17,6 +17,41 @@ from ada_grasp_ctrl.mpc.reference import linear_reference
 from ada_grasp_ctrl.mpc.contracts import controller_mode
 
 
+def _validate_endpoint_displacement(endpoint: dict, start: list[float], target: list[float], height: float) -> None:
+    """Bind any horizontal shift to an explicit bounded active-base policy.
+
+    Legacy records without adjustment metadata retain strictly vertical motion.
+    Height and wrist orientation remain exact target constraints for both policies.
+    """
+    offset = [0.0, 0.0]
+    if "horizontal_adjustment" in endpoint:
+        adjustment = endpoint["horizontal_adjustment"]
+        if not isinstance(adjustment, dict) or adjustment.get("policy") != "toward_active_base":
+            raise ValueError("Invalid horizontal endpoint policy")
+        maximum = adjustment.get("max_distance_m")
+        if (
+            isinstance(maximum, bool)
+            or not isinstance(maximum, (int, float))
+            or not math.isfinite(maximum)
+            or not 0 < maximum <= 0.1
+        ):
+            raise ValueError("Invalid horizontal endpoint bound")
+        offset = finite_vector(adjustment.get("offset_world_xy_m"), 2, "endpoint XY offset")
+        base = finite_vector(adjustment.get("base_position_world_m"), 3, "endpoint active base")
+        if math.hypot(*offset) > maximum + 1e-10:
+            raise ValueError("Endpoint horizontal offset exceeds bound")
+        before = math.hypot(base[0] - start[0], base[1] - start[1])
+        after = math.hypot(base[0] - target[0], base[1] - target[1])
+        if after > before + 1e-10:
+            raise ValueError("Endpoint horizontal offset must approach the active base")
+    axis = "+Z_with_inward_offset" if any(offset) else "+Z"
+    if endpoint.get("axis") != axis:
+        raise ValueError("Endpoint axis differs from horizontal offset policy")
+    displacement = [*offset, height, 0.0, 0.0, 0.0, 0.0]
+    if any(abs(t - s - d) > 1e-8 for s, t, d in zip(start, target, displacement)):
+        raise ValueError("Endpoint must preserve orientation and the declared XYZ displacement")
+
+
 def validate_plan(plan: dict[str, Any]) -> None:
     """Reject incomplete or malformed execution plans before preview or sending."""
     if plan.get("schema_version") != 1 or plan.get("environment") not in ("mock", "hardware"):
@@ -63,7 +98,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
         if (
             above.get("solver_success") is not True
             or above.get("frame_id") != "world"
-            or above.get("axis") != "+Z"
+            or above.get("axis") not in ("+Z", "+Z_with_inward_offset")
             or above.get("hand_policy")
             not in ("zero_joint_open", "retain_selected_pregrasp", "extrapolate_grasp_to_pregrasp")
             or above.get("used_for_candidate_selection") is not False
@@ -92,8 +127,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
             raise ValueError("Above-object clearance is insufficient")
         start = finite_vector(above.get("start_flange_wxyz"), 7, "above-object start")
         target = finite_vector(above.get("target_flange_wxyz"), 7, "above-object target")
-        if any(abs(target[i] - start[i] - (height if i == 2 else 0)) > 1e-8 for i in range(7)):
-            raise ValueError("Above-object endpoint must retain pregrasp XY and orientation")
+        _validate_endpoint_displacement(above, start, target, height)
         if above.get("positions") != plan["keyframes"][1]:
             raise ValueError("Above-object joints differ from preview")
         if above["hand_policy"] == "zero_joint_open":
@@ -124,7 +158,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
             or lift.get("collision_checked") is not False
             or lift.get("solver_success") is not True
             or lift.get("frame_id") != "world"
-            or lift.get("axis") != "+Z"
+            or lift.get("axis") not in ("+Z", "+Z_with_inward_offset")
         ):
             raise ValueError("Lift must be an explicitly generated post-selection target without path/collision checks")
         height = lift.get("height_m")
@@ -132,8 +166,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
             raise ValueError("Invalid lift height")
         start = finite_vector(lift.get("start_flange_wxyz"), 7, "lift start")
         target = finite_vector(lift.get("target_flange_wxyz"), 7, "lift target")
-        if any(abs(target[i] - start[i] - (height if i == 2 else 0)) > 1e-8 for i in range(7)):
-            raise ValueError("Lift must retain squeeze orientation and move only along world +Z")
+        _validate_endpoint_displacement(lift, start, target, height)
         index = phases.index("lift") + 1
         if (
             lift.get("positions") != plan["keyframes"][index]

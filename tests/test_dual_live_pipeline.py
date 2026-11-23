@@ -148,6 +148,7 @@ class DualLiveContracts(unittest.TestCase):
         config = configuration("src/ada_grasp_ctrl/config/experiments/dual_grasp_pipeline.yaml")
         self.assertEqual(config["enabled_arms"], ["left", "right"])
         self.assertTrue(config["above_object_open_hand"])
+        self.assertEqual(config["endpoint_inward_offset_m"], 0.1)
         self.assertIn("inference_model", config)
         self.assertNotIn("inference_reference", config)
         for key in ("roi", "candidate_id", "object_pose", "selected_side"):

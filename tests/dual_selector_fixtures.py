@@ -24,6 +24,7 @@ class AnalyticalSide:
     def __init__(self, robot: object, sim: object, current: object, side: str) -> None:
         self.limits = robot.limits[side_slice(side)]
         self.model_T_world = np.eye(4)
+        self.base_position_world = np.array([0.0, 0.0 if side == "left" else -1.0, 0.0])
         self.kin = SimpleNamespace(forward=self.forward, bounds=self.limits[:6].T)
 
     def forward(self, q: object) -> np.ndarray:

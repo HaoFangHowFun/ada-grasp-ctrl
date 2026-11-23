@@ -1,4 +1,4 @@
-"""Read the installed calibration and apply absolute transforms to an Ada-only snapshot."""
+"""Read authoritative calibration for Ada snapshots and ROS hand-mount configuration."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import shutil
 import xml.etree.ElementTree as ET
 
 import numpy as np
+import yaml
 
 from ada_grasp_ctrl.experiments.fixed_camera_geometry import file_hash, rigid
 from ada_grasp_ctrl.paths import resolve_from_root
@@ -103,6 +104,31 @@ def calibrated_urdf(description: str, calibration: dict) -> str:
     return ET.tostring(root, encoding="unicode")
 
 
+def export_ros_hand_mounts(output: str | Path, path: str | Path = DEFAULT_CALIBRATION) -> Path:
+    """Export the same absolute mount transforms consumed by calibrated Ada snapshots.
+
+    Args:
+        output: New YAML file, resolved through the Ada output root.
+        path: Master calibration JSON used by the pipeline.
+
+    Returns:
+        Absolute path for the bimanual launch's hand_mounts argument.
+
+    Raises:
+        ValueError: If the authoritative calibration is malformed.
+        FileExistsError: If the output already exists.
+    """
+    calibration = load_calibration(path)
+    output = resolve_from_root(output, "output")
+    mounts = {side: dict(xyz=value["xyz_m"], rpy=value["rpy_rad"]) for side, value in calibration["mounts"].items()}
+    mounts["calibration"] = calibration["provenance"]
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("x") as stream:
+        stream.write("# Generated from authoritative calibration; physical validation is separate.\n")
+        stream.write(yaml.safe_dump(mounts, sort_keys=False))
+    return output
+
+
 def calibrated_snapshot(source: str | Path, output: str | Path, path: str | Path = DEFAULT_CALIBRATION) -> Path:
     """Create a new portable Ada snapshot for model, preview and existing packet provenance.
 
@@ -138,3 +164,19 @@ def calibrated_snapshot(source: str | Path, output: str | Path, path: str | Path
     (output / "model.urdf").write_text(description)
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2, allow_nan=False) + "\n")
     return output
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Export ROS mount configuration without starting ROS or commanding hardware."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description=main.__doc__)
+    parser.add_argument("--calibration", default=DEFAULT_CALIBRATION)
+    parser.add_argument("--output", required=True, help="New hand_mounts.yaml path")
+    args = parser.parse_args(argv)
+    print(export_ros_hand_mounts(args.output, args.calibration))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

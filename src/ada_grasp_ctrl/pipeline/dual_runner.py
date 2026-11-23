@@ -24,6 +24,7 @@ from .dual_scene import live_scene
 from .dual_artifacts import export_dual_selection
 from .dual_selection import selector_settings, select_live_hierarchical
 from .plan import check_start
+from .lift import inward_offset_limit
 
 
 def configuration(path: str) -> dict:
@@ -216,6 +217,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.arms != "auto":
             config["enabled_arms"] = [args.arms]
         enabled_set(config["enabled_arms"])
+        inward_offset_limit(config.get("endpoint_inward_offset_m", 0.0))
         if args.selector == "hierarchical":
             selector_settings(config.get("hierarchical_selector"))
         root.mkdir(parents=True, exist_ok=False)

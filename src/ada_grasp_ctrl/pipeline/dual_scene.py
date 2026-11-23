@@ -53,6 +53,7 @@ class SideAdapter:
     def __init__(self, robot: DualArmModel, sim: DualArmSimulation, q56: object, side: str) -> None:
         self.robot, self.side = robot, side
         self.current = robot.configuration(q56)
+        self.base_position_world = robot.fk(self.current, side, f"{side}_base_link")[:3, 3]
         self.block = side_slice(side)
         self.model, self.data = sim.model, mujoco.MjData(sim.model)
         self.addresses = sim.qpos[self.block]

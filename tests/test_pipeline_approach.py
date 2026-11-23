@@ -31,6 +31,38 @@ class CartesianKinematics:
 
 
 class ApproachTest(unittest.TestCase):
+    def test_inward_overhead_retains_clearance_and_exact_selected_grasp(self) -> None:
+        class CoupledKinematics(CartesianKinematics):
+            bounds = np.array([[0.0, -2, -2, -2, -2, -2], [2.0] * 6])
+
+            def forward(self, q: np.ndarray) -> np.ndarray:
+                pose = super().forward(q)
+                pose[0, 3] += 0.5 * q[2]
+                return pose
+
+        adapter = SimpleNamespace(kin=CoupledKinematics(), model_T_world=np.eye(4), limits=np.array([[-2, 2]] * 28))
+        pre = np.r_[[0, 0, 0.4, 0, 0, 0], [0.2] * 22]
+        original = pre.copy()
+        geometry = SimpleNamespace(measure=lambda q: {"gap_m": float(q[2] - 0.1)})
+        with patch("ada_grasp_ctrl.pipeline.approach.HandGeometry", return_value=geometry):
+            with self.assertRaises(AboveObjectTargetError):
+                above_object_target(adapter, pre, [[0, 0, 0.25]], 0.1)
+            result = above_object_target(
+                adapter,
+                pre,
+                [[0, 0, 0.25]],
+                0.1,
+                max_inward_offset_m=0.1,
+                base_position_world=[1, 0, 0],
+                open_hand=True,
+            )
+        self.assertAlmostEqual(result["height_m"], 0.05)
+        self.assertAlmostEqual(result["lowest_world_z_m"] - result["object_top_world_z_m"], 0.1, places=6)
+        self.assertAlmostEqual(result["target_flange_wxyz"][0] - result["start_flange_wxyz"][0], 0.03)
+        self.assertEqual(result["axis"], "+Z_with_inward_offset")
+        self.assertEqual(result["positions"][6:], [0.0] * 22)
+        np.testing.assert_array_equal(pre, original)
+
     def test_open_fingers_recompute_clearance_and_preserve_selected_grasps(self) -> None:
         adapter = SimpleNamespace(
             kin=CartesianKinematics(), model_T_world=np.eye(4), limits=np.array([[-2, 2]] * 28, dtype=float)
@@ -150,7 +182,10 @@ class ApproachTest(unittest.TestCase):
     def test_open_hand_hardware_plan_is_bound_to_preview_and_rejects_nonzero_fingers(self) -> None:
         self.check_eight_phase_plan(open_hand=True)
 
-    def check_eight_phase_plan(self, *, open_hand: bool) -> None:
+    def test_inward_overhead_hardware_packet_remains_bound_to_reviewed_plan(self) -> None:
+        self.check_eight_phase_plan(open_hand=True, inward=True)
+
+    def check_eight_phase_plan(self, *, open_hand: bool, inward: bool = False) -> None:
         fixture = fixtures.PipelineTransportTest()
         with tempfile.TemporaryDirectory() as directory:
             path, packet = fixture.write_packet(Path(directory), lift=True, complete=True, environment="hardware")
@@ -174,6 +209,15 @@ class ApproachTest(unittest.TestCase):
                 path_checked=False,
                 collision_checked=False,
             )
+            if inward:
+                above["axis"] = "+Z_with_inward_offset"
+                above["target_flange_wxyz"][0] = 0.03
+                above["horizontal_adjustment"] = dict(
+                    policy="toward_active_base",
+                    max_distance_m=0.1,
+                    base_position_world_m=[1, 0, 0],
+                    offset_world_xy_m=[0.03, 0],
+                )
             plan["above_object"] = above
             plan["phases"].insert(0, "above_object")
             plan["keyframes"].insert(1, q)

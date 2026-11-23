@@ -3,6 +3,9 @@ base_config: src/ada_grasp_ctrl/config/experiments/grasp_pipeline.yaml
 environment: hardware
 robot_snapshot: output/dual_arm/phase1_20261111/commit_snapshot
 enabled_arms: [left, right]
+# Preserve endpoint height/orientation; allow up to 10 cm horizontally toward
+# the active base after vertical IK fails. Zero restores strict vertical targets.
+endpoint_inward_offset_m: 0.1
 # Explicit example preference, used only with --selector hierarchical; not a learned prior.
 # left_full labels mirrored right_full output, not an independently trained model.
 hierarchical_selector:

@@ -179,6 +179,6 @@ def check_kinematics(expected: dict[str, Any], actual: dict[str, Any]) -> None:
             other = actual[link][key]
             if isinstance(value, list):
                 if len(value) != len(other) or any(abs(a - b) > 1e-8 for a, b in zip(value, other)):
-                    raise ValueError(f"ROS/source kinematics differ: {link}.{key}")
+                    raise ValueError(f"ROS/source kinematics differ: {link}.{key}; source={value!r}, ROS={other!r}")
             elif value != other:
-                raise ValueError(f"ROS/source kinematics differ: {link}.{key}")
+                raise ValueError(f"ROS/source kinematics differ: {link}.{key}; source={value!r}, ROS={other!r}")

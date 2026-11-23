@@ -141,7 +141,7 @@ class RosTransportContractTest(unittest.TestCase):
         check_kinematics(model, deepcopy(model))
         changed = deepcopy(model)
         changed["link"]["xyz"][0] = 0.001
-        with self.assertRaisesRegex(ValueError, "kinematics differ"):
+        with self.assertRaisesRegex(ValueError, r"kinematics differ: link.xyz; source=.*ROS=.*0.001"):
             check_kinematics(model, changed)
 
     def test_invalid_preparation_is_rejected_before_export(self):

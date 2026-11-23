@@ -45,6 +45,10 @@ def export_dual_selection(
     }
     with np.load(object_root / "object.npz", allow_pickle=False) as archive:
         points = archive["points_world_m"]
+    endpoint_options = dict(
+        max_inward_offset_m=config.get("endpoint_inward_offset_m", 0.0),
+        base_position_world=adapter.base_position_world if config.get("endpoint_inward_offset_m", 0.0) else None,
+    )
     above = above_object_target(
         adapter,
         poses["pregrasp"],
@@ -53,8 +57,9 @@ def export_dual_selection(
         grasp=poses["grasp"],
         open_hand=config["above_object_open_hand"],
         hand_extrapolation_factor=config["above_object_hand_factor"],
+        **endpoint_options,
     )
-    lift = lift_target(adapter, poses["squeeze"], config["lift_height_m"])
+    lift = lift_target(adapter, poses["squeeze"], config["lift_height_m"], **endpoint_options)
     phases = ["above_object", *CYCLE_PHASES]
     frames = [
         start,

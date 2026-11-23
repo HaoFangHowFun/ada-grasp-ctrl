@@ -24,6 +24,51 @@ class CartesianKinematics:
 
 
 class PipelineLiftTest(unittest.TestCase):
+    def test_bounded_offset_preserves_world_height_orientation_and_selected_hand(self) -> None:
+        class CoupledKinematics(CartesianKinematics):
+            bounds = np.array([[0.0, -2, -2, -2, -2, -2], [2.0] * 6])
+
+            def forward(self, q: np.ndarray) -> np.ndarray:
+                pose = super().forward(q)
+                pose[0, 3] += 0.5 * q[2]
+                return pose
+
+        for angle in (0, 90, 180):
+            with self.subTest(world_rotation=angle):
+                model_world = np.eye(4)
+                model_world[:3, :3] = Rotation.from_euler("z", angle, degrees=True).as_matrix()
+                adapter = SimpleNamespace(kin=CoupledKinematics(), model_T_world=model_world)
+                squeeze = np.r_[[0.0, 0, 0.4, 0, 0, 0], np.linspace(0, 0.1, 22)]
+                original = squeeze.copy()
+                base = model_world[:3, :3].T @ [1.0, 0, 0]
+                with self.assertRaisesRegex(ValueError, "could not be computed"):
+                    lift_target(adapter, squeeze, 0.05)
+                result = lift_target(adapter, squeeze, 0.05, max_inward_offset_m=0.1, base_position_world=base)
+                adjustment = result["horizontal_adjustment"]
+                delta = np.asarray(result["actual_flange_wxyz"][:3]) - result["start_flange_wxyz"][:3]
+                np.testing.assert_allclose(delta, model_world[:3, :3].T @ [0.03, 0, 0.05], atol=1e-6)
+                np.testing.assert_allclose(result["actual_flange_wxyz"][3:], result["start_flange_wxyz"][3:], atol=1e-6)
+                np.testing.assert_array_equal(result["positions"][6:], squeeze[6:])
+                np.testing.assert_array_equal(squeeze, original)
+                self.assertFalse(adjustment["attempts"][0]["accepted"])
+                self.assertTrue(adjustment["attempts"][-1]["accepted"])
+                self.assertLessEqual(np.linalg.norm(adjustment["offset_world_xy_m"]), 0.1)
+                with self.assertRaisesRegex(ValueError, "offset limit 0.01"):
+                    lift_target(adapter, squeeze, 0.05, max_inward_offset_m=0.01, base_position_world=base)
+
+    def test_vertical_success_is_preferred_and_invalid_offset_policy_is_rejected(self) -> None:
+        adapter = self.adapter()
+        vertical = lift_target(adapter, np.zeros(28), 0.05)
+        enabled = lift_target(adapter, np.zeros(28), 0.05, max_inward_offset_m=0.1, base_position_world=[1, 0, 0])
+        np.testing.assert_array_equal(vertical["positions"], enabled["positions"])
+        self.assertEqual(len(enabled["horizontal_adjustment"]["attempts"]), 1)
+        self.assertEqual(enabled["axis"], "+Z")
+        for invalid in (True, -0.1, 0.101, float("nan"), float("inf"), "0.1"):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                lift_target(adapter, np.zeros(28), 0.05, max_inward_offset_m=invalid, base_position_world=[1, 0, 0])
+        with self.assertRaises(ValueError):
+            lift_target(adapter, np.zeros(28), 0.05, max_inward_offset_m=0.1)
+
     def adapter(self) -> SimpleNamespace:
         model_world = np.eye(4)
         model_world[:3, :3] = Rotation.from_euler("y", 90, degrees=True).as_matrix()
@@ -101,6 +146,39 @@ class PipelineLiftTest(unittest.TestCase):
         changed.pop("execution_phases")
         with self.assertRaises(ValueError):
             validate_packet(changed)
+
+        shifted = deepcopy(plan)
+        endpoint = shifted["lift"]
+        endpoint["axis"] = "+Z_with_inward_offset"
+        endpoint["target_flange_wxyz"][0] += 0.03
+        endpoint["horizontal_adjustment"] = dict(
+            policy="toward_active_base",
+            max_distance_m=0.1,
+            base_position_world_m=[1, 0, 0],
+            offset_world_xy_m=[0.03, 0],
+        )
+        validate_plan(shifted)
+        for field, value in (
+            ("max_distance_m", 0.02),
+            ("max_distance_m", 0.11),
+            ("base_position_world_m", [-1, 0, 0]),
+            ("offset_world_xy_m", [0.04, 0]),
+            ("offset_world_xy_m", [float("nan"), 0]),
+            ("policy", "free_xy"),
+        ):
+            changed = deepcopy(shifted)
+            changed["lift"]["horizontal_adjustment"][field] = value
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                validate_plan(changed)
+        for i in (2, 3):
+            changed = deepcopy(shifted)
+            changed["lift"]["target_flange_wxyz"][i] += 0.01
+            with self.assertRaises(ValueError):
+                validate_plan(changed)
+        changed = deepcopy(shifted)
+        del changed["lift"]["horizontal_adjustment"]
+        with self.assertRaises(ValueError):
+            validate_plan(changed)
 
 
 if __name__ == "__main__":

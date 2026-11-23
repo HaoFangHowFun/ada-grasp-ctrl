@@ -13,7 +13,13 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 import yaml
 
-from ada_grasp_ctrl.calibration import DEFAULT_CALIBRATION, load_calibration, calibrated_urdf, calibrated_snapshot
+from ada_grasp_ctrl.calibration import (
+    DEFAULT_CALIBRATION,
+    load_calibration,
+    calibrated_urdf,
+    calibrated_snapshot,
+    export_ros_hand_mounts,
+)
 from ada_grasp_ctrl.experiments import fixed_camera
 from ada_grasp_ctrl.experiments.fixed_camera_geometry import load_extrinsics, transform, file_hash
 from ada_grasp_ctrl.paths import resolve_from_root, reset_runtime_roots
@@ -87,6 +93,32 @@ class UnifiedCalibrationTests(unittest.TestCase):
 
     def write(self) -> None:
         self.path.write_text(json.dumps(self.data))
+
+    def test_ros_mount_export_matches_calibrated_urdf_and_tracks_source(self):
+        self.data["authoritative"]["hand_mounts"]["left"]["xyz_m"] = [0.01, -0.02, 0.03]
+        self.data["authoritative"]["hand_mounts"]["right"]["rpy_rad"] = [0.1, -0.2, 0.3]
+        self.write()
+        output = export_ros_hand_mounts(self.root / "ros" / "hand_mounts.yaml", self.path)
+        config = yaml.safe_load(output.read_text())
+        source = source_snapshot(self.root / "source")
+        model = ET.fromstring(calibrated_urdf((source / "model.urdf").read_text(), load_calibration(self.path)))
+        for side in ("left", "right"):
+            origin = model.find(f"joint[@name='{side}_arm_to_hand']/origin")
+            for field in ("xyz", "rpy"):
+                self.assertEqual(config[side][field], [float(v) for v in origin.get(field).split()])
+        self.assertEqual(config["calibration"]["sha256"], file_hash(self.path))
+        original = output.read_bytes()
+        with self.assertRaises(FileExistsError):
+            export_ros_hand_mounts(output, self.path)
+        self.assertEqual(output.read_bytes(), original)
+
+    def test_ros_mount_export_rejects_invalid_calibration_before_writing(self):
+        self.data["authoritative"]["hand_mounts"]["right"]["rpy_rad"] = [0, float("nan"), 0]
+        self.write()
+        output = self.root / "invalid.yaml"
+        with self.assertRaises(ValueError):
+            export_ros_hand_mounts(output, self.path)
+        self.assertFalse(output.exists())
 
     def test_authoritative_only_and_malformed_transforms(self):
         expected = load_calibration(self.path)

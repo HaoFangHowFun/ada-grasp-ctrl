@@ -6,7 +6,7 @@ import numpy as np
 
 from ada_grasp_ctrl.experiments.table_clearance import HandGeometry
 from ada_grasp_ctrl.experiments.crx_sharpa_right_model import matrix_pose
-from .lift import lift_target
+from .lift import inward_offset_limit, lift_target
 
 
 class AboveObjectTargetError(ValueError):
@@ -22,15 +22,19 @@ def above_object_target(
     grasp: object | None = None,
     hand_extrapolation_factor: float = 1.0,
     open_hand: bool = False,
+    max_inward_offset_m: float = 0.0,
+    base_position_world: object = None,
 ) -> dict:
     """Raise pregrasp until the lowest hand mesh clears the observed object top.
 
-    Retain pregrasp XY and wrist orientation. Open all fingers to zero or extend
+    Retain wrist orientation, optionally searching horizontally toward the active base.
+    Open all fingers to zero or extend
     the grasp-to-pregrasp motion, then recompute mesh clearance for that hand shape.
     Only a local endpoint IK is computed; execution uses joint interpolation.
     """
     if isinstance(clearance_m, bool) or not np.isfinite(clearance_m) or clearance_m <= 0:
         raise AboveObjectTargetError("Above-object clearance must be positive and finite")
+    max_inward_offset_m = inward_offset_limit(max_inward_offset_m)
     points = np.asarray(object_points_world, dtype=float)
     if points.ndim != 2 or points.shape[1] != 3 or not len(points) or not np.isfinite(points).all():
         raise AboveObjectTargetError("Above-object target requires finite observed object points")
@@ -64,9 +68,13 @@ def above_object_target(
     start = np.linalg.inv(adapter.model_T_world) @ adapter.kin.forward(q)
     target = start.copy()
     target[2, 3] += height
+    lift = None
     try:
         if height > 0:
-            q = np.asarray(lift_target(adapter, q, height)["positions"])
+            lift = lift_target(
+                adapter, q, height, max_inward_offset_m=max_inward_offset_m, base_position_world=base_position_world
+            )
+            q = np.asarray(lift["positions"])
     except ValueError as error:
         raise AboveObjectTargetError("Selected grasp retained; above-object IK failed: " + str(error)) from error
     final = geometry.measure(q)["gap_m"]
@@ -74,7 +82,7 @@ def above_object_target(
         raise AboveObjectTargetError("Above-object endpoint misses clearance by more than 1 mm")
     if np.any(q < adapter.limits[:, 0]) or np.any(q > adapter.limits[:, 1]):
         raise AboveObjectTargetError("Above-object endpoint exceeds joint limits")
-    return {
+    result = {
         "positions": q.tolist(),
         "clearance_m": float(clearance_m),
         "object_top_world_z_m": top,
@@ -83,9 +91,9 @@ def above_object_target(
         "lowest_world_z_m": final,
         "height_m": height,
         "start_flange_wxyz": matrix_pose(start).tolist(),
-        "target_flange_wxyz": matrix_pose(target).tolist(),
+        "target_flange_wxyz": lift["target_flange_wxyz"] if lift else matrix_pose(target).tolist(),
         "frame_id": "world",
-        "axis": "+Z",
+        "axis": lift["axis"] if lift else "+Z",
         "hand_policy": "zero_joint_open"
         if open_hand
         else "retain_selected_pregrasp"
@@ -97,3 +105,8 @@ def above_object_target(
         "path_checked": False,
         "collision_checked": False,
     }
+    if lift and "horizontal_adjustment" in lift:
+        result["horizontal_adjustment"] = lift["horizontal_adjustment"]
+        result["actual_flange_wxyz"] = lift["actual_flange_wxyz"]
+        result["residual"] = lift["residual"]
+    return result
