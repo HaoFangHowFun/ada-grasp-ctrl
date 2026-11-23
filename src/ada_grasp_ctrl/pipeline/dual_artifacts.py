@@ -35,6 +35,8 @@ def export_dual_selection(
     if chosen is None:
         raise ValueError("No feasible candidate on either enabled side")
     side = chosen["selected_side"]
+    if chosen["required_arms"] != [side] or chosen["candidate"].get("mode", "").startswith("both_"):
+        raise ValueError("unsupported_simultaneous_hardware_execution")
     passive = "left" if side == "right" else "right"
     state = read_json(state_path)
     q56 = robot.configuration(state["full_positions_rad"])

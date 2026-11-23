@@ -25,6 +25,7 @@ from .dual_artifacts import export_dual_selection
 from .dual_selection import selector_settings, select_live_hierarchical
 from .plan import check_start
 from .lift import inward_offset_limit
+from .grasp_models import configure_model
 
 
 def configuration(path: str) -> dict:
@@ -69,17 +70,49 @@ def run(args: argparse.Namespace, config: dict, root: Path, processes: Processes
     # Retain the established object ROI/cluster interaction and calibration path.
     perceive_args = argparse.Namespace(mode="live", reuse_candidates=False, roi=args.roi, cluster=args.cluster)
     group = dict(group="live")
+    timings = report.setdefault("timings", {})
+    began = time.monotonic()
     obj = perceive(group, perceive_args, config, processes, root, infer=False)
+    timings["capture_s"] = time.monotonic() - began
+    began = time.monotonic()
     rows = infer_live_sides(obj, config, processes, root)
+    timings["inference_s"] = time.monotonic() - began
+    native_diagnostics = None
+    if config.get("grasp_model") == "native_multimode":
+        native_diagnostics = read_json(root / "candidates.json")
+        report.update(
+            {
+                k: native_diagnostics[k]
+                for k in (
+                    "checkpoint",
+                    "availability_scores",
+                    "ranked_available_modes",
+                    "eligible_modes",
+                    "unsupported_modes",
+                )
+            }
+        )
+        timings["native_inference"] = native_diagnostics["timings"]
+    else:
+        reference = config.get("inference_model") or read_json(resolve_from_root(config["inference_reference"]))
+        report["checkpoint"] = reference["checkpoint"]
     state_path = snapshot("state")
     state = read_json(state_path)
     robot, sim = live_scene(
         resolve_from_root(config["robot_snapshot"]), state, read_json(resolve_from_root(config["table_plane"]))
     )
     print("Selecting across enabled arms: " + ", ".join(config["enabled_arms"]), flush=True)
+    began = time.monotonic()
     if args.selector == "hierarchical":
+        options = dict(native_diagnostics=native_diagnostics) if native_diagnostics is not None else {}
         selection, batch, audit = select_live_hierarchical(
-            robot, sim, rows, config["enabled_arms"], state["full_positions_rad"], config["hierarchical_selector"]
+            robot,
+            sim,
+            rows,
+            config["enabled_arms"],
+            state["full_positions_rad"],
+            config["hierarchical_selector"],
+            **options,
         )
         write_json(root / "canonical_candidates.json", batch)
         write_json(root / "hierarchical_selection.json", audit)
@@ -88,6 +121,7 @@ def run(args: argparse.Namespace, config: dict, root: Path, processes: Processes
         report.update(selector="hierarchical", selection_status=audit["status"], selected_mode=audit["selected_mode"])
     else:
         selection = select_candidates(robot, sim, rows, config["enabled_arms"], state["full_positions_rad"])
+    timings["selection_s"] = time.monotonic() - began
     selection["geometry_note"] = (
         "Measured table and both robots; partial object cloud is not a verified collision solid"
     )
@@ -101,10 +135,16 @@ def run(args: argparse.Namespace, config: dict, root: Path, processes: Processes
     report.update(
         selected_side=selected["selected_side"], candidate_id=selected["candidate_id"], effort=selected["effort"]
     )
+    report.update(
+        selected_source_mode=selected["candidate"]["provenance"].get("source_model_mode", "right_full"),
+        execution_mode=selected["candidate"].get("execution_mode", selected["selected_side"] + "_full"),
+    )
+    began = time.monotonic()
     packet_path = export_dual_selection(
         robot, sim, selection, state_path, obj, config, root / "export", root / "candidates.json"
     )
     packet = load_packet(packet_path)
+    timings["export_s"] = time.monotonic() - began
     report.update(status="exported", packet_path=str(packet_path))
     write_json(root / "run_report.json", report)
     print(
@@ -199,6 +239,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--ros-domain-id", type=int)
     parser.add_argument("--arms", choices=("auto", "left", "right"), default="auto")
     parser.add_argument("--selector", choices=("legacy", "hierarchical"), default="legacy")
+    parser.add_argument("--grasp-model", choices=("right_full", "native_multimode"), default="right_full")
     parser.add_argument("--roi", nargs=4, type=int)
     parser.add_argument("--cluster", type=int)
     mode = parser.add_mutually_exclusive_group()
@@ -209,6 +250,8 @@ def main(argv: list[str] | None = None) -> int:
     report = dict(schema_version=1, status="preflight", object_lifted=None, object_held=None)
     try:
         config = configuration(args.config)
+        configure_model(config, args.grasp_model, args.selector)
+        report["grasp_model"] = args.grasp_model
         if args.environment:
             config["environment"] = args.environment
         config["ros_domain_id"] = validate_domain(
@@ -218,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
             config["enabled_arms"] = [args.arms]
         enabled_set(config["enabled_arms"])
         inward_offset_limit(config.get("endpoint_inward_offset_m", 0.0))
-        if args.selector == "hierarchical":
+        if args.selector == "hierarchical" and args.grasp_model == "right_full":
             selector_settings(config.get("hierarchical_selector"))
         root.mkdir(parents=True, exist_ok=False)
         created = True

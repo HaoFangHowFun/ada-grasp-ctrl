@@ -2,6 +2,8 @@
 base_config: src/ada_grasp_ctrl/config/experiments/grasp_pipeline.yaml
 environment: hardware
 robot_snapshot: output/dual_arm/phase1_20261111/commit_snapshot
+# Fresh table-only fit; camera extrinsics remain unchanged. See this run's calibration_review.json.
+table_plane: output/fixed_camera/table_recalibration_20261123T215945_898848Z/fit/table_plane.json
 enabled_arms: [left, right]
 # Preserve endpoint height/orientation; allow up to 10 cm horizontally toward
 # the active base after vertical IK fails. Zero restores strict vertical targets.
@@ -17,6 +19,13 @@ hierarchical_selector:
 mirroring:
   plane_normal_world: [0, 1, 0]
   plane_point: object_point_cloud_centroid
+
+# Native Auto-Mode deployment; sampling settings come from this run's Hydra config.
+grasp_models:
+  native_multimode:
+    checkpoint: /home/hao-fang/hugs-workspace/HUGS-DexLearn/output/sharpaDualMulti_robotMultiHierar_native_sharpa_all5_50k_v1/ckpts/step_200000.pth
+    training_config: /home/hao-fang/hugs-workspace/HUGS-DexLearn/output/sharpaDualMulti_robotMultiHierar_native_sharpa_all5_50k_v1/.hydra/config.yaml
+    metadata_root: /home/hao-fang/hugs-workspace/HUGS-DexLearn/pilots/dual_sharpa_phase4_v1/dataset/sharpa_dual
 
 # Model references only; no captured object, ROI or candidate is reused.
 inference_model:

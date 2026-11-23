@@ -21,6 +21,23 @@ from .dual_scene import live_scene
 from .plan import sample_plan, phase_at_progress, phase_progress
 
 
+def model_summary(report: dict) -> str:
+    """Format the existing run report for the viewer's markdown panel."""
+    scores = report.get("availability_scores", {})
+    text = (
+        f"**Model:** {report.get('grasp_model', 'right_full')}\n\n"
+        f"**Checkpoint:** {report.get('checkpoint', {}).get('path', 'unknown')}\n\n"
+        f"**Source mode:** {report.get('selected_source_mode', 'right_full')} · "
+        f"**Execution:** {report.get('execution_mode', report.get('selected_side', 'unknown'))}\n\n"
+        f"**Effort:** {report.get('effort', 0):.6f} rad²"
+    )
+    if scores:
+        text += "\n\n**Availability:** " + ", ".join(f"{m}: {s:.4f}" for m, s in scores.items())
+        text += "\n\n**Ranked available:** " + ", ".join(report["ranked_available_modes"])
+        text += "\n\n**Executable modes:** " + ", ".join(report["eligible_modes"])
+    return text
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path, required=True)
@@ -62,6 +79,7 @@ def main() -> None:
             f"**Selected: {packet['side'].upper()} · {plan['candidate_id']}**\n\n"
             "Review the full cycle, then press Enter in the pipeline terminal to execute."
         )
+        server.gui.add_markdown(model_summary(read_json(root / "run_report.json")))
         progress = server.gui.add_slider("Playback (%)", min=0, max=100, step=0.1, initial_value=0.0)
         playing = server.gui.add_checkbox("Play", initial_value=False)
         phase = server.gui.add_dropdown("Phase", options=tuple(plan["phases"]), initial_value=plan["phases"][0])
