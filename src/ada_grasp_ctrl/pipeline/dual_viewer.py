@@ -12,13 +12,31 @@ import yaml
 from mjviser import ViserMujocoScene
 import viser
 
-from ada_grasp_ctrl.experiments.right_ros_sender import load_packet
-from ada_grasp_ctrl.grasp_selection.adapters.dexlearn import read_json, file_hash
+from .dual_packet import load_execution_packet as load_packet, preview_identity
+from ada_grasp_ctrl.ros_execution.shared_packet import stage_reference
+from ada_grasp_ctrl.grasp_selection.adapters.dexlearn import read_json
 from ada_grasp_ctrl.grasp_selection.cli import write_json
 from ada_grasp_ctrl.paths import resolve_from_root
 from ada_grasp_ctrl.robot_environment.model import side_slice
 from .dual_scene import live_scene
 from .plan import sample_plan, phase_at_progress, phase_progress
+
+
+def sample_shared_preview(packet: dict, progress: float) -> np.ndarray:
+    """Render both arms from the same nominal phase clock and lift waypoints."""
+    schedule = packet["schedule"]
+    now = schedule["stage_start_time"] + progress / 100 * (schedule["end_time"] - schedule["stage_start_time"])
+    stage = next((s for s in schedule["stages"] if now <= s["settled_time"]), schedule["stages"][-1])
+    q = np.zeros(56)
+    for side in ("left", "right"):
+        q[side_slice(side)] = stage_reference(
+            stage,
+            side,
+            stage["arms"][side]["start_positions_rad"],
+            now - stage["stage_start_time"],
+            stage["duration_s"],
+        )
+    return q
 
 
 def model_summary(report: dict) -> str:
@@ -46,13 +64,25 @@ def main() -> None:
     config = yaml.safe_load((root / "effective_config.yaml").read_text())
     packet_path = root / "export/targets.json"
     packet = load_packet(packet_path)
-    plan = packet["reviewed_plan"]
+    paired = "schedule" in packet
+    if paired:
+        schedule = packet["schedule"]
+        plan = dict(
+            phases=[s["phase"] for s in schedule["stages"]],
+            durations_s=[s["duration_s"] for s in schedule["stages"]],
+            settle_time_s=schedule["settle_time_s"],
+            candidate_id=packet["plan_identity"]["candidate_id"],
+        )
+        side_label = "left + right"
+    else:
+        plan = packet["reviewed_plan"]
+        side_label = packet["side"]
     state = read_json(root / "state/robot_state.json")
     _, sim = live_scene(
         resolve_from_root(config["robot_snapshot"]), state, read_json(resolve_from_root(config["table_plane"]))
     )
     q56 = np.asarray(state["full_positions_rad"])
-    block = side_slice(packet["side"])
+    block = None if paired else side_slice(packet["side"])
     server = viser.ViserServer(host="127.0.0.1", port=8089, label="Live dual-arm grasp")
     try:
         if server.get_port() != 8089:
@@ -76,7 +106,7 @@ def main() -> None:
             "/environment", points=points, colors=np.tile([160, 160, 160], (len(points), 1)), point_size=0.002
         )
         server.gui.add_markdown(
-            f"**Selected: {packet['side'].upper()} · {plan['candidate_id']}**\n\n"
+            f"**Selected: {side_label.upper()} · {plan['candidate_id']}**\n\n"
             "Review the full cycle, then press Enter in the pipeline terminal to execute."
         )
         server.gui.add_markdown(model_summary(read_json(root / "run_report.json")))
@@ -96,15 +126,18 @@ def main() -> None:
                 progress.value = (progress.value + (now - previous) / duration * 100) % 100
             previous = now
             q = q56.copy()
-            q[block] = sample_plan(plan, float(progress.value))
+            if paired:
+                q = sample_shared_preview(packet, float(progress.value))
+            else:
+                q[block] = sample_plan(plan, float(progress.value))
             sim.data.qpos[sim.qpos] = q
             mujoco.mj_forward(sim.model, sim.data)
             scene.update_from_mjdata(sim.data)
-            label.content = f"**{phase_at_progress(plan, progress.value)}** · {packet['side']}"
+            label.content = f"**{phase_at_progress(plan, progress.value)}** · {side_label}"
             if not ready:
                 write_json(
                     root / "viewer_state.json",
-                    dict(side=packet["side"], candidate_id=plan["candidate_id"], packet_sha256=file_hash(packet_path)),
+                    preview_identity(packet, packet_path),
                 )
                 print("PREVIEW_URL=http://localhost:8089", flush=True)
                 ready = True

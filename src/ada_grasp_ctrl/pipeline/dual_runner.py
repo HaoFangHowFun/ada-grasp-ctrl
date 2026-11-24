@@ -13,10 +13,10 @@ import yaml
 
 from ada_grasp_ctrl.calibration import DEFAULT_CALIBRATION, calibrated_snapshot
 from ada_grasp_ctrl.paths import resolve_from_root
-from ada_grasp_ctrl.grasp_selection.adapters.dexlearn import read_json, file_hash
+from ada_grasp_ctrl.grasp_selection.adapters.dexlearn import read_json
 from ada_grasp_ctrl.grasp_selection.cli import write_json
 from ada_grasp_ctrl.grasp_selection.multi_arm import select_candidates, enabled_set
-from ada_grasp_ctrl.experiments.right_ros_sender import load_packet
+from .dual_packet import load_execution_packet as load_packet, preview_identity
 from ada_grasp_ctrl.ros_execution.settings import validate_domain, DEFAULTS
 from .runner import Processes, perceive, wait_for_enter
 from .dual_inference import infer_live_sides
@@ -105,6 +105,8 @@ def run(args: argparse.Namespace, config: dict, root: Path, processes: Processes
     began = time.monotonic()
     if args.selector == "hierarchical":
         options = dict(native_diagnostics=native_diagnostics) if native_diagnostics is not None else {}
+        if config.get("grasp_mode", "auto") != "auto":
+            options["grasp_mode"] = config["grasp_mode"]
         selection, batch, audit = select_live_hierarchical(
             robot,
             sim,
@@ -138,6 +140,8 @@ def run(args: argparse.Namespace, config: dict, root: Path, processes: Processes
     report.update(
         selected_source_mode=selected["candidate"]["provenance"].get("source_model_mode", "right_full"),
         execution_mode=selected["candidate"].get("execution_mode", selected["selected_side"] + "_full"),
+        source_model_mode=selected["candidate"]["provenance"].get("source_model_mode", "right_full"),
+        required_arms=selected["required_arms"],
     )
     began = time.monotonic()
     packet_path = export_dual_selection(
@@ -146,6 +150,8 @@ def run(args: argparse.Namespace, config: dict, root: Path, processes: Processes
     packet = load_packet(packet_path)
     timings["export_s"] = time.monotonic() - began
     report.update(status="exported", packet_path=str(packet_path))
+    if "schedule" in packet:
+        report.update(shared_timing=packet["schedule"], physical_execution_verified=False)
     write_json(root / "run_report.json", report)
     print(
         f"Selected {report['selected_side']} / {report['candidate_id']} (cost {report['effort']:.6f} rad²)", flush=True
@@ -176,13 +182,33 @@ def run(args: argparse.Namespace, config: dict, root: Path, processes: Processes
         report["status"] = "canceled_before_execution"
         return
     displayed = read_json(status_path)
-    if displayed != dict(side=packet["side"], candidate_id=packet["sample_id"], packet_sha256=file_hash(packet_path)):
+    if displayed != preview_identity(packet, packet_path):
         raise ValueError("Preview differs from selected packet")
     fresh = read_json(snapshot("before_execute"))
     for side in ("left", "right"):
         check_start(fresh["sides"][side]["positions_rad"], state["sides"][side]["positions_rad"])
     if load_packet(packet_path) != packet:
         raise ValueError("Reviewed packet changed")
+    if len(selected["required_arms"]) == 2:
+        module = "shared_hardware" if config["environment"] == "hardware" else "shared_executor"
+        command = [
+            config["ros_python"],
+            "-m",
+            "ada_grasp_ctrl.ros_execution." + module,
+            "--targets",
+            str(packet_path),
+            "--output-root",
+            str(root / "shared_executor"),
+            "--ros-domain-id",
+            str(config["ros_domain_id"]),
+        ]
+        if config["environment"] == "hardware":
+            command += ["--reviewed-sha256", displayed["packet_sha256"]]
+        report.update(status="executing", execution_started=True)
+        write_json(root / "run_report.json", report)
+        processes.run(command, "shared_executor", ros=True, timeout=3000)
+        report.update(status="completed", execution=read_json(root / "shared_executor/run_report.json"))
+        return
     processes.run(
         [config["ros_python"], "-m", "ada_grasp_ctrl.pipeline.ros_probe", "--side", packet["side"]],
         "receiver_probe",
@@ -240,6 +266,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--arms", choices=("auto", "left", "right"), default="auto")
     parser.add_argument("--selector", choices=("legacy", "hierarchical"), default="legacy")
     parser.add_argument("--grasp-model", choices=("right_full", "native_multimode"), default="right_full")
+    parser.add_argument("--grasp-mode", choices=("auto", "both_only"), default="auto")
     parser.add_argument("--roi", nargs=4, type=int)
     parser.add_argument("--cluster", type=int)
     mode = parser.add_mutually_exclusive_group()
@@ -260,6 +287,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.arms != "auto":
             config["enabled_arms"] = [args.arms]
         enabled_set(config["enabled_arms"])
+        config["grasp_mode"] = args.grasp_mode
+        report["grasp_mode"] = args.grasp_mode
+        if args.grasp_mode == "both_only" and (
+            args.grasp_model != "native_multimode" or set(config["enabled_arms"]) != {"left", "right"}
+        ):
+            raise ValueError("--grasp-mode both_only requires native_multimode and both enabled arms")
         inward_offset_limit(config.get("endpoint_inward_offset_m", 0.0))
         if args.selector == "hierarchical" and args.grasp_model == "right_full":
             selector_settings(config.get("hierarchical_selector"))

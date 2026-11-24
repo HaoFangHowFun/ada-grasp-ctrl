@@ -1,7 +1,7 @@
-"""Run an explicit shared packet on verified mock drivers using one publishing loop.
+"""One publishing loop behind separate, explicitly scoped mock and hardware entries.
 
-Legacy single-side senders/actions remain unchanged. This entry cannot enable
-physical execution, even if invoked from a hardware ROS environment.
+Legacy single-side senders/actions remain unchanged. This module's CLI remains
+mock-only; shared_hardware owns the hardware packet/review entry point.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import time
 from ada_grasp_ctrl.experiments.right_ros_contract import check_kinematics, kinematic_contract, side_names
 from ada_grasp_ctrl.paths import resolve_from_root
 from .settings import validate_domain
-from .shared_packet import SIDES, load_shared_packet, receiver_config
+from .shared_packet import SIDES, load_shared_packet, receiver_config, validate_shared_packet
 from .shared_stream import SharedStageStream
 
 
@@ -34,8 +34,25 @@ def execute_shared(packet: dict, log: object, canceled: threading.Event) -> dict
     Raises:
         Exception: Any preflight, feedback, routing or combined-stage failure after bounded abort.
     """
-    validate_domain("mock", os.environ.get("ROS_DOMAIN_ID"))
-    if os.environ.get("ROS_AUTOMATIC_DISCOVERY_RANGE") != "LOCALHOST":
+    return _execute_shared(validate_shared_packet(packet), log, canceled, environment="mock")
+
+
+def execute_hardware(packet: dict, log: object, canceled: threading.Event, *, reviewed_sha256: str) -> dict:
+    """Require the exact operator-reviewed hardware packet before real-driver preflight."""
+    import json
+    from .shared_hardware import validate_hardware_packet
+
+    checked = validate_hardware_packet(packet)
+    digest = hashlib.sha256(json.dumps(checked, sort_keys=True, allow_nan=False).encode()).hexdigest()
+    if digest != reviewed_sha256:
+        raise ValueError("Operator-reviewed hardware packet identity differs")
+    return _execute_shared(checked, log, canceled, environment="hardware")
+
+
+def _execute_shared(packet: dict, log: object, canceled: threading.Event, *, environment: str) -> dict:
+    """One transport owner after explicit scope validation; retain both runtime preflights."""
+    validate_domain(environment, os.environ.get("ROS_DOMAIN_ID"))
+    if environment == "mock" and os.environ.get("ROS_AUTOMATIC_DISCOVERY_RANGE") != "LOCALHOST":
         raise ValueError("Shared mock execution requires localhost discovery")
     from .runtime import Runtime, ARM_COMMAND
     from .model import Model
@@ -46,7 +63,7 @@ def execute_shared(packet: dict, log: object, canceled: threading.Event) -> dict
     published = 0
     log.result.update(
         active_arms=arms,
-        operation="shared_mock_stage_schedule",
+        operation=f"shared_{environment}_stage_schedule",
         packet=packet,
         joint_names={s: list(sum(side_names(s), ())) for s in SIDES},
     )
@@ -74,20 +91,23 @@ def execute_shared(packet: dict, log: object, canceled: threading.Event) -> dict
     try:
         for side in SIDES:
             config = receiver_config(packet, side)
+            if environment == "hardware":
+                config["operator_reviewed_joint_goal"] = True
             if len(arms) == 1 and side in arms:
                 passive = "left" if side == "right" else "right"
                 config["passive_positions_rad"] = packet["snapshot"][passive]["positions_rad"]
             runtimes[side] = Runtime(config, log)
         # No command publisher exists during either preflight. Even a passive side
-        # must identify itself as mock before its stationary arm target can be sent.
+        # must match the explicit environment before its stationary target is sent.
+        log.result["driver_interfaces_by_side"] = {}
         for side, rt in runtimes.items():
             rt.preflight(side in arms)
+            from copy import deepcopy
+
+            log.result["driver_interfaces_by_side"][side] = deepcopy(log.result.get("driver_interfaces", {}))
             for branch in SIDES:
                 check_kinematics(packet["scene_kinematics"][branch], kinematic_contract(rt.description, branch))
             models[side] = Model(rt.description, rt.c)
-        log.result["driver_interfaces_by_side"] = {}
-        for side, rt in runtimes.items():
-            log.result["driver_interfaces_by_side"][side] = dict(mock_verified=True, side=side)
         limits = {
             side: dict(
                 joint_names=list(sum(side_names(side), ())),
@@ -174,7 +194,10 @@ def execute_shared(packet: dict, log: object, canceled: threading.Event) -> dict
         )
         for side in arms:
             if side in runtimes:
-                runtimes[side].abort()
+                try:
+                    runtimes[side].abort()
+                except Exception as stop_error:
+                    log.event("shared_stop_error", side=side, error=str(stop_error))
         raise
     finally:
         for rt in runtimes.values():
@@ -183,19 +206,33 @@ def execute_shared(packet: dict, log: object, canceled: threading.Event) -> dict
 
 def main(argv: list[str] | None = None) -> int:
     """Validate explicit isolated mock scope before ROS initialization; never use domain 87."""
+    return executor_main(argv, environment="mock")
+
+
+def executor_main(argv: list[str] | None = None, *, environment: str) -> int:
+    """Run explicitly scoped transport; hardware additionally binds the operator-reviewed file."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--targets", required=True)
     parser.add_argument("--output-root", required=True)
     parser.add_argument("--ros-domain-id", required=True, type=int)
+    if environment == "hardware":
+        parser.add_argument("--reviewed-sha256", required=True)
     args = parser.parse_args(argv)
     try:
-        domain = validate_domain("mock", args.ros_domain_id)
+        domain = validate_domain(environment, args.ros_domain_id)
         if os.environ.get("ROS_DOMAIN_ID") != str(domain):
             raise ValueError("ROS_DOMAIN_ID must explicitly match --ros-domain-id before startup")
-        if os.environ.get("ROS_AUTOMATIC_DISCOVERY_RANGE") != "LOCALHOST":
+        if environment == "mock" and os.environ.get("ROS_AUTOMATIC_DISCOVERY_RANGE") != "LOCALHOST":
             raise ValueError("Shared mock execution requires ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST")
         path = resolve_from_root(args.targets)
-        packet = load_shared_packet(path)
+        if environment == "hardware":
+            from .shared_hardware import load_hardware_packet
+
+            packet = load_hardware_packet(path)
+            if hashlib.sha256(path.read_bytes()).hexdigest() != args.reviewed_sha256:
+                raise ValueError("Operator-reviewed packet file changed")
+        else:
+            packet = load_shared_packet(path)
     except (ValueError, OSError) as error:
         parser.error(str(error))
     import rclpy
@@ -217,18 +254,24 @@ def main(argv: list[str] | None = None) -> int:
             root / "run_manifest.yaml",
             dict(
                 schema_version=1,
-                environment="mock",
+                environment=environment,
                 ros_domain_id=domain,
                 packet_path=str(path),
                 packet_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
             ),
         )
-        execute_shared(packet, log, canceled)
+        if environment == "hardware":
+            import json
+
+            digest = hashlib.sha256(json.dumps(packet, sort_keys=True, allow_nan=False).encode()).hexdigest()
+            execute_hardware(packet, log, canceled, reviewed_sha256=digest)
+        else:
+            execute_shared(packet, log, canceled)
         return 0
     except BaseException as error:
         if log is not None:
             log.result.update(final_state="FAULT", task_completed=False, abort_reason=str(error))
-        print(f"Shared mock execution failed: {error}", flush=True)
+        print(f"Shared {environment} execution failed: {error}", flush=True)
         return 1
     finally:
         if log is not None:

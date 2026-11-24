@@ -1,4 +1,4 @@
-"""Explicit hierarchical selection adapter for the existing single-side live exporter."""
+"""Ranked native mode selection for the existing single-side and paired live exporters."""
 
 from __future__ import annotations
 
@@ -63,6 +63,22 @@ def canonical_batch(rows: list[dict], available_arms: object, *, native: bool = 
         if not isinstance(row, dict):
             raise ValueError("Live candidates must be schema-1 objects")
         arms = row.get("required_arms")
+        if native and row.get("mode") in SOURCE_MODES[3:]:
+            candidate = candidate_from_schema1(row, mode=row["mode"])
+            name, source = candidate["candidate_id"], candidate["provenance"]
+            if (
+                arms != ["left", "right"]
+                or name in ids
+                or not name.startswith(row["mode"] + ":")
+                or candidate.get("execution_mode") != row["mode"]
+                or source.get("source_model_mode") != row["mode"]
+                or source.get("generator") != row["mode"]
+                or not all(source.get(k) for k in ("checkpoint", "metadata"))
+            ):
+                raise ValueError("Inconsistent native paired identity/targets/provenance")
+            ids.add(name)
+            groups[row["mode"]].append(candidate)
+            continue
         if not isinstance(arms, list) or len(arms) != 1 or not isinstance(arms[0], str) or arms[0] not in available:
             raise ValueError("Live hierarchical candidates must require one enabled arm")
         side = arms[0]
@@ -115,18 +131,19 @@ def legacy_selection(
         if chosen is None:
             raise ValueError("SELECTED requires a candidate")
         side, mode, name = chosen["selected_side"], report["selected_mode"], chosen["candidate_id"]
-        valid_mode = mode in SINGLE_MODES if native else mode == side + "_full"
-        if side not in available or not valid_mode or report["selected_side"] != side:
+        required = ["left", "right"] if native and mode in SOURCE_MODES[3:] else [side]
+        valid_mode = mode in SOURCE_MODES if native else mode == side + "_full"
+        if not set(required) <= set(available) or not valid_mode or report["selected_side"] != side:
             raise ValueError("Hierarchical selected mode/side differs")
         matches = [r for r in batch["candidates_by_mode"].get(mode, []) if r["candidate_id"] == name]
         originals = [r for r in rows if r["candidate_id"] == name]
         if (
             len(matches) != 1
             or len(originals) != 1
-            or chosen["required_arms"] != [side]
+            or chosen["required_arms"] != required
             or chosen["candidate"] != matches[0]
-            or matches[0]["required_arms"] != [side]
-            or originals[0]["required_arms"] != [side]
+            or matches[0]["required_arms"] != required
+            or originals[0]["required_arms"] != required
             or originals[0]["targets"] != matches[0]["targets"]
         ):
             raise ValueError("Hierarchical selected identity/arms differ from the input candidate")
@@ -165,9 +182,14 @@ def select_live_hierarchical(
     settings: dict,
     *,
     native_diagnostics: dict | None = None,
+    grasp_mode: str = "auto",
 ) -> tuple[dict, dict, dict]:
     """Call the existing selector and return legacy selection, canonical batch and audit report."""
     native = native_diagnostics is not None
+    if grasp_mode not in ("auto", "both_only") or (
+        grasp_mode == "both_only" and (not native or enabled_set(available_arms) != {"left", "right"})
+    ):
+        raise ValueError("both_only requires native_multimode and both enabled arms")
     if native:
         scores = native_diagnostics["availability_scores"]
         available_modes = native_diagnostics["ranked_available_modes"]
@@ -177,18 +199,29 @@ def select_live_hierarchical(
             raise ValueError("Unknown native available mode")
         settings = dict(
             prior=dict(schema_version=1, kind="scores", scores={m: scores[m] for m in available_modes}),
-            supported_modes=list(SINGLE_MODES),
+            supported_modes=list(SOURCE_MODES),
         )
     else:
         settings = selector_settings(settings)
     batch = canonical_batch(rows, available_arms, native=native)
     report = select_hierarchical(
-        robot, sim, batch, settings["prior"], available_arms, q_current, supported_modes=settings["supported_modes"]
+        robot,
+        sim,
+        batch,
+        settings["prior"],
+        available_arms,
+        q_current,
+        supported_modes=settings["supported_modes"],
+        enabled_modes=SOURCE_MODES[3:] if grasp_mode == "both_only" else None,
     )
     if native:
-        for entry in report["mode_trace"]:
-            if entry["mode"] in SOURCE_MODES[3:]:
-                entry["reasons"] = ["unsupported_simultaneous_hardware_execution"]
+        if enabled_set(available_arms) != {"left", "right"}:
+            for entry in report["mode_trace"]:
+                if entry["mode"] in SOURCE_MODES[3:]:
+                    entry["reasons"] = list(dict.fromkeys(["disabled_arm", *entry["reasons"]]))
         report.update(availability_scores=scores, ranked_available_modes=available_modes)
         report["execution_mode"] = report["selected"]["candidate"]["execution_mode"] if report["selected"] else None
+        report["source_model_mode"] = report["selected_mode"]
+        report["required_arms"] = report["selected"]["required_arms"] if report["selected"] else []
+        report["grasp_mode"] = grasp_mode
     return legacy_selection(report, batch, rows, available_arms, native=native), batch, report

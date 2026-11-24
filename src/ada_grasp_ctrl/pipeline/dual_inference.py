@@ -14,7 +14,7 @@ from ada_grasp_ctrl.grasp_selection.contracts import candidate_from_schema1
 from ada_grasp_ctrl.grasp_selection.adapters.dexlearn import file_hash, read_json, verify_reference
 from ada_grasp_ctrl.grasp_selection.cli import write_json
 from ada_grasp_ctrl.paths import resolve_from_root
-from .grasp_models import SINGLE_MODES
+from .grasp_models import SINGLE_MODES, SOURCE_MODES
 
 
 def infer_live_sides(object_root: Path, config: dict, processes: object, output: Path) -> list[dict]:
@@ -149,6 +149,32 @@ def infer_native_sides(object_root: Path, config: dict, processes: object, outpu
 def from_native_record(record: dict, plane: dict) -> dict:
     """Convert native decoded stages using the existing canonical wrist/joint mirror."""
     mode, side = record["source_model_mode"], record["side"]
+    if mode in SOURCE_MODES[3:]:
+        if side != "right" or "targets" not in record:
+            raise ValueError("Native paired modes require original-cloud paired targets")
+        return candidate_from_schema1(
+            dict(
+                schema_version=1,
+                candidate_id=record["candidate_id"],
+                required_arms=["left", "right"],
+                frame_id="world",
+                unit="m",
+                joint_unit="rad",
+                execution_mode=mode,
+                targets=record["targets"],
+                provenance={
+                    **record["provenance"],
+                    "source_candidate_id": record["candidate_id"],
+                    "source_model_mode": mode,
+                    "generator": mode,
+                    "generation_method": mode,
+                    "execution_mode": mode,
+                    "raw_candidate_index": record["raw_candidate_index"],
+                    "log_probability": record["log_probability"],
+                },
+            ),
+            mode=mode,
+        )
     if mode not in SINGLE_MODES:
         raise ValueError("unsupported_simultaneous_hardware_execution")
     row = from_right_record(record, record["provenance"], side=side, plane=plane)

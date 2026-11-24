@@ -127,7 +127,7 @@ def from_right_record(row: dict, provenance: dict, *, side: str = "right", plane
     )
 
 
-def forbidden_contacts(rows: list[dict], active_side: str, *, phase: str = "pregrasp") -> list[dict]:
+def forbidden_contacts(rows: list[dict], active_side: str | list[str], *, phase: str = "pregrasp") -> list[dict]:
     """Apply stage-aware hand/object checks and retain other legacy collision gates.
 
     Arm penetration may reach 10 micrometers. Same-hand self and hand/table
@@ -142,7 +142,7 @@ def forbidden_contacts(rows: list[dict], active_side: str, *, phase: str = "preg
 
     Args:
         rows: Contact diagnostics from static checking or live dynamics.
-        active_side: Arm executing the grasp.
+        active_side: Arm executing the grasp, or the explicit list of both active arms.
         phase: Stage used to apply the active hand/object gate.
 
     Returns:
@@ -151,7 +151,7 @@ def forbidden_contacts(rows: list[dict], active_side: str, *, phase: str = "preg
     Raises:
         ValueError: If the side or phase is unknown.
     """
-    side_slice(active_side)
+    active = enabled_set([active_side] if isinstance(active_side, str) else active_side)
     if phase not in ("initial", *STAGES, "lift", "hold"):
         raise ValueError(f"Unknown contact-check phase: {phase}")
     rejected = []
@@ -175,19 +175,142 @@ def forbidden_contacts(rows: list[dict], active_side: str, *, phase: str = "preg
             and not is_arm
             and category == "robot_object"
             and hands
-            and row["sides"] == [active_side]
+            and row["sides"][0] in active
         ):
             continue
         if single_side and not is_arm:
             if (
                 (category == "within_robot" and bodies == hands)
                 or (category == "robot_table" and hands)
-                or (category == "robot_object" and hands and row["sides"] == [active_side])
+                or (category == "robot_object" and hands and row["sides"][0] in active)
             ):
                 threshold = 0.01
         if row["penetration_m"] > threshold:
             rejected.append(row)
     return rejected
+
+
+def solve_paired(robot: object, q: object, poses: dict, *, max_nfev: int = 200) -> tuple[np.ndarray, dict]:
+    """Solve existing arm IK sequentially, enforcing preservation of all other joints."""
+    current = robot.configuration(q)
+    diagnostics = {}
+    for side in ("left", "right"):
+        previous = current.copy()
+        current, diag = robot.solve_arm_ik(current, side, poses[side], max_nfev=max_nfev)
+        current = robot.configuration(current)
+        mask = np.ones(56, dtype=bool)
+        mask[side_slice(side, True)] = False
+        if not np.array_equal(current[mask], previous[mask]):
+            raise ValueError(f"{side}: IK changed joints outside the active CRX arm")
+        diagnostics[side] = diag
+        if not diag["accepted"]:
+            raise ValueError(f"{side}:ik_rejected:{diag}")
+    return current, diagnostics
+
+
+def select_paired_candidates(
+    robot: object,
+    sim: object,
+    rows: list[dict],
+    enabled_arms: object,
+    q_current: object,
+    max_nfev: int = 200,
+) -> dict:
+    """Evaluate native pairs with combined stage collision checks and summed CRX effort."""
+    from itertools import product
+
+    enabled = enabled_set(enabled_arms)
+    current = robot.configuration(q_current)
+    ids = [r.get("candidate_id") for r in rows]
+    if any(not isinstance(i, str) or not i for i in ids) or len(ids) != len(set(ids)):
+        raise ValueError("Candidate IDs must be present and globally unique")
+    evaluations, feasible = [], []
+    for raw in rows:
+        result = dict(candidate_id=raw["candidate_id"], reasons=[], attempts=[])
+        evaluations.append(result)
+        try:
+            row = validate_candidate(raw)
+            if set(row["required_arms"]) != SIDES:
+                raise ValueError("Paired selection requires both arms")
+        except (ValueError, KeyError, TypeError) as error:
+            result.update(reasons=["invalid_candidate"], error=str(error))
+            continue
+        if not SIDES <= enabled:
+            result["reasons"] = ["disabled_arm"]
+            continue
+        hands = {
+            s: {
+                stage: np.array([row["targets"][s][stage]["joint_positions_rad"][n] for n in hand_names(s)])
+                for stage in STAGES
+            }
+            for s in sorted(SIDES)
+        }
+        if any(
+            np.any(q < robot.limits[side_slice(s)][6:, 0]) or np.any(q > robot.limits[side_slice(s)][6:, 1])
+            for s in hands
+            for q in hands[s].values()
+        ):
+            result["reasons"] = ["hand_joint_limits"]
+            continue
+        seeds = {s: [current[side_slice(s, True)], *SEEDS] for s in sorted(SIDES)}
+        rejected_left_seeds = {}
+        for index, pair in enumerate(product(seeds["left"], seeds["right"])):
+            attempt = dict(seed_index=index, stages={}, reasons=[])
+            result["attempts"].append(attempt)
+            left_index = index // len(seeds["right"])
+            if left_index in rejected_left_seeds:
+                attempt.update(reasons=rejected_left_seeds[left_index], reused_left_rejection=True)
+                continue
+            q = current.copy()
+            for side, seed in zip(("left", "right"), pair):
+                q[side_slice(side, True)] = seed
+            try:
+                q = robot.configuration(q)
+                stage_q = {}
+                for stage in ("grasp", "pregrasp", "squeeze"):
+                    if stage != "grasp":
+                        q = stage_q["grasp"].copy()
+                    for side in hands:
+                        block = side_slice(side)
+                        q[block.start + 6 : block.stop] = hands[side][stage]
+                    q, diag = solve_paired(
+                        robot, q, {s: row["targets"][s][stage]["T_world_hand"] for s in hands}, max_nfev=max_nfev
+                    )
+                    contacts = sim.check_static_contacts(q)
+                    bad = forbidden_contacts(contacts, ["left", "right"], phase=stage)
+                    attempt["stages"][stage] = dict(ik=diag, contacts=contacts, forbidden_contacts=bad, q56=q.tolist())
+                    if bad:
+                        raise ValueError(f"{stage}:collision")
+                    stage_q[stage] = q.copy()
+                deltas = {s: stage_q["grasp"][side_slice(s, True)] - current[side_slice(s, True)] for s in hands}
+                effort = float(sum(np.dot(d, d) for d in deltas.values()))
+                if not np.isfinite(effort):
+                    raise ValueError("nonfinite_cost")
+                attempt["effort"] = effort
+                feasible.append(
+                    dict(
+                        candidate_id=row["candidate_id"],
+                        selected_side="both",
+                        required_arms=["left", "right"],
+                        source_candidate_id=row["provenance"].get("source_candidate_id"),
+                        effort=effort,
+                        delta_rad={s: d.tolist() for s, d in deltas.items()},
+                        seed_index=index,
+                        crx_target_rad={s: stage_q["grasp"][side_slice(s, True)].tolist() for s in hands},
+                        stages=attempt["stages"],
+                        candidate=row,
+                    )
+                )
+            except (ValueError, RuntimeError) as error:
+                attempt["reasons"].append(str(error))
+                # Separate kinematic branches: changing the right seed cannot repair
+                # rejected left-arm IK. Retain the original failure in every skipped pair.
+                if str(error).startswith("left:ik_rejected:"):
+                    rejected_left_seeds[left_index] = attempt["reasons"].copy()
+        if not any(x["candidate_id"] == row["candidate_id"] for x in feasible):
+            result["reasons"] = ["no_feasible_ik_branch"]
+    feasible.sort(key=lambda x: (x["effort"], x["candidate_id"], x["seed_index"]))
+    return dict(selected=feasible[0] if feasible else None, evaluations=evaluations)
 
 
 def select_candidates(

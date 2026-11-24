@@ -8,10 +8,9 @@ from typing import Callable
 from ada_grasp_ctrl.experiments.right_ros_contract import JOINT_NAMES, finite_vector, side_names
 from ada_grasp_ctrl.mpc.baseline_stream import BaselineStream
 from ada_grasp_ctrl.mpc.contracts import JointFeedback, MPCProposal, fresh
-from ada_grasp_ctrl.mpc.reference import linear_reference
 from ada_grasp_ctrl.pipeline.plan import check_start
 from .motion import arrival_reached
-from .shared_packet import SIDES, number, receiver_config, validate_shared_packet
+from .shared_packet import SIDES, number, receiver_config, validate_shared_packet, stage_reference
 
 
 class SharedStageStream:
@@ -24,7 +23,12 @@ class SharedStageStream:
     """
 
     def __init__(self, packet: dict, limits: dict, event: Callable[..., None] | None = None) -> None:
-        self.packet = validate_shared_packet(packet)
+        if packet.get("environment") == "hardware":
+            from .shared_hardware import validate_hardware_packet
+
+            self.packet = validate_hardware_packet(packet)
+        else:
+            self.packet = validate_shared_packet(packet)
         self.arms = self.packet["plan_identity"]["active_arms"]
         self.schedule = self.packet["schedule"]
         self.configs = {side: receiver_config(self.packet, side) for side in SIDES}
@@ -53,6 +57,12 @@ class SharedStageStream:
         for stage in self.schedule["stages"]:
             for side, target in stage["arms"].items():
                 self._limits(side, target["positions_rad"])
+                previous = target["start_positions_rad"]
+                for point, duration in zip(stage.get("waypoints_rad", []), stage.get("segment_durations_s", [])):
+                    self._limits(side, point[side])
+                    if duration + 1e-6 < self._minimum(side, previous, point[side]):
+                        raise ValueError(f"lift.{side}: waypoint violates model duration limits")
+                    previous = point[side]
                 if stage["duration_s"] + 1e-6 < self._minimum(
                     side, target["start_positions_rad"], target["positions_rad"]
                 ):
@@ -133,6 +143,9 @@ class SharedStageStream:
             # Preserve legacy nonblocking-hand policy: refresh starts and extend one
             # shared duration if contact left fingers away from their previous targets.
             duration = max(duration, self._minimum(side, actual[side], stage["arms"][side]["positions_rad"]))
+            if "waypoints_rad" in stage:
+                first = self._minimum(side, actual[side], stage["waypoints_rad"][0][side])
+                duration = max(duration, first * stage["duration_s"] / stage["segment_durations_s"][0])
         if duration > 300:
             raise ValueError("Fresh state requires more than the existing 300 second bound")
         self.starts = {side: actual[side].copy() for side in self.arms}
@@ -144,7 +157,11 @@ class SharedStageStream:
                 if k not in ("side", "active_arms", "tip_frame", "mode", "path_verified")
             }
             guard = BaselineStream(
-                tuple(limits["lower"]), tuple(limits["upper"]), tuple(limits["velocity"]), config=config
+                tuple(limits["lower"]),
+                tuple(limits["upper"]),
+                tuple(limits["velocity"]),
+                config=config,
+                hardware_enabled=self.packet["environment"] == "hardware",
             )
             guard.start(self._numeric_feedback(feedback[side], side), now, owner="baseline")
             self.guards[side] = guard
@@ -197,7 +214,7 @@ class SharedStageStream:
             commands, references, errors = {}, {}, {}
             for side in self.arms:
                 target = stage["arms"][side]["positions_rad"]
-                desired = linear_reference(self.starts[side], target, elapsed, self.duration)
+                desired = stage_reference(stage, side, self.starts[side], elapsed, self.duration)
                 guard = self.guards[side]
                 previous, velocity = guard.q, guard.velocity
                 guard.accept(MPCProposal(tuple(JOINT_NAMES), tuple(desired), True, now, 0, "linear"), now)

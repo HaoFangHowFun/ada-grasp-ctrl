@@ -19,7 +19,17 @@ def main() -> int:
     parser.add_argument(
         "--cases",
         nargs="+",
-        default=["both", "right", "left", "late_hand_error", "stale_right", "limit_left", "owner", "legacy_right"],
+        default=[
+            "both",
+            "right",
+            "left",
+            "late_hand_error",
+            "stale_right",
+            "limit_left",
+            "owner",
+            "cancel",
+            "legacy_right",
+        ],
     )
     args = parser.parse_args()
     if os.environ.get("ROS_DOMAIN_ID") != "88" or os.environ.get("ROS_AUTOMATIC_DISCOVERY_RANGE") != "LOCALHOST":
@@ -298,6 +308,7 @@ def main() -> int:
                 "stale_right",
                 "limit_left",
                 "owner",
+                "cancel",
                 "legacy_right",
             }:
                 raise ValueError(f"Unknown mock case: {case}")
@@ -327,8 +338,11 @@ def main() -> int:
                     ],
                     case_root / "executor.log",
                 )
+                if case == "cancel":
+                    spin_until(lambda: state["first_command"] is not None, 20)
+                    child.send_signal(signal.SIGTERM)
                 spin_until(lambda: child.poll() is not None, 65)
-                failed = case in ("stale_right", "limit_left", "owner")
+                failed = case in ("stale_right", "limit_left", "owner", "cancel")
                 assert child.returncode == (1 if failed else 0), (
                     case,
                     child.returncode,

@@ -1,4 +1,4 @@
-"""Validate canonical planning data before projecting to the mock ROS transport ABI."""
+"""Validate canonical planning data before explicit mock or hardware ROS projection."""
 
 from __future__ import annotations
 
@@ -25,6 +25,20 @@ def shared_mock_packet(schedule: dict, snapshot: dict[str, dict[str, float]], de
     Raises:
         ValueError: On invalid planning data, missing states or mismatched starting positions.
     """
+    return validate_shared_packet(_shared_projection(schedule, snapshot, description, environment="mock", kind=KIND))
+
+
+def shared_hardware_packet(schedule: dict, snapshot: dict, description: str, source: dict) -> dict:
+    """Export explicit hardware intent with source identity; operator review remains required."""
+    from ada_grasp_ctrl.ros_execution.shared_hardware import KIND as HARDWARE_KIND, validate_hardware_packet
+
+    packet = _shared_projection(schedule, snapshot, description, environment="hardware", kind=HARDWARE_KIND)
+    packet.update(source=source, operator_review_required=True)
+    return validate_hardware_packet(packet)
+
+
+def _shared_projection(schedule: dict, snapshot: dict, description: str, *, environment: str, kind: str) -> dict:
+    """Project canonical data once; public exporters validate their distinct scope."""
     checked = validate_stage_schedule(schedule)
     plan = checked.pop("plan")
     if set(snapshot) != set(SIDES):
@@ -39,18 +53,16 @@ def shared_mock_packet(schedule: dict, snapshot: dict[str, dict[str, float]], de
         name: deepcopy(plan[name]) for name in ("schema_version", "candidate_id", "mode", "active_arms", "provenance")
     }
     identity["available_arms"] = plan.get("available_arms", plan["active_arms"]).copy()
-    return validate_shared_packet(
-        dict(
-            schema_version=1,
-            kind=KIND,
-            environment="mock",
-            hardware_ready=False,
-            plan_identity=identity,
-            schedule=checked,
-            snapshot=states,
-            source_schedule_sha256=hashlib.sha256(
-                json.dumps(schedule, sort_keys=True, allow_nan=False).encode()
-            ).hexdigest(),
-            scene_kinematics={side: kinematic_contract(description, side) for side in SIDES},
-        )
+    return dict(
+        schema_version=1,
+        kind=kind,
+        environment=environment,
+        hardware_ready=False,
+        plan_identity=identity,
+        schedule=checked,
+        snapshot=states,
+        source_schedule_sha256=hashlib.sha256(
+            json.dumps(schedule, sort_keys=True, allow_nan=False).encode()
+        ).hexdigest(),
+        scene_kinematics={side: kinematic_contract(description, side) for side in SIDES},
     )

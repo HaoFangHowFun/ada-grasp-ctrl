@@ -14,8 +14,8 @@ from typing import Any
 from ada_grasp_ctrl.experiments.right_ros_contract import PHASE_SEQUENCES, CYCLE_PHASES, finite_vector, side_names
 from ada_grasp_ctrl.experiments.right_ros_sender import motion_duration
 from ada_grasp_ctrl.grasp_selection.contracts import GraspPlan, validate_grasp_plan
-from ada_grasp_ctrl.mpc.reference import linear_reference
 from ada_grasp_ctrl.ros_execution.settings import DEFAULTS
+from ada_grasp_ctrl.ros_execution.shared_packet import waypoint_timing, stage_reference
 
 POLICY_KEYS = ("arm_speed", "hand_speed", "arm_acceleration", "hand_acceleration")
 
@@ -76,6 +76,7 @@ def build_stage_schedule(
     stage_start_time: float = 0.0,
     settle_time_s: float = DEFAULTS["settle_time"],
     hold_s: float = 5.0,
+    lift_waypoints_rad: list[dict[str, list[float]]] | None = None,
 ) -> dict[str, Any]:
     """Build a shared stage timeline using all commanded joints, without solving IK.
 
@@ -147,11 +148,19 @@ def build_stage_schedule(
                 raise ValueError(f"{phase}.{side}: invalid computed duration") from error
             requirements[side] = _duration(required, f"{phase}.{side}.duration_s")
         duration = max(requirements.values())
+        waypoint_fields = {}
+        if phase == "lift" and lift_waypoints_rad is not None:
+            segments, requirements = waypoint_timing(previous, lift_waypoints_rad, policies)
+            if lift_waypoints_rad[-1] != positions:
+                raise ValueError("Lift waypoints must end at the lift target")
+            duration = _duration(sum(segments), "lift.duration")
+            waypoint_fields = dict(waypoints_rad=lift_waypoints_rad, segment_durations_s=segments)
         end_time, settled_time = cursor + duration, cursor + duration + settle
         if not math.isfinite(settled_time) or not cursor < end_time < settled_time:
             raise ValueError(f"{phase}: clock cannot represent the stage and settle intervals")
         stages.append(
             dict(
+                **waypoint_fields,
                 phase=phase,
                 stage_start_time=cursor,
                 stage_end_time=end_time,
@@ -238,6 +247,7 @@ def validate_stage_schedule(schedule: dict) -> dict[str, Any]:
             stage_start_time=schedule["stage_start_time"],
             settle_time_s=schedule["settle_time_s"],
             hold_s=schedule["hold_s"],
+            lift_waypoints_rad=next((s.get("waypoints_rad") for s in stages if s["phase"] == "lift"), None),
         )
     except (KeyError, TypeError, IndexError) as error:
         raise ValueError(f"Malformed stage schedule: {error}") from error
@@ -286,7 +296,7 @@ def sample_stage(
             if progress == 0
             else end.copy()
             if progress == 1
-            else linear_reference(start, end, now - began, duration)
+            else stage_reference(stage, side, start, now - began, duration)
         )
         references[side] = dict(joint_names=target["joint_names"], positions_rad=positions)
     return dict(

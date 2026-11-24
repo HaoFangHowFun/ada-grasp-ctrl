@@ -34,6 +34,10 @@ def export_dual_selection(
     chosen = selection["selected"]
     if chosen is None:
         raise ValueError("No feasible candidate on either enabled side")
+    if chosen["required_arms"] == ["left", "right"]:
+        from .paired_artifacts import export_paired_selection
+
+        return export_paired_selection(robot, sim, selection, state_path, object_root, config, output, candidates_path)
     side = chosen["selected_side"]
     if chosen["required_arms"] != [side] or chosen["candidate"].get("mode", "").startswith("both_"):
         raise ValueError("unsupported_simultaneous_hardware_execution")

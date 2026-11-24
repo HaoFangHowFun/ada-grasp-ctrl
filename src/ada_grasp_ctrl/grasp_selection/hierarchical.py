@@ -1,4 +1,4 @@
-"""Explicit external mode priorities followed by incumbent single-arm feasibility."""
+"""Explicit mode priorities followed by single-arm or combined-state paired feasibility."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Any
 
 from .contracts import validate_grasp_candidate, plan_from_candidate
 from .criteria.joint_effort import JointDisplacement
-from .multi_arm import enabled_set, select_candidates
+from .multi_arm import enabled_set, select_candidates, select_paired_candidates
 from .types import jsonable
 
 
@@ -150,6 +150,7 @@ def select_hierarchical(
         )
         trace.append(entry)
         eligible = {side: [] for side in available}
+        eligible["both"] = []
         diagnostics = {}
         for raw in rows:
             diagnostic = dict(candidate_id=raw["candidate_id"], reasons=list(reasons), attempts=[])
@@ -162,17 +163,19 @@ def select_hierarchical(
                 diagnostic["reasons"].append("invalid_candidate")
                 diagnostic["error"] = str(error)
                 continue
-            if len(row["required_arms"]) != 1:
-                diagnostic["reasons"].append("unsupported_multi_arm_candidate")
-            elif row["required_arms"][0] not in available:
+            if not set(row["required_arms"]) <= set(available):
                 diagnostic["reasons"].append("disabled_arm")
             elif not reasons:
-                eligible[row["required_arms"][0]].append(row)
+                eligible["both" if len(row["required_arms"]) == 2 else row["required_arms"][0]].append(row)
         winners = []
         for side, candidates in eligible.items():
             if not candidates:
                 continue
-            result = select_candidates(robot, sim, candidates, available, current, weights[side], max_nfev)
+            result = (
+                select_paired_candidates(robot, sim, candidates, available, current, max_nfev)
+                if side == "both"
+                else select_candidates(robot, sim, candidates, available, current, weights[side], max_nfev)
+            )
             entry["evaluated_candidate_count"] += len(candidates)
             for diagnostic in result["evaluations"]:
                 diagnostics[diagnostic["candidate_id"]] = diagnostic

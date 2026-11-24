@@ -17,6 +17,43 @@ SIDES = ("left", "right")
 LIMIT_KEYS = ("arm_speed", "hand_speed", "arm_acceleration", "hand_acceleration")
 
 
+def waypoint_timing(starts: dict, waypoints: list[dict], policies: dict) -> tuple[list[float], dict]:
+    """Time common lift segments using the existing slower-side motion policy."""
+    if not isinstance(waypoints, list) or not 2 <= len(waypoints) <= 10:
+        raise ValueError("Lift requires 2..10 common waypoints")
+    previous = starts
+    durations, requirements = [], dict.fromkeys(starts, 0.0)
+    for point in waypoints:
+        if set(point) != set(starts):
+            raise ValueError("Lift waypoint arms differ")
+        required = {}
+        for side in starts:
+            end = finite_vector(point[side], 28, f"lift.{side}.waypoint")
+            if end[6:] != starts[side][6:]:
+                raise ValueError("Lift waypoints must retain squeeze fingers")
+            required[side] = motion_duration(previous[side], end, argparse.Namespace(**policies[side]))
+            requirements[side] += required[side]
+        durations.append(max(required.values()))
+        previous = point
+    return durations, requirements
+
+
+def stage_reference(stage: dict, side: str, start: list[float], elapsed: float, duration: float) -> list[float]:
+    """Sample one common stage clock, including paired lift translation waypoints."""
+    from ada_grasp_ctrl.mpc.reference import linear_reference
+
+    if "waypoints_rad" not in stage:
+        return linear_reference(start, stage["arms"][side]["positions_rad"], elapsed, duration)
+    cursor = max(0.0, elapsed) * stage["duration_s"] / duration
+    previous = start
+    for point, segment in zip(stage["waypoints_rad"], stage["segment_durations_s"]):
+        if cursor <= segment:
+            return linear_reference(previous, point[side], cursor, segment)
+        cursor -= segment
+        previous = point[side]
+    return previous.copy()
+
+
 def number(value: object, field: str, *, positive: bool = False) -> float:
     """Validate one finite clock, duration or policy number without bool coercion."""
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
@@ -40,7 +77,7 @@ def receiver_config(packet: dict, side: str) -> dict:
         dict(
             side=side,
             active_arms=list(SIDES),
-            environment="mock",
+            environment=packet["environment"],
             hand_arrival_required=False,
             settle_time=packet["schedule"]["settle_time_s"],
             **{key: policy.get(key, DEFAULTS[key]) for key in LIMIT_KEYS},
@@ -60,15 +97,20 @@ def validate_shared_packet(packet: dict) -> dict:
     Raises:
         ValueError: On incompatible schema, hardware scope or inconsistent targets/timing.
     """
+    return _validate_packet(packet, environment="mock", kind=KIND)
+
+
+def _validate_packet(packet: dict, *, environment: str, kind: str) -> dict:
+    """Common numeric transport contract; callers separately enforce their execution scope."""
     try:
         if (
             type(packet.get("schema_version")) is not int
             or packet["schema_version"] != 1
-            or packet.get("kind") != KIND
-            or packet.get("environment") != "mock"
+            or packet.get("kind") != kind
+            or packet.get("environment") != environment
             or packet.get("hardware_ready") is not False
         ):
-            raise ValueError("Expected explicit schema-1 mock-only shared packet; hardware is not enabled")
+            raise ValueError(f"Expected explicit schema-1 {environment}-only shared packet")
         identity, schedule = packet["plan_identity"], packet["schedule"]
         if type(identity["schema_version"]) is not int or identity["schema_version"] != 1:
             raise ValueError("plan_identity.schema_version must be 1")
@@ -145,14 +187,27 @@ def validate_shared_packet(packet: dict) -> dict:
                 required[side] = (
                     hold if phase == "hold" else motion_duration(start, end, argparse.Namespace(**policies[side]))
                 )
-                if (
+                if "waypoints_rad" not in stage and (
                     number(stage["required_durations_s"][side], f"{phase}.{side}.duration", positive=True)
                     != required[side]
                 ):
                     raise ValueError(f"{phase}.{side}: duration policy differs")
                 previous[side] = end
             duration = number(stage["duration_s"], f"{phase}.duration", positive=True)
-            if duration != max(required.values()) or duration > 300:
+            expected_duration = max(required.values())
+            if "waypoints_rad" in stage:
+                if phase != "lift":
+                    raise ValueError("Only lift supports translation waypoints")
+                starts = {s: stage["arms"][s]["start_positions_rad"] for s in arms}
+                segments, waypoint_required = waypoint_timing(starts, stage["waypoints_rad"], policies)
+                if (
+                    stage["segment_durations_s"] != segments
+                    or stage["waypoints_rad"][-1] != previous
+                    or stage["required_durations_s"] != waypoint_required
+                ):
+                    raise ValueError("Lift waypoint endpoint/timing differs")
+                expected_duration = sum(segments)
+            if duration != expected_duration or duration > 300:
                 raise ValueError(f"{phase}: invalid common duration")
             if (
                 number(stage["stage_start_time"], phase) != cursor

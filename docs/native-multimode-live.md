@@ -6,6 +6,10 @@ checksums, per-side inference, IDs and selector behavior. The selector still def
 to `legacy`; explicitly select `hierarchical` for the native model. An incompatible
 native/legacy combination fails before capture or subprocess startup.
 
+The integrated paired implementation and current validation are documented in
+[native-bimanual-hardware.md](native-bimanual-hardware.md). `--grasp-mode auto` is
+the default; `both_only` filters model-available modes after inference.
+
 ## Hardware-connected validation commands
 
 These commands are for the operator. Implementation validation did not capture a new
@@ -66,9 +70,11 @@ The original scene's score stays in both branches' provenance.
 The existing hierarchical selector evaluates both allowed sides in each source
 mode, selects minimum squared CRX displacement within the first feasible mode,
 and does not run IK on lower-ranked modes after selection. `both_three` and
-`both_full` remain in the scores/raw output and are skipped as
-`unsupported_simultaneous_hardware_execution`. Only available modes receive a
-priority; unsupported-only availability returns no feasible executable candidate.
+`both_full` now decode paired original-cloud targets and use independent arm IK
+with combined-state collision checking. Their effort is the sum of both six-joint
+squared displacements. Only model-available modes receive a priority.
+`both_only` restricts feasibility to available paired modes without changing scores
+or sampling. Bimanual candidates require both enabled arms.
 
 One DexLearn subprocess loads one checkpoint per capture. It eagerly samples the
 available mirrored single-hand modes before returning to Ada. This avoids adding
@@ -79,7 +85,10 @@ to the existing CRX checker. `--arms left` runs only the original backbone/avail
 head for ranking, then mirrored sampling. Robot conversion stays in Ada's environment;
 no MuJoCo or Pinocchio dependencies were added to DexLearn.
 
-## Artifacts and validation on 2026-11-23
+## Original single-arm integration evidence on 2026-11-23
+
+This section records the earlier single-arm implementation. Current paired evidence
+is in [native-bimanual-hardware.md](native-bimanual-hardware.md).
 
 `candidates.json` records the checkpoint, all five scores, ranked available and eligible
 modes, conversion rejections, reflection plane and branch timings. Each native branch
@@ -201,12 +210,13 @@ other generated artifacts remain local runtime dependencies outside Git.
 - `pipeline/dual_inference.py`: one-process native orchestration and existing canonical mirror conversion.
 - `pipeline/dual_selection.py`: source-mode grouping, scored priorities and compatible export envelope.
 - `pipeline/dual_runner.py`: CLI, reporting and lightweight timing.
-- `pipeline/dual_artifacts.py`: reject simultaneous-hand records at the single-side exporter.
+- `pipeline/dual_artifacts.py`: dispatch by required arms, retaining the existing single-side exporter.
 - `pipeline/dual_viewer.py`: model, score and execution-mode text in the existing viewer.
 - `tests/test_native_multimode_pipeline.py`: focused non-hardware regression coverage.
 
-Paths above are relative to `src/ada_grasp_ctrl/`, except the test file. Simultaneous
-bimanual execution remains unsupported. Mirrored sampling is eager, and availability
+Paths above are relative to `src/ada_grasp_ctrl/`, except the test file. The paired
+implementation and physical-validation limitations are in the linked runbook.
+Mirrored sampling is eager in `auto` (omitted in `both_only`), and availability
 is not a calibrated physical success probability. The trained input source is a
 complete object cloud; live single-view partial-cloud grasp performance remains for
 the operator to validate. No checkpoint/tensor-contract mismatch was found.

@@ -17,8 +17,45 @@ from ada_grasp_ctrl.grasp_selection.adapters.dexlearn import file_hash, read_jso
 from ada_grasp_ctrl.grasp_selection.cli import write_json
 from ada_grasp_ctrl.sharpa_mirror import SharpaHandMirror
 from ada_grasp_ctrl.pipeline.grasp_models import SOURCE_MODES, SINGLE_MODES
-from .fixed_camera_grasp import decode_candidates, preprocess
+from .fixed_camera_grasp import decode_candidates, preprocess, STAGES
 from .fixed_camera_geometry import rigid, transform
+from scipy.spatial.transform import Rotation
+
+
+def decode_bimanual(raw: np.ndarray, joint_names: list[str], preprocessing: dict) -> dict:
+    """Decode one native paired sample; dummy-arm metadata entries are never predictions."""
+    values = np.asarray(raw, dtype=float)
+    mirror = SharpaHandMirror()
+    axes = ("TransX", "TransY", "TransZ", "RotX", "RotY", "RotZ")
+    expected = [f"ra_{a}J" for a in axes] + list(mirror.right_joint_names)
+    expected += [f"la_{a}J" for a in axes] + list(mirror.left_joint_names)
+    if joint_names != expected or values.shape != (3, 58) or not np.isfinite(values).all():
+        raise ValueError("Expected native (3,58) paired sample and ordered 56-joint metadata")
+    center = np.asarray(preprocessing["center_world_m"], dtype=float)
+    if (
+        preprocessing["frame_id"] != "world"
+        or preprocessing["scale"] != 1.0
+        or center.shape != (3,)
+        or not np.isfinite(center).all()
+    ):
+        raise ValueError("Expected centered metric world coordinates")
+    targets = {}
+    for side, offset, names in (("right", 0, joint_names[6:28]), ("left", 29, joint_names[34:56])):
+        targets[side] = {}
+        for stage, vector in zip(STAGES, values[:, offset : offset + 29]):
+            quat = vector[3:7]
+            if not np.isclose(np.linalg.norm(quat), 1, atol=1e-4, rtol=0):
+                raise ValueError(f"{side}/{stage}: non-unit WXYZ quaternion")
+            pose = np.eye(4)
+            pose[:3, :3] = Rotation.from_quat(quat[[1, 2, 3, 0]]).as_matrix()
+            pose[:3, 3] = vector[:3] + center
+            targets[side][stage] = dict(
+                frame_id="world",
+                pose_frame=f"{side}_hand_flange",
+                T_world_hand=pose.tolist(),
+                joint_positions_rad=dict(zip(names, vector[7:29].tolist())),
+            )
+    return targets
 
 
 def metadata_contract(root: Path) -> dict:
@@ -194,7 +231,7 @@ def infer(object_root: Path, config: dict, output: Path) -> dict:
     ) -> None:
         for index in np.flatnonzero(keep):
             mode = SOURCE_MODES[int(ids[index]) - 1]
-            if mode not in SINGLE_MODES:
+            if mode not in ranked or (mode not in SINGLE_MODES and (side != "right" or len(arms) != 2)):
                 continue
             provenance = dict(
                 **refs,
@@ -207,9 +244,20 @@ def infer(object_root: Path, config: dict, output: Path) -> dict:
                 raw_predictions_sha256=branches[label]["sha256"],
             )
             try:
-                decoded = decode_candidates(
-                    raw[index : index + 1], logp[index : index + 1], metadata[mode]["joint_names"], prep, world_color
-                )[0]
+                decoded = (
+                    dict(
+                        targets=decode_bimanual(raw[index], metadata[mode]["joint_names"], prep),
+                        log_probability=float(logp[index]),
+                    )
+                    if mode not in SINGLE_MODES
+                    else decode_candidates(
+                        raw[index : index + 1],
+                        logp[index : index + 1],
+                        metadata[mode]["joint_names"],
+                        prep,
+                        world_color,
+                    )[0]
+                )
                 decoded.update(
                     candidate_id=f"{mode}:c{index:04d}",
                     raw_candidate_index=int(index),
@@ -223,7 +271,7 @@ def infer(object_root: Path, config: dict, output: Path) -> dict:
 
     if "right" in arms:
         convert(raw, ids, logp, keep, "right", prep, "original_auto")
-    if "left" in arms and any(m in SINGLE_MODES for m in ranked):
+    if config.get("grasp_mode", "auto") == "auto" and "left" in arms and any(m in SINGLE_MODES for m in ranked):
         mirrored_points = np.load(config["native_mirrored_cloud"], allow_pickle=False)
         mirrored, mirror_prep, mirror_normalized = batch_for(mirrored_points)
         for mode in ranked:
@@ -241,8 +289,13 @@ def infer(object_root: Path, config: dict, output: Path) -> dict:
         **refs,
         availability_scores=score_map,
         ranked_available_modes=ranked,
-        eligible_modes=[m for m in ranked if m in SINGLE_MODES],
-        unsupported_modes={m: "unsupported_simultaneous_hardware_execution" for m in ranked if m not in SINGLE_MODES},
+        eligible_modes=[
+            m
+            for m in ranked
+            if (m in SINGLE_MODES or len(arms) == 2)
+            and (config.get("grasp_mode", "auto") == "auto" or m.startswith("both_"))
+        ],
+        unsupported_modes={},
         score_semantics="independent sigmoid availability, not calibrated success probabilities",
         right_records=rows,
         conversion_rejections=rejected,

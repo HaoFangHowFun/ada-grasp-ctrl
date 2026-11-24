@@ -120,7 +120,7 @@ class HierarchicalSelectionTests(unittest.TestCase):
                 available_arms=["right"],
             )
         trace = {t["mode"]: t for t in result["mode_trace"]}
-        self.assertEqual(trace["both_full"]["candidates"][0]["reasons"], ["unsupported_multi_arm_candidate"])
+        self.assertEqual(trace["both_full"]["candidates"][0]["reasons"], ["disabled_arm"])
         self.assertEqual(trace["left_full"]["candidates"][0]["reasons"], ["disabled_arm"])
         self.assertEqual(trace["unknown"]["reasons"], ["unsupported_mode"])
         self.assertEqual(trace["right_full"]["reasons"], ["disabled_mode"])

@@ -178,6 +178,50 @@ from ada_grasp_ctrl.ros_execution.bridge import Bridge
             self.assertEqual(args[key], self.config[key])
         self.assertEqual(args["minimum_duration"], 2.0)
 
+    def test_shared_hardware_config_retains_real_driver_and_review_preflight_on_each_side(self) -> None:
+        from ada_grasp_ctrl.ros_execution.shared_packet import receiver_config
+        from shared_executor_fixtures import packet
+
+        # Only test the resolved runtime settings here; this deliberately is not
+        # a valid hardware packet and never enters an executor or creates a node.
+        data = packet()
+        data["environment"] = "hardware"
+        for side in ("left", "right"):
+            rt = self.runtime.Runtime.__new__(self.runtime.Runtime)
+            rt.c = receiver_config(data, side)
+            rt.description = "fixture"
+            rt.arm_description = (
+                "<robot><ros2_control><hardware><plugin>fanuc_robot_driver/FanucHardwareInterface</plugin>"
+                "</hardware></ros2_control></robot>"
+            )
+            rt.log = SimpleNamespace(result={})
+            rt.fresh = lambda: True
+            rt.wait = lambda *args: None
+            hand = dict(side=side, backend="sharpa_sdk", read_only=False, control_mode="mit")
+
+            def parameters(node, names):
+                if "hand_node" in node:
+                    return hand
+                raise RuntimeError("Reached controller ownership checks")
+
+            rt.parameters = parameters
+            self.assertEqual(rt.c["active_arms"], ["left", "right"])
+            self.assertFalse(rt.c["hand_arrival_required"])
+            with self.assertRaisesRegex(RuntimeError, "reviewed path"):
+                rt.preflight(True)
+            rt.c["operator_reviewed_joint_goal"] = True
+            with self.assertRaisesRegex(RuntimeError, "ownership"):
+                rt.preflight(True)
+            hand["backend"] = "mock"
+            with self.assertRaisesRegex(RuntimeError, "drivers"):
+                rt.preflight(True)
+            hand["backend"] = "sharpa_sdk"
+            rt.arm_description = rt.arm_description.replace(
+                "fanuc_robot_driver/FanucHardwareInterface", "mock_components/GenericSystem"
+            )
+            with self.assertRaisesRegex(RuntimeError, "hardware plugin"):
+                rt.preflight(True)
+
 
 if __name__ == "__main__":
     unittest.main()

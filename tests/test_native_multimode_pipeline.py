@@ -123,7 +123,7 @@ class NativePipelineTests(unittest.TestCase):
             self.assertEqual({c.args[1] for c in ik.call_args_list}, {"left", "right"})
             for entry in audit["mode_trace"]:
                 if entry["mode"].startswith("both_"):
-                    self.assertEqual(entry["reasons"], ["unsupported_simultaneous_hardware_execution"])
+                    self.assertEqual(entry["reasons"], ["empty_candidate_set"])
                     self.assertEqual(entry["evaluated_candidate_count"], 0)
                 elif entry["mode"] != "right_two":
                     self.assertEqual(entry["evaluated_candidate_count"], 0)
@@ -156,7 +156,7 @@ class NativePipelineTests(unittest.TestCase):
                 )
                 self.assertEqual((fixture.root / "run/native_mirrored_cloud.npy").exists(), side == "left")
 
-    def test_only_unsupported_available_never_forces_single_mode_or_exports(self):
+    def test_available_mode_without_candidates_never_manufactures_or_exports(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = NativeFixture(Path(directory) / "run", available=["both_full"])
             with patch.object(fixture.robot, "solve_arm_ik", side_effect=AssertionError("IK must not run")):
@@ -215,7 +215,7 @@ class NativePipelineTests(unittest.TestCase):
                 canonical_batch(bad, ["left", "right"], native=True)
             bad = deepcopy(rows)
             bad[0]["mode"] = "both_full"
-            with self.assertRaisesRegex(ValueError, "unsupported_simultaneous"):
+            with self.assertRaisesRegex(ValueError, "paired"):
                 canonical_batch(bad, ["left", "right"], native=True)
 
 
@@ -260,7 +260,7 @@ class NativeConversionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             decode_candidates(raw[:, :, :-1], np.array([1.0]), list(hand_names("right")), prep, world_color)
         record["source_model_mode"] = "both_three"
-        with self.assertRaisesRegex(ValueError, "unsupported_simultaneous"):
+        with self.assertRaisesRegex(ValueError, "paired"):
             from_native_record(record, plane)
 
     def test_metadata_rejects_reordered_finger_contract(self):
