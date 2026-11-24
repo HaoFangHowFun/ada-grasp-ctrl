@@ -56,11 +56,26 @@ def model_summary(report: dict) -> str:
     return text
 
 
+def create_server() -> viser.ViserServer:
+    """Own the existing single 8089 preview for either grasp or placement review."""
+    server = viser.ViserServer(host="127.0.0.1", port=8089, label="Ada · Grasp / Placement Preview")
+    if server.get_port() != 8089:
+        server.stop()
+        raise RuntimeError("Port 8089 is occupied")
+    return server
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path, required=True)
+    parser.add_argument("--placement-only", action="store_true")
     args = parser.parse_args()
     root = args.run
+    if args.placement_only:
+        from ada_grasp_ctrl.placement.ui import serve_saved
+
+        serve_saved(root, create_server)
+        return
     config = yaml.safe_load((root / "effective_config.yaml").read_text())
     packet_path = root / "export/targets.json"
     packet = load_packet(packet_path)
@@ -83,7 +98,7 @@ def main() -> None:
     )
     q56 = np.asarray(state["full_positions_rad"])
     block = None if paired else side_slice(packet["side"])
-    server = viser.ViserServer(host="127.0.0.1", port=8089, label="Live dual-arm grasp")
+    server = create_server()
     try:
         if server.get_port() != 8089:
             raise RuntimeError("Port 8089 is occupied")

@@ -272,11 +272,21 @@ def main(argv: list[str] | None = None) -> int:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--export-only", action="store_true")
     mode.add_argument("--preview-only", action="store_true")
+    mode.add_argument("--placement-only", action="store_true", help="Select placement in 8089; no grasp or execution")
+    parser.add_argument("--object-root", help="Placement only: reuse an explicitly selected captured object")
+    parser.add_argument("--uop-root", help="Existing UOP-Net checkout (or UOP_NET_ROOT)")
+    parser.add_argument("--uop-python", help="Existing UOP Python (defaults to checkout/.venv/bin/python)")
     args = parser.parse_args(argv)
     root, processes, created = resolve_from_root(args.output_root, "output"), None, False
     report = dict(schema_version=1, status="preflight", object_lifted=None, object_held=None)
     try:
         config = configuration(args.config)
+        if args.placement_only:
+            from ada_grasp_ctrl.placement.workflow import run_placement
+
+            return run_placement(args, config, root)
+        if args.object_root or args.uop_root or args.uop_python:
+            raise ValueError("Placement options require --placement-only")
         configure_model(config, args.grasp_model, args.selector)
         report["grasp_model"] = args.grasp_model
         if args.environment:

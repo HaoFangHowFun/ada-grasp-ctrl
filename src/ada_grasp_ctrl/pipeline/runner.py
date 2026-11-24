@@ -172,7 +172,14 @@ def wait_for_enter(processes: Processes, stream: Any = None) -> bool:
 
 
 def perceive(
-    group: dict, args: argparse.Namespace, config: dict, processes: Processes, root: Path, *, infer: bool = True
+    group: dict,
+    args: argparse.Namespace,
+    config: dict,
+    processes: Processes,
+    root: Path,
+    *,
+    infer: bool = True,
+    build_asset: bool = True,
 ) -> Path:
     """Capture or replay a cloud, apply calibration and run real checkpoint inference."""
     reference = load_candidates(resolve_from_root(group["candidates_path"])) if infer or args.mode == "replay" else None
@@ -240,6 +247,8 @@ def perceive(
     if cluster is not None:
         command += ["--cluster", str(cluster)]
     processes.run(command, f"group{group['group']}_object", ros=True)
+    if not infer and not build_asset:
+        return object_root
     processes.run(
         [
             ros_python,

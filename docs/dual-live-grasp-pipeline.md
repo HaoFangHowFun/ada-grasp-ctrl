@@ -9,6 +9,11 @@ There is no fixed object, saved candidate, ROI, or object pose in the default wo
 capture used during development is test evidence only. The checkpoint/config/metadata references
 identify the model, not an object to replay.
 
+For orientation-only object placement review, use the same entry with
+[`--placement-only`](placement-selection.md). It reuses object selection and the
+8089 viewport, adds P00/UOP candidates and saves a confirmed orientation without
+starting grasp inference or robot execution.
+
 ## Start the two physical arms, hands and fixed camera
 
 Use a ROS terminal and keep the launch running. Replace an existing single-side launch before
