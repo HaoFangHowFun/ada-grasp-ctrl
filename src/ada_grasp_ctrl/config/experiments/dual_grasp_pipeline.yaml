@@ -41,6 +41,8 @@ inference_model:
 
 # Interactive MuJoCo only; shared hardware targets and receiver policies are unchanged.
 simulation:
+  contact_profile: dexgraspbench
+  reference_hz: 25
   squeeze_extrapolate_ratio: 2.0
   stage_completion: timed
   # Historical single-arm benchmark environment: no global gravity, object force = mass * -10 N/kg.

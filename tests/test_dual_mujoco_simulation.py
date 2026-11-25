@@ -55,6 +55,7 @@ def idle_reference(scene, arms):
         plan_from_candidate(candidate, available_arms=["left", "right"]), named, endpoints, hold_s=0.1
     )
     return dict(
+        reference_hz=25,
         stage_completion="timed",
         kind="ada_simulation_reference",
         environment="simulation",
@@ -109,7 +110,9 @@ class SceneContracts(unittest.TestCase):
                     for _ in range(10):
                         falling.apply_forces()
                         sim.step()
-                    np.testing.assert_allclose(sim.data.joint("object_free").qvel[:3], [0, 0, -0.2], atol=1e-10)
+                    np.testing.assert_allclose(
+                        sim.data.joint("object_free").qvel[:3], [0, 0, -100 * sim.model.opt.timestep], atol=1e-10
+                    )
                     expected = np.zeros_like(sim.data.xfrc_applied)
                     expected[sim.model.body("object").id, 2] = -mass * 10
                     np.testing.assert_allclose(sim.data.xfrc_applied, expected)
@@ -141,6 +144,61 @@ class SceneContracts(unittest.TestCase):
             scene.sim.data.xfrc_applied[scene.sim.model.body("object").id, 2] = 0
             with self.assertRaisesRegex(ValueError, "Settled xfrc_applied changed"):
                 SimulationExecutor(scene, idle_reference(scene, ["right"]), self.config, root)
+
+    def test_reviewed_control_rate_and_legacy_sampling(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            scene, _, _ = self.scene(root)
+            plan = idle_reference(scene, ["right"])
+            executor = SimulationExecutor(scene, plan, self.config, root)
+            self.assertEqual(executor.substeps, 10)
+            bench_model = scene.sim.model
+            self.assertEqual(scene.metadata["contact_profile"]["name"], "dexgraspbench")
+            start = scene.sim.data.time
+            executor.tick(plan["schedule"]["stages"][0], 0, io.StringIO())
+            self.assertAlmostEqual(scene.sim.data.time - start, 0.04)
+            for hz in (0, -1, float("nan"), float("inf")):
+                with self.subTest(hz=hz), self.assertRaisesRegex(ValueError, "reference_hz"):
+                    verify_plan({**plan, "reference_hz": hz})
+            plan["reference_hz"] = 100
+            with self.assertRaisesRegex(ValueError, "must divide"):
+                SimulationExecutor(scene, plan, self.config, root)
+        config = deepcopy(self.config)
+        config["simulation"]["contact_profile"] = "source"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            builder = SceneBuilder(config)
+            scene, _, _ = builder.confirm(builder.defaults(), root)
+            plan = idle_reference(scene, ["right"])
+            plan.pop("reference_hz")
+            executor = SimulationExecutor(scene, plan, config, root)
+            self.assertEqual(executor.reference_hz, 100)
+            self.assertEqual(executor.substeps, 5)
+            source_model = scene.sim.model
+            for field in (
+                "actuator_gainprm",
+                "actuator_biasprm",
+                "actuator_forcerange",
+                "actuator_ctrlrange",
+                "dof_damping",
+                "dof_armature",
+                "body_mass",
+                "body_inertia",
+                "geom_size",
+                "geom_pos",
+            ):
+                np.testing.assert_array_equal(getattr(bench_model, field), getattr(source_model, field), err_msg=field)
+            for geom_id in range(bench_model.ngeom):
+                body_name = bench_model.body(int(bench_model.geom_bodyid[geom_id])).name
+                geom = bench_model.geom(geom_id)
+                np.testing.assert_array_equal(geom.friction, [0.8, 0.02, 0.0001])
+                self.assertEqual(geom.condim, 4)
+                if body_name.startswith(("left_", "right_")):
+                    np.testing.assert_array_equal(geom.solref, [0.005, 1])
+                    np.testing.assert_array_equal(geom.solimp[:3], [0.5, 0.99, 0.0001])
+                else:
+                    np.testing.assert_array_equal(geom.solref, source_model.geom(geom_id).solref)
+                    np.testing.assert_array_equal(geom.solimp, source_model.geom(geom_id).solimp)
 
     def test_scale_changes_support_height_and_stays_within_manifest_and_table(self):
         for key, entry in self.builder.entries.items():
@@ -236,7 +294,7 @@ class SceneContracts(unittest.TestCase):
                     expected = self.builder.pose(req)[0]
                     scene, _, _ = self.builder.confirm(req, Path(directory))
                     # A short settling window alone can miss slow rolling after confirmation.
-                    for step in range(2500):
+                    for step in range(round(5 / scene.sim.model.opt.timestep)):
                         scene.apply_forces()
                         scene.sim.step()
                         if step % 100:
@@ -308,7 +366,7 @@ class SceneContracts(unittest.TestCase):
             self.assertNotIn("extrinsics", info)
             self.assertNotIn("T_world_object", info)
             self.assertEqual(scene.sim.model.ncam, 0)
-            self.assertEqual(scene.sim.model.opt.timestep, 0.002)
+            self.assertEqual(scene.sim.model.opt.timestep, 0.004)
             settling = json.loads((root / "settling_report.json").read_text())
             self.assertEqual(settling["status"], "settled")
             self.assertGreaterEqual(settling["observed_window_s"] + 1e-9, 0.5)
@@ -383,7 +441,7 @@ class SceneContracts(unittest.TestCase):
             for event in result["phase_events"]:
                 elapsed = event["end_s"] - event["start_s"]
                 self.assertGreaterEqual(elapsed + 1e-9, event["scheduled_total_s"])
-                self.assertLess(elapsed, event["scheduled_total_s"] + 0.010001)
+                self.assertLess(elapsed, event["scheduled_total_s"] + executor.reference_interval_s + 1e-6)
                 self.assertFalse(event["arrival_reached"])
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

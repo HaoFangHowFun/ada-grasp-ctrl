@@ -1,4 +1,4 @@
-"""Explicit historical Sharpa contact numerics for the private dual-arm scene."""
+"""Explicit historical and DexGraspBench contact profiles for private dual-arm scenes."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ import mujoco
 import numpy as np
 
 PROFILE = "sharpa_native_v3"
+BENCH_PROFILE = "dexgraspbench"
+BENCH_FRICTION = (0.8, 0.02, 0.0001)
 
 
 def apply_contact_profile(spec: mujoco.MjSpec, name: str, friction: np.ndarray) -> dict | None:
@@ -13,8 +15,8 @@ def apply_contact_profile(spec: mujoco.MjSpec, name: str, friction: np.ndarray) 
 
     Args:
         spec: Fully assembled scene, including robot, object, and table.
-        name: ``source`` preserves the prior scene; ``sharpa_native_v3`` restores numerics.
-        friction: Declared object friction; historical profile requires the exact old values.
+        name: ``source``, historical ``sharpa_native_v3``, or robot-only ``dexgraspbench``.
+        friction: Declared object friction; must match the selected profile exactly.
 
     Returns:
         Resolved profile metadata, or None for the unchanged source configuration.
@@ -24,6 +26,40 @@ def apply_contact_profile(spec: mujoco.MjSpec, name: str, friction: np.ndarray) 
     """
     if name == "source":
         return None
+    if name == BENCH_PROFILE:
+        if not np.array_equal(friction, BENCH_FRICTION):
+            raise ValueError("dexgraspbench requires declared object friction [0.8, 0.02, 0.0001]")
+        # Bench hardens only the imported robot; object/table keep source stiffness.
+        robot_geoms = [g for b in spec.bodies if b.name.startswith(("left_", "right_")) for g in b.geoms]
+        if not robot_geoms:
+            raise ValueError("dexgraspbench requires named left_/right_ robot bodies")
+        for geom in spec.geoms:
+            geom.friction = BENCH_FRICTION
+            geom.condim = 4
+        for geom in robot_geoms:
+            geom.solref = [0.005, 1]
+            geom.solimp[:3] = [0.5, 0.99, 0.0001]
+        spec.option.timestep = 0.004
+        spec.option.integrator = mujoco.mjtIntegrator.mjINT_IMPLICITFAST
+        spec.option.cone = mujoco.mjtCone.mjCONE_ELLIPTIC
+        spec.option.impratio = 10
+        spec.option.noslip_iterations = 2
+        return dict(
+            name=BENCH_PROFILE,
+            friction=list(BENCH_FRICTION),
+            condim=4,
+            robot_solref=[0.005, 1],
+            robot_solimp_first_three=[0.5, 0.99, 0.0001],
+            robot_geom_count=len(robot_geoms),
+            object_table_stiffness="Preserve source solref/solimp",
+            timestep_s=0.004,
+            integrator="implicitfast",
+            cone="elliptic",
+            impratio=10,
+            noslip_iterations=2,
+            reference="HUGS-DexGraspBench/src/util/hand_util.py: MjHO._add_hand, _set_friction",
+            gravity_policy="Preserve caller gravity/force policy",
+        )
     if name != PROFILE:
         raise ValueError(f"Unknown scene.contact_profile: {name!r}")
     if not np.array_equal(friction, [0.8, 0.02, 0.001]):

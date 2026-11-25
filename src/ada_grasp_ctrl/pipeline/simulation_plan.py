@@ -135,6 +135,7 @@ def build_plan(robot: object, static: object, selection: dict, root: Path, confi
     if adjusted_path.exists():
         references[str(adjusted_path)] = file_hash(adjusted_path)
     result = dict(
+        reference_hz=config.get("simulation", {}).get("reference_hz", 100),
         stage_completion=config.get("simulation", {}).get("stage_completion", "timed"),
         pose_adjustment=deepcopy(chosen["candidate"]["provenance"].get("simulation_pose_adjustment", {})),
         schema_version=1,
@@ -167,6 +168,9 @@ def verify_plan(plan: dict) -> None:
         raise ValueError("Expected a simulation reference, never a relabeled transport packet")
     if plan.get("stage_completion", "arrival") not in ("timed", "arrival"):
         raise ValueError("Unknown simulation stage_completion policy")
+    hz = float(plan.get("reference_hz", 100))
+    if not np.isfinite(hz) or hz <= 0:
+        raise ValueError("Simulation reference_hz must be finite and positive")
     validate_stage_schedule(plan["schedule"])
     if plan["execution_phases"] != list(PHASES) or tuple(s["phase"] for s in plan["schedule"]["stages"][:6]) != PHASES:
         raise ValueError("Simulation must execute the identical six-stage prefix")

@@ -9,6 +9,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 import yaml
 
+from ada_grasp_ctrl.experiments.sharpa_contact_profile import BENCH_PROFILE, BENCH_FRICTION
 from ada_grasp_ctrl.experiments.simulated_object_cloud import (
     ObjectScene,
     body_pose,
@@ -202,8 +203,14 @@ class SceneBuilder:
         pose, vertices = self.pose(requested)
         self.check_footprint(vertices)
         entry = self.entries[requested["object_id"]]
+        profile = self.config.get("simulation", {}).get("contact_profile", "source")
+        physics = deepcopy(entry["physics"])
+        if profile == BENCH_PROFILE:
+            physics["friction"] = list(BENCH_FRICTION)
+            physics["assumptions"] += " Friction overridden by explicit DexGraspBench contact profile."
         config = dict(
             scene=dict(
+                contact_profile=profile,
                 robot_snapshot=str(self.robot.directory),
                 initial_robot_state=dict(zip(self.robot.joint_names, self.initial.tolist())),
                 table_plane=self.plane,
@@ -218,7 +225,7 @@ class SceneBuilder:
                 scale=[requested["scale"]] * 3,
                 freejoint=True,
                 placement="settle_on_table",
-                physics=entry["physics"],
+                physics=physics,
                 pose=dict(
                     frame_id="world",
                     position_m=pose[:3, 3].tolist(),

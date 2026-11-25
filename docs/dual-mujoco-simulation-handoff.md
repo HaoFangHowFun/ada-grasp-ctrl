@@ -60,15 +60,15 @@ static checks never modify execution data.
 
 `simulation_plan.json` is a distinct transport-neutral reference. Before execution,
 source hashes, the reviewed JSON and complete settled qpos/qvel/ctrl are checked.
-`physics.jsonl` streams actual state, contacts and reference tracking at 100 Hz;
+`physics.jsonl` streams actual state, contacts and reference tracking at 25 Hz;
 `execution_report.json` distinguishes completion, scheduled hold success, current
 retention, retention failure and a drop after earlier retention. Reset/exit writes
 cancellation evidence and preserves prior output.
 
 Exact geometry and physics assumptions are documented in the operator guide:
 finite 1.2 × 1.4 m unmeasured tabletop, original plane acceptance status, snapshot
-initial arms, 100 g unmeasured objects, original friction and position actuators,
-2 ms physics / 100 Hz reference, original arrival tolerances, 3 cm / 0.02 m/s
+initial arms, 100 g unmeasured objects, DexGraspBench contacts and original position actuators,
+4 ms physics / 25 Hz reference, original arrival tolerances, 3 cm / 0.02 m/s
 retention thresholds and contact on **each** active side throughout Hold.
 No assumptions were presented as accepted laboratory calibration.
 
@@ -341,3 +341,44 @@ exactly match the earlier baseline (68 success, 4 failure, 21 invalid, 7 degrade
 `/tmp/ada_gravity_scale_tests_final.log`, `/tmp/ada_gravity_scale_full_tests.log`,
 `/tmp/ada_gravity_quick.log`. Restart Python and confirm a fresh scene to load
 these force and UI changes.
+
+
+## DexGraspBench contact and sampling alignment (2026-11-24)
+
+Interactive defaults now select the explicit `dexgraspbench` contact profile and
+25 Hz reviewed references. All geoms use friction `[0.8, 0.02, 0.0001]`, condim 4,
+elliptic cone, impratio 10 and noslip iterations 2. Robot geoms alone receive
+solref `[0.005, 1]` and solimp prefix `[0.5, 0.99, 0.0001]`; object/table stiffness
+stays at source values. Physics uses implicitfast at 4 ms, ten steps per target.
+The reference is `HUGS-DexGraspBench/src/util/hand_util.py` (`MjHO._add_hand`,
+`_set_friction`, `control_hand_with_interp`). Historical `sharpa_native_v3` and
+standalone `source` profiles retain their existing behavior. Old plans without
+`reference_hz` retain 100 Hz; incompatible timestep/rate pairs fail before stepping.
+
+Object-only gravity, CRX paths, stage durations and fixed endpoint dwell, squeeze
+ratio 2, gains, torque limits, masses, inference checkpoint and success thresholds
+are unchanged. Bench's dummy-arm paths, density-based masses and evaluation
+criteria are not imported, so no Bench success-rate equivalence is claimed.
+
+Diagnostic replay evidence:
+`output/simulation/bench_contact_20261124_165541/report.json`.
+Both saved single/paired candidates were reapplied to freshly settled scenes,
+reselected and replanned, then completed all six phases without motion/numerical
+failure. Neither passed scheduled Hold: minimum retained lift was 0.029199 m
+(single) and 0.007461 m (paired). These are two diagnostic replays, not fresh
+inference or a measured success rate; the 0.03 m threshold was preserved.
+
+Validation for this change: 22 interactive simulation tests pass; four focused
+contact-profile tests pass (two optional snapshot tests skip). The full canonical
+unit suite reports 652 tests, OK with 88 skips. Ruff check, compileall, changed-file
+format check and `git diff --check` pass. Repository-wide format checking still
+reports eight pre-existing unrelated files.
+
+Fresh quick gate root: `/tmp/ada_bench_gate_20261124_v1`. It stops at the existing
+Shadow expected-inventory mismatch (68 success, 4 failure, 21 invalid, 7 degraded,
+0 execution errors); Allegro/LEAP are not reached. All 100 classifications exactly
+match the prior local baseline, verified in `/tmp/ada_bench_gate_comparison.json`,
+digest `9a96b3bb4972b36c71914d49bdabca6167c95459a0d4e95a8ec07fedcdd65dbb`.
+No golden inventory was changed. Restart the interactive simulation process and
+confirm a new scene to load the new defaults; existing running attempts retain
+their compiled physics and reviewed reference rate.

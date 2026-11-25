@@ -9,7 +9,13 @@ import mujoco
 import numpy as np
 import yaml
 
-from ada_grasp_ctrl.experiments.sharpa_contact_profile import PROFILE, apply_contact_profile, diagnostic_step_interval
+from ada_grasp_ctrl.experiments.sharpa_contact_profile import (
+    PROFILE,
+    BENCH_PROFILE,
+    BENCH_FRICTION,
+    apply_contact_profile,
+    diagnostic_step_interval,
+)
 from ada_grasp_ctrl.experiments.simulated_object_cloud import ObjectScene
 from ada_grasp_ctrl.paths import project_root
 
@@ -48,6 +54,40 @@ class ProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "requires declared"):
             apply_contact_profile(spec, PROFILE, np.array([0.6, 0.02, 0.001]))
         self.assertEqual(spec.to_xml(), before)
+
+    def test_bench_contacts_harden_robot_only_and_preserve_dynamics(self) -> None:
+        spec = self.spec()
+        body = spec.worldbody.add_body(name="right_hand", pos=[0, 0, 0.14])
+        body.add_joint(name="finger", type=mujoco.mjtJoint.mjJNT_SLIDE, axis=[0, 0, 1])
+        body.add_geom(name="finger", type=mujoco.mjtGeom.mjGEOM_SPHERE, size=[0.05, 0, 0], mass=0.2)
+        spec.add_actuator(name="motor", target="finger", trntype=mujoco.mjtTrn.mjTRN_JOINT, gainprm=[7.5] + [0] * 9)
+        source = spec.compile()
+        meta = apply_contact_profile(spec, BENCH_PROFILE, np.array(BENCH_FRICTION))
+        model = spec.compile()
+        for field in ("body_mass", "body_inertia", "actuator_gainprm", "actuator_forcerange", "dof_damping"):
+            np.testing.assert_array_equal(getattr(model, field), getattr(source, field))
+        np.testing.assert_array_equal(model.opt.gravity, source.opt.gravity)
+        for name in ("object", "table"):
+            np.testing.assert_array_equal(model.geom(name).solref, source.geom(name).solref)
+            np.testing.assert_array_equal(model.geom(name).solimp, source.geom(name).solimp)
+        np.testing.assert_array_equal(model.geom("finger").solref, [0.005, 1])
+        np.testing.assert_array_equal(model.geom("finger").solimp, [0.5, 0.99, 0.0001, 0.5, 2])
+        np.testing.assert_array_equal(model.geom_friction, np.tile(BENCH_FRICTION, (model.ngeom, 1)))
+        np.testing.assert_array_equal(model.geom_condim, 4)
+        self.assertEqual(model.opt.timestep, 0.004)
+        self.assertEqual(model.opt.integrator, mujoco.mjtIntegrator.mjINT_IMPLICITFAST)
+        self.assertEqual(model.opt.cone, mujoco.mjtCone.mjCONE_ELLIPTIC)
+        self.assertEqual(model.opt.impratio, 10)
+        self.assertEqual(model.opt.noslip_iterations, 2)
+        data = mujoco.MjData(model)
+        mujoco.mj_forward(model, data)
+        self.assertGreater(data.ncon, 0)
+        for contact in data.contact:
+            self.assertEqual(contact.dim, 4)
+            np.testing.assert_array_equal(contact.friction, [0.8, 0.8, 0.02, 0.0001, 0.0001])
+        self.assertEqual(meta["robot_geom_count"], 1)
+        with self.assertRaisesRegex(ValueError, "requires declared"):
+            apply_contact_profile(spec, BENCH_PROFILE, np.array([1, 0.02, 0.0001]))
 
     def test_twenty_ms_checks_remain_twenty_ms_for_both_timesteps(self) -> None:
         self.assertEqual(diagnostic_step_interval(0.002), 10)

@@ -40,9 +40,11 @@ class SimulationExecutor:
             "hand_arrival_required": config["hand_arrival_required"],
         }
         self.dt = float(self.sim.model.opt.timestep)
-        self.substeps = round(0.01 / self.dt)
-        if self.substeps < 1 or not np.isclose(self.substeps * self.dt, 0.01, atol=1e-12):
-            raise ValueError("Physics timestep must divide the 100 Hz reference interval")
+        self.reference_hz = float(plan.get("reference_hz", 100))
+        self.reference_interval_s = 1 / self.reference_hz
+        self.substeps = round(self.reference_interval_s / self.dt)
+        if self.substeps < 1 or not np.isclose(self.substeps * self.dt, self.reference_interval_s, atol=1e-12, rtol=0):
+            raise ValueError("Physics timestep must divide the reviewed reference interval")
         if (root / "settled_state.npz").exists():
             with np.load(root / "settled_state.npz", allow_pickle=False) as snapshot:
                 for field in ("qpos", "qvel", "ctrl", "qfrc_applied", "xfrc_applied"):
@@ -67,7 +69,8 @@ class SimulationExecutor:
             post_hold_retention_failure_latched=False,
             phase_events=[],
             timestep_s=self.dt,
-            reference_hz=100,
+            reference_hz=self.reference_hz,
+            contact_profile=deepcopy(scene.metadata.get("contact_profile", {})),
             substeps=self.substeps,
             success_criterion=dict(
                 minimum_lift_m=0.03,

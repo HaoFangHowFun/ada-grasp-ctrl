@@ -142,10 +142,18 @@ Paths are in `src/ada_grasp_ctrl/config/experiments/dual_grasp_pipeline.yaml` an
   supported initialization does not guarantee a motionless free body indefinitely.
   Legacy explicit RPY/scale requests remain readable by the scene builder;
   arbitrary legacy orientations and custom physical scenes still require validation.
-- Mass/friction: existing exploratory `config/simulation_scene.yaml` assumptions:
-  100 g, friction `[0.8, 0.02, 0.001]`, fixed mass across scales, equal mass per
+- Mass: existing exploratory `config/simulation_scene.yaml` assumptions:
+  100 g, fixed mass across scales, equal mass per
   convex collision piece with uniform-density inertia. These are not identified
   object properties. Actual compiled mass/inertia are saved per attempt.
+- Contacts: `simulation.contact_profile: dexgraspbench` applies friction
+  `[0.8, 0.02, 0.0001]`, `condim=4` (sliding plus torsional friction), elliptic
+  cone, `impratio=10`, and `noslip_iterations=2`. Only robot geoms receive
+  `solref=[0.005, 1]` and the first three `solimp` values `[0.5, 0.99, 0.0001]`;
+  object/table retain their source stiffness. This follows DexGraspBench's
+  `MjHO._add_hand` and `_set_friction`, unlike historical `sharpa_native_v3`,
+  which hardens every geom. The profile and effective object friction are saved
+  in scene configuration and physical evidence.
 - Gravity: `simulation.gravity_mode: object_only` matches the historical successful
   single-arm benchmark: MuJoCo global gravity is disabled, and every physics step
   applies a world-Z force of `-10 * compiled_object_mass_kg` N at the object's COM.
@@ -157,11 +165,19 @@ Paths are in `src/ada_grasp_ctrl/config/experiments/dual_grasp_pipeline.yaml` an
   Default open-hand initialization in object-only mode starts at least 0.0001 rad
   inside finger limits to avoid tiny soft-limit undershoot at exactly zero. Explicit
   initial states, physical limits and generated grasp targets are not altered.
-- Dynamics: existing canonical position actuators and source contact numerics.
-  Timestep is 0.002 s; the shared
-  linear reference updates at 100 Hz and is held for five physics substeps.
+- Dynamics: existing canonical position actuators with implicitfast integration.
+  Timestep is 0.004 s; `simulation.reference_hz: 25` updates the shared linear
+  reference every 40 ms, held for ten physics substeps, matching Bench sampling.
+  The reviewed plan records the rate; old plans without it retain 100 Hz.
+  Standalone ObjectScene configs default to the unchanged `source` profile.
+  To restore previous interactive numerics, set `contact_profile: source` and
+  `reference_hz: 100` together.
   All active side targets are set before the common step. Rendering is 30 Hz;
   UI metrics update at 10 Hz. Interactive stepping is paced near real time.
+  CRX paths, stage durations, squeeze multiplier, gains, fixed mass policy and
+  success criteria remain as before. This matches Bench contact/control sampling,
+  not its dummy-arm evaluator or density-based object masses; its success rate
+  does not transfer to this setup.
 - Progression: `simulation.stage_completion: timed` is the default. The existing
   0.01 rad arm arrival threshold is diagnostic in this mode. Set `arrival` to
   restore the older arrival/settle/timeout behavior; older saved plans without
