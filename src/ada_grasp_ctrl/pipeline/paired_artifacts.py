@@ -27,21 +27,10 @@ def named_state(q: np.ndarray) -> dict:
     return {s: dict(zip(sum(side_names(s), ()), q[side_slice(s)].tolist())) for s in SIDES}
 
 
-def export_paired_selection(
-    robot: object,
-    sim: object,
-    selection: dict,
-    state_path: Path,
-    object_root: Path,
-    config: dict,
-    output: Path,
-    candidates_path: Path,
-) -> Path:
-    """Build and check shared endpoints and sampled paths; never authorize physical movement.
-
-    Lift uses five common world-Z translations with retained squeeze fingers. Static
-    samples are diagnostics of the nominal joint reference, not continuous path certification.
-    """
+def paired_schedule(
+    robot: object, sim: object, selection: dict, state_path: Path, object_root: Path, config: dict
+) -> tuple[dict, dict]:
+    """Solve the incumbent paired endpoints and nominal checks without a transport packet."""
     chosen = selection["selected"]
     if chosen["required_arms"] != list(SIDES):
         raise ValueError("Paired export requires both arms")
@@ -128,23 +117,42 @@ def export_paired_selection(
         hold_s=config["hold_s"],
         lift_waypoints_rad=[{s: q[side_slice(s)].tolist() for s in SIDES} for q in lift],
     )
+    checks = dict(
+        above_object=above_checks,
+        lift=lift_checks,
+        phases=checks,
+        continuous_path_verified=False,
+        physical_execution_verified=False,
+        geometry_note="Measured table and robots; partial object cloud is not a collision solid",
+        relative_wrist_note=(
+            "Constrained at common IK waypoints; interpolation and driver tracking are not rigid-object control"
+        ),
+    )
+    return schedule, checks
+
+
+def export_paired_selection(
+    robot: object,
+    sim: object,
+    selection: dict,
+    state_path: Path,
+    object_root: Path,
+    config: dict,
+    output: Path,
+    candidates_path: Path,
+) -> Path:
+    """Build and check shared endpoints and sampled paths; never authorize physical movement.
+
+    Lift uses five common world-Z translations with retained squeeze fingers. Static
+    samples are diagnostics of the nominal joint reference, not continuous path certification.
+    """
+    schedule, checks = paired_schedule(robot, sim, selection, state_path, object_root, config)
+    state = read_json(state_path)
+    current = robot.configuration(state["full_positions_rad"])
     output.mkdir(parents=True, exist_ok=False)
     plan_path = output / "motion_plan.json"
     write_json(plan_path, schedule)
-    write_json(
-        output / "path_checks.json",
-        dict(
-            above_object=above_checks,
-            lift=lift_checks,
-            phases=checks,
-            continuous_path_verified=False,
-            physical_execution_verified=False,
-            geometry_note="Measured table and robots; partial object cloud is not a collision solid",
-            relative_wrist_note=(
-                "Constrained at common IK waypoints; interpolation and driver tracking are not rigid-object control"
-            ),
-        ),
-    )
+    write_json(output / "path_checks.json", checks)
     paths = [
         plan_path,
         output / "path_checks.json",

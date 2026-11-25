@@ -18,7 +18,6 @@ from ada_grasp_ctrl.grasp_selection.cli import write_json
 from ada_grasp_ctrl.sharpa_mirror import SharpaHandMirror
 from ada_grasp_ctrl.pipeline.grasp_models import SOURCE_MODES, SINGLE_MODES
 from .fixed_camera_grasp import decode_candidates, preprocess, STAGES
-from .fixed_camera_geometry import rigid, transform
 from scipy.spatial.transform import Rotation
 
 
@@ -97,11 +96,10 @@ def infer(object_root: Path, config: dict, output: Path) -> dict:
         raise ValueError("Unsupported object schema/frame/units")
     if file_hash(object_root / "object.npz") != info["object_sha256"]:
         raise ValueError("Object snapshot hash mismatch")
-    with np.load(object_root / "object.npz", allow_pickle=False) as archive:
-        points = archive["points_world_m"]
-        world_color = rigid(archive["T_world_color"])
-        if not np.allclose(transform(archive["points_color_m"], world_color), points, atol=1e-7, rtol=0):
-            raise ValueError("Object camera/world round-trip failed")
+    from ada_grasp_ctrl.pipeline.observation import read_observation, source_provenance
+
+    info, points, camera_arrays = read_observation(object_root)
+    world_color = camera_arrays.get("T_world_color")
     plane = config["native_reflection_plane"]
     arms = set(config["enabled_arms"])
     if not arms or not arms <= {"left", "right"}:
@@ -155,15 +153,17 @@ def infer(object_root: Path, config: dict, output: Path) -> dict:
         dexlearn_commit=subprocess.check_output(["git", "-C", str(dexroot), "rev-parse", "HEAD"], text=True).strip(),
         source_object=str(object_root),
         source_object_sha256=info["object_sha256"],
-        calibration=info["extrinsics"],
-        input_point_source="live_measured_object",
+        **source_provenance(info),
     )
     timings = dict(load_and_setup_s=time.monotonic() - began)
     rows, rejected, branches = [], [], {}
 
     def batch_for(cloud: np.ndarray) -> tuple[dict, dict, np.ndarray]:
         normalized, prep = preprocess(cloud, int(cfg.data.point_cloud.num_points), seed)
-        prep.update(training_point_source="complete", input_point_source="single-view partial measured cloud")
+        prep.update(
+            training_point_source="complete",
+            input_point_source=info.get("source_type", "single-view partial measured cloud"),
+        )
         batch = dataset.get_sparse_tensor(
             torch.as_tensor(normalized[None], device=device), float(model_cfg.backbone.voxel_size)
         )
@@ -193,7 +193,7 @@ def infer(object_root: Path, config: dict, output: Path) -> dict:
             available_mask=available,
             normalized_points_m=normalized,
             center_world_m=prep["center_world_m"],
-            T_world_color=world_color,
+            **camera_arrays,
         )
         branches[label] = dict(
             raw_predictions=str(path),

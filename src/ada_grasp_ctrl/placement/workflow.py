@@ -157,3 +157,36 @@ def run_placement(args: argparse.Namespace, config: dict, root: Path) -> int:
     finally:
         processes.close()
         write_json(root / "run_report.json", report)
+
+
+def prepare_simulation_session(object_root: Path, root: Path, state: dict) -> PlacementSession:
+    """Bind placement to a genuine immutable simulation cloud without camera records."""
+    from ada_grasp_ctrl.pipeline.observation import read_observation
+
+    info, points, _ = read_observation(object_root)
+    if info.get("source_type") != "simulation_complete_mesh":
+        raise ValueError("Expected simulation provenance")
+    plane_path = resolve_from_root(info["plane_path"])
+    if sha256(plane_path) != info["plane_sha256"]:
+        raise ValueError("Table changed after scene confirmation")
+    plane = json.loads(plane_path.read_text())
+    root.mkdir()
+    np.savez_compressed(root / "snapshot.npz", object_points_world_m=points, table_normal_world=plane["normal_xyz"])
+    write_json(root / "source_object.json", info)
+    write_json(root / "robot_state.json", state)
+    metadata = dict(
+        frame_id="world",
+        unit="m",
+        source_type=info["source_type"],
+        simulation_source=info["simulation_source"],
+        source_object_sha256=info["object_sha256"],
+        table_plane_sha256=info["plane_sha256"],
+        snapshot_sha256=sha256(root / "snapshot.npz"),
+        rotation_convention="active column vectors: v_new=R_relative@v; row points use @R_relative.T",
+        preview_transform="(points_world_m-observed_centroid)@R_relative.T+observed_centroid",
+        preview_translation="centroid retained for orientation review; contact height undetermined",
+        target_support_normal=(-np.asarray(plane["normal_xyz"])).tolist(),
+    )
+    session = PlacementSession(root, points, info["object_sha256"], metadata)
+    session.save_candidates()
+    return session

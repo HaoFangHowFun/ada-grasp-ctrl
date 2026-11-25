@@ -17,17 +17,19 @@ class PlacementPanel:
 
     def __init__(self, server: Any, session: PlacementSession, infer: Callable[[], list[dict]] | None) -> None:
         self.session, self.infer = session, infer
+        self.active = True
         self.lock = threading.RLock()
-        with np.load(session.root / "snapshot.npz", allow_pickle=False) as data:
-            environment = data["environment_points_world_m"]
-            # Hide captured object pixels in the background to avoid a stale duplicate.
-            mask = np.ones(len(environment), dtype=bool)
-            mask[data["object_source_indices"]] = False
-            environment = environment[mask]
-        stride = max(1, int(np.ceil(len(environment) / 40000)))
-        server.scene.add_point_cloud(
-            "/environment", points=environment[::stride], colors=(155, 155, 155), point_size=0.002
-        )
+        if session.metadata.get("source_type") != "simulation_complete_mesh":
+            with np.load(session.root / "snapshot.npz", allow_pickle=False) as data:
+                environment = data["environment_points_world_m"]
+                # Hide captured object pixels in the background to avoid a stale duplicate.
+                mask = np.ones(len(environment), dtype=bool)
+                mask[data["object_source_indices"]] = False
+                environment = environment[mask]
+            stride = max(1, int(np.ceil(len(environment) / 40000)))
+            server.scene.add_point_cloud(
+                "/environment", points=environment[::stride], colors=(155, 155, 155), point_size=0.002
+            )
         self.cloud = server.scene.add_point_cloud(
             "/object", points=session.points, colors=(80, 200, 80), point_size=0.003, precision="float32"
         )
@@ -36,7 +38,7 @@ class PlacementPanel:
         server.initial_camera.look_at = tuple(center)
         server.initial_camera.up = (0, 0, 1)
         server.gui.add_markdown(
-            "**Placement Selection**\n\nOrientation preview from the captured partial cloud. "
+            "**Placement Selection**\n\nOrientation preview from the immutable observed cloud. "
             "P00 preserves the original orientation. Stability, contact height and collision clearance are unverified."
         )
         self.run_button = server.gui.add_button("Run UOP-Net once")
@@ -81,18 +83,22 @@ class PlacementPanel:
     def switch(self, _: object = None) -> None:
         """Update only the object geometry; the environment and model remain untouched."""
         with self.lock:
+            if not self.active:
+                return
             self.cloud.points = self.session.select(self.choice.value.split(" — ")[0])
             self.refresh()
 
     def run(self, _: object = None) -> None:
         """Disable the one-shot action before dispatching the existing UOP environment."""
         with self.lock:
-            if self.infer is None or self.session.inference_status != "not_run":
+            if not self.active or self.infer is None or self.session.inference_status != "not_run":
                 return
             self.run_button.disabled = True
             self.confirm_button.disabled = True
             self.notice.content = "Running UOP-Net on the saved snapshot…"
             self.session.infer_once(self.infer)
+            if not self.active:
+                return
             self.choice.options = self.options()
             self.confirm_button.disabled = False
             self.notice.content = "Candidates cached. Select an orientation, then Confirm Placement."
@@ -101,6 +107,8 @@ class PlacementPanel:
     def confirm(self, _: object = None) -> None:
         """Persist the selected orientation and stop at the phase boundary."""
         with self.lock:
+            if not self.active:
+                return
             try:
                 # Browser updates may be queued on another callback thread.
                 self.cloud.points = self.session.select(self.choice.value.split(" — ")[0])

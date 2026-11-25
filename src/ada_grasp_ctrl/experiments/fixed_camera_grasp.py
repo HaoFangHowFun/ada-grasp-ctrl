@@ -14,7 +14,7 @@ import yaml
 
 from ada_grasp_ctrl.paths import resolve_external_root, resolve_from_root
 from .fixed_camera import read_json, write_json
-from .fixed_camera_geometry import file_hash, rigid, transform
+from .fixed_camera_geometry import file_hash, rigid
 
 STAGES = ("pregrasp", "grasp", "squeeze")
 
@@ -47,7 +47,7 @@ def preprocess(points: np.ndarray, count: int, seed: int) -> tuple[np.ndarray, d
 
 
 def decode_candidates(
-    raw: np.ndarray, scores: np.ndarray, joint_names: list[str], preprocessing: dict, world_color: np.ndarray
+    raw: np.ndarray, scores: np.ndarray, joint_names: list[str], preprocessing: dict, world_color: np.ndarray | None
 ) -> list[dict]:
     """Decode all three predicted world-flange stages without pregrasp extrapolation.
 
@@ -65,7 +65,7 @@ def decode_candidates(
     if preprocessing["frame_id"] != "world" or preprocessing["scale"] != 1.0:
         raise ValueError("This checkpoint adapter supports centered metric world points only")
     center = np.asarray(preprocessing["center_world_m"])
-    color_world = np.linalg.inv(rigid(world_color))
+    color_world = np.linalg.inv(rigid(world_color)) if world_color is not None else None
     candidates = []
     for index, candidate in enumerate(raw):
         stages = {}
@@ -76,16 +76,18 @@ def decode_candidates(
             matrix = np.eye(4)
             matrix[:3, :3] = Rotation.from_quat(quat[[1, 2, 3, 0]]).as_matrix()
             matrix[:3, 3] = values[:3] + center
-            camera_hand = color_world @ matrix
-            roundtrip = float(np.max(np.abs(rigid(world_color) @ camera_hand - matrix)))
+            camera_fields = {}
+            if color_world is not None:
+                camera_hand = color_world @ matrix
+                roundtrip = float(np.max(np.abs(rigid(world_color) @ camera_hand - matrix)))
+                camera_fields = dict(T_color_hand=camera_hand.tolist(), camera_world_roundtrip_max=roundtrip)
             stages[name] = dict(
                 frame_id="world",
                 pose_frame="right_hand_flange",
                 position_m=matrix[:3, 3].tolist(),
                 quaternion_wxyz=quat.tolist(),
                 T_world_hand=matrix.tolist(),
-                T_color_hand=camera_hand.tolist(),
-                camera_world_roundtrip_max=roundtrip,
+                **camera_fields,
                 joint_positions_rad=dict(zip(joint_names, values[7:29].tolist())),
             )
         candidates.append(dict(candidate_id=f"c{index:04d}", log_probability=float(scores[index]), stages=stages))
@@ -102,12 +104,10 @@ def infer(args: argparse.Namespace, output: Path) -> dict:
         raise ValueError("Object table has not been accepted; --allow-unaccepted is diagnostic preview only")
     if file_hash(object_root / "object.npz") != info["object_sha256"]:
         raise ValueError("Object snapshot hash mismatch")
-    with np.load(object_root / "object.npz", allow_pickle=False) as archive:
-        points = archive["points_world_m"]
-        color_points = archive["points_color_m"]
-        world_color = rigid(archive["T_world_color"])
-    if not np.allclose(transform(color_points, world_color), points, atol=1e-7, rtol=0):
-        raise ValueError("Object camera/world round-trip failed")
+    from ada_grasp_ctrl.pipeline.observation import read_observation, source_provenance
+
+    info, points, camera_arrays = read_observation(object_root)
+    world_color = camera_arrays.get("T_world_color")
     checkpoint = resolve_from_root(args.checkpoint)
     training_config = resolve_from_root(args.training_config)
     metadata_path = resolve_from_root(args.metadata)
@@ -136,12 +136,14 @@ def infer(args: argparse.Namespace, output: Path) -> dict:
     OmegaConf.save(model_config, output / "resolved_model_config.yaml")
     normalized, preprocessing = preprocess(points, int(config.data.point_cloud.num_points), args.seed)
     preprocessing["training_point_source"] = "complete"
-    preprocessing["input_point_source"] = "single-view partial measured cloud; distribution shift unvalidated"
+    preprocessing["input_point_source"] = info.get(
+        "source_type", "single-view partial measured cloud; distribution shift unvalidated"
+    )
     np.savez_compressed(
         output / "preprocessing.npz",
         normalized_points_m=normalized,
         sampled_world_points_m=points[np.asarray(preprocessing["indices"])],
-        T_world_color=world_color,
+        **camera_arrays,
     )
     write_json(output / "preprocessing.json", preprocessing)
     model_module = importlib.import_module("dexlearn.network.models.robot_hierarchical")
@@ -190,7 +192,7 @@ def infer(args: argparse.Namespace, output: Path) -> dict:
         candidates=candidates,
         object_root=str(object_root),
         object_sha256=info["object_sha256"],
-        calibration=info["extrinsics"],
+        **source_provenance(info),
         table_status=info["table_status"],
         checkpoint=dict(path=str(checkpoint), sha256=file_hash(checkpoint), iteration=int(state["iter"])),
         training_config=dict(path=str(training_config), sha256=file_hash(training_config)),

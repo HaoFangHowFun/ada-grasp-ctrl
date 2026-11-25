@@ -1,0 +1,507 @@
+schema_version: 1
+source: Existing local DGN 2k quick subset; no new assets copied or downloaded.
+clearance_m: 0.001
+support_pose_validation:
+  reports:
+  - output/simulation/support_pose_20261124_155149/report.json
+  - output/simulation/support_refine_20261124_155730/report.json
+  - output/simulation/container_window_20261124_155936/report.json
+  yaw_deg: [0, 90, 180, 270]
+  description: Actual MuJoCo settling, finite footprint and 2 mm penetration checks at default scales.
+# Interactive scene initialization only; grasp retention thresholds are separate.
+settling:
+  timeout_s: 10.0
+  window_s: 0.5
+  position_span_m: 0.003
+  orientation_span_deg: 2.0
+default_xy_m:
+- 0.45
+- -0.45
+table:
+  center_xy_m:
+  - 0.35
+  - -0.4
+  half_extents_xy_m:
+  - 0.6
+  - 0.7
+  thickness_m: 0.04
+  assumptions: Explicit 1.2 x 1.4 m laboratory footprint assumption; physical boundaries
+    unmeasured. Top follows current dual pipeline plane, preserving its acceptance
+    status.
+objects:
+- id: core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06
+  # Fixed support rotation in the tabletop frame, WXYZ.
+  support_quaternion_wxyz: [0.8640860502563731, 0.1059585822579308, 0.47534908760359973, -0.12716651097146273]
+  label: Mug
+  mesh: examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/mesh/simplified.obj
+  mesh_sha256: 1006a3903219ad0ca22f91f4d33de9fd6367c08afe94614dd8a4a8f206582d8e
+  collision_meshes:
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_000.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_001.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_002.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_003.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_004.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_005.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_006.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_007.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_008.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_009.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_010.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_011.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_012.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_013.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_014.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_015.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_016.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_017.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_018.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_019.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_020.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_021.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_022.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_023.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_024.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_025.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_026.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_027.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_028.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_029.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_030.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_031.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_032.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_033.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_034.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_035.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_036.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_037.obj
+  - examples/assets/object/DGN_2k/processed_data/core_mug_a3cd44bbd3ba5b019a4cbf5d3b79df06/urdf/meshes/convex_piece_038.obj
+  nominal_dimensions_m:
+  - 0.131775154
+  - 0.1762938296
+  - 0.178944549
+  default_scale: 0.14
+  scale_range:
+  - 0.06
+  - 0.32
+  rpy_deg:
+  - 0
+  - 0
+  - 0
+  physics:
+    mass_kg: 0.1
+    friction:
+    - 0.8
+    - 0.02
+    - 0.001
+    assumptions: Existing config/simulation_scene.yaml diagnostic 100 g and friction;
+      not measured. Fixed mass across scales; equal mass per convex piece, uniform
+      density inertia.
+- id: core_bottle_15787789482f045d8add95bf56d3d2fa
+  # Fixed support rotation in the tabletop frame, WXYZ.
+  support_quaternion_wxyz: [0.7071067811865476, 0.7071067811865475, 0.0, 0.0]
+  label: Bottle
+  mesh: examples/assets/object/DGN_2k/processed_data/core_bottle_15787789482f045d8add95bf56d3d2fa/mesh/simplified.obj
+  mesh_sha256: 3df6b22766dec5dcf1a4d550790c5220eb0e5a71c5513cc076009b76d15e2035
+  collision_meshes:
+  - examples/assets/object/DGN_2k/processed_data/core_bottle_15787789482f045d8add95bf56d3d2fa/urdf/meshes/convex_piece_000.obj
+  - examples/assets/object/DGN_2k/processed_data/core_bottle_15787789482f045d8add95bf56d3d2fa/urdf/meshes/convex_piece_001.obj
+  nominal_dimensions_m:
+  - 0.1106786688
+  - 0.28442708
+  - 0.1110686256
+  default_scale: 0.16
+  scale_range:
+  - 0.06
+  - 0.32
+  rpy_deg:
+  - 0
+  - 0
+  - 0
+  physics:
+    mass_kg: 0.1
+    friction:
+    - 0.8
+    - 0.02
+    - 0.001
+    assumptions: Existing config/simulation_scene.yaml diagnostic 100 g and friction;
+      not measured. Fixed mass across scales; equal mass per convex piece, uniform
+      density inertia.
+- id: sem_MilkCarton_2546e080ae36044d25924baa64fe1af2
+  # Fixed support rotation in the tabletop frame, WXYZ.
+  support_quaternion_wxyz: [0.9999935395712654, 0.00021335932741021178, 2.4936339288375186e-05, -0.003588129277004986]
+  label: Milk carton
+  mesh: examples/assets/object/DGN_2k/processed_data/sem_MilkCarton_2546e080ae36044d25924baa64fe1af2/mesh/simplified.obj
+  mesh_sha256: cd315a187d87fe17448c3d0b816cd02410654607669de5e0df4b99fabe5c7381
+  collision_meshes:
+  - examples/assets/object/DGN_2k/processed_data/sem_MilkCarton_2546e080ae36044d25924baa64fe1af2/urdf/meshes/convex_piece_000.obj
+  - examples/assets/object/DGN_2k/processed_data/sem_MilkCarton_2546e080ae36044d25924baa64fe1af2/urdf/meshes/convex_piece_001.obj
+  nominal_dimensions_m:
+  - 0.1556206146
+  - 0.1556968886
+  - 0.3889717898
+  default_scale: 0.22
+  scale_range:
+  - 0.06
+  - 0.32
+  rpy_deg:
+  - 0
+  - 0
+  - 0
+  physics:
+    mass_kg: 0.1
+    friction:
+    - 0.8
+    - 0.02
+    - 0.001
+    assumptions: Existing config/simulation_scene.yaml diagnostic 100 g and friction;
+      not measured. Fixed mass across scales; equal mass per convex piece, uniform
+      density inertia.
+- id: ddg_gd_box_poisson_020
+  # Fixed support rotation in the tabletop frame, WXYZ.
+  support_quaternion_wxyz: [0.9999999103951447, -1.2485579128744338e-06, -5.995903007928003e-05, 0.00041906211783823466]
+  label: Box
+  mesh: examples/assets/object/DGN_2k/processed_data/ddg_gd_box_poisson_020/mesh/simplified.obj
+  mesh_sha256: 5c21d65a3fd49e8b7f1a71b274b2e5ddd1428f1531396c4fdcbb02dc4a3a0396
+  collision_meshes:
+  - examples/assets/object/DGN_2k/processed_data/ddg_gd_box_poisson_020/urdf/meshes/convex_piece_000.obj
+  nominal_dimensions_m:
+  - 0.2764039992
+  - 0.08433214079999998
+  - 0.3848416176
+  default_scale: 0.24
+  scale_range:
+  - 0.06
+  - 0.32
+  rpy_deg:
+  - 0
+  - 0
+  - 0
+  physics:
+    mass_kg: 0.1
+    friction:
+    - 0.8
+    - 0.02
+    - 0.001
+    assumptions: Existing config/simulation_scene.yaml diagnostic 100 g and friction;
+      not measured. Fixed mass across scales; equal mass per convex piece, uniform
+      density inertia.
+- id: sem_Detergent_547fa0085800c5c3846564a8a219239b
+  # Fixed support rotation in the tabletop frame, WXYZ.
+  support_quaternion_wxyz: [0.9999993133837728, -0.00023972904001630176, -0.0009071761579825405, -0.0007019924421413909]
+  label: Detergent
+  mesh: examples/assets/object/DGN_2k/processed_data/sem_Detergent_547fa0085800c5c3846564a8a219239b/mesh/simplified.obj
+  mesh_sha256: d3294bb1d73759cf4465b70b6d19262e3a5aecfb60192c961d554a51a86acf97
+  collision_meshes:
+  - examples/assets/object/DGN_2k/processed_data/sem_Detergent_547fa0085800c5c3846564a8a219239b/urdf/meshes/convex_piece_000.obj
+  - examples/assets/object/DGN_2k/processed_data/sem_Detergent_547fa0085800c5c3846564a8a219239b/urdf/meshes/convex_piece_001.obj
+  - examples/assets/object/DGN_2k/processed_data/sem_Detergent_547fa0085800c5c3846564a8a219239b/urdf/meshes/convex_piece_002.obj
+  - examples/assets/object/DGN_2k/processed_data/sem_Detergent_547fa0085800c5c3846564a8a219239b/urdf/meshes/convex_piece_003.obj
+  - examples/assets/object/DGN_2k/processed_data/sem_Detergent_547fa0085800c5c3846564a8a219239b/urdf/meshes/convex_piece_004.obj
+  - examples/assets/object/DGN_2k/processed_data/sem_Detergent_547fa0085800c5c3846564a8a219239b/urdf/meshes/convex_piece_005.obj
+  - examples/assets/object/DGN_2k/processed_data/sem_Detergent_547fa0085800c5c3846564a8a219239b/urdf/meshes/convex_piece_006.obj
+  - examples/assets/object/DGN_2k/processed_data/sem_Detergent_547fa0085800c5c3846564a8a219239b/urdf/meshes/convex_piece_007.obj
+  - examples/assets/object/DGN_2k/processed_data/sem_Detergent_547fa0085800c5c3846564a8a219239b/urdf/meshes/convex_piece_008.obj
+  - examples/assets/object/DGN_2k/processed_data/sem_Detergent_547fa0085800c5c3846564a8a219239b/urdf/meshes/convex_piece_009.obj
+  nominal_dimensions_m:
+  - 0.2451395914
+  - 0.12148624619999998
+  - 0.351106459
+  default_scale: 0.22
+  scale_range:
+  - 0.06
+  - 0.32
+  rpy_deg:
+  - 0
+  - 0
+  - 0
+  physics:
+    mass_kg: 0.1
+    friction:
+    - 0.8
+    - 0.02
+    - 0.001
+    assumptions: Existing config/simulation_scene.yaml diagnostic 100 g and friction;
+      not measured. Fixed mass across scales; equal mass per convex piece, uniform
+      density inertia.
+- id: ddg_gd_can_poisson_016
+  # Fixed support rotation in the tabletop frame, WXYZ.
+  support_quaternion_wxyz: [0.9999989417870169, -5.89874119351988e-05, -0.0014534004690102465, -2.3925056329052363e-05]
+  label: Can
+  mesh: examples/assets/object/DGN_2k/processed_data/ddg_gd_can_poisson_016/mesh/simplified.obj
+  mesh_sha256: a5ebb09093a0e55bb2207a25aa8d80a26003fda4f820325b5f8f45f45023a5fe
+  collision_meshes:
+  - examples/assets/object/DGN_2k/processed_data/ddg_gd_can_poisson_016/urdf/meshes/convex_piece_000.obj
+  nominal_dimensions_m:
+  - 0.1482013744
+  - 0.1482276016
+  - 0.2428640832
+  default_scale: 0.16
+  scale_range:
+  - 0.06
+  - 0.32
+  rpy_deg:
+  - 0
+  - 0
+  - 0
+  physics:
+    mass_kg: 0.1
+    friction:
+    - 0.8
+    - 0.02
+    - 0.001
+    assumptions: Existing config/simulation_scene.yaml diagnostic 100 g and friction;
+      not measured. Fixed mass across scales; equal mass per convex piece, uniform
+      density inertia.
+- id: core_jar_32dc55c3e945384dbc5e533ab711fd24
+  # Fixed support rotation in the tabletop frame, WXYZ.
+  support_quaternion_wxyz: [0.8948235885896613, 0.09414101320859544, 0.4355796000603246, -0.026431552108557892]
+  label: Jar
+  mesh: examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/mesh/simplified.obj
+  mesh_sha256: 1f2242983fc44fc394908f69b61ac440b7e81c784f7bf453b5f4a62fcdd42741
+  collision_meshes:
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_000.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_001.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_002.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_003.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_004.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_005.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_006.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_007.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_008.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_009.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_010.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_011.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_012.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_013.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_014.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_015.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_016.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_017.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_018.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_019.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_020.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_021.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_022.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_023.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_024.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_025.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_026.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_027.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_028.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_029.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_030.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_031.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_032.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_033.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_034.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_035.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_036.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_037.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_038.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_039.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_040.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_041.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_042.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_043.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_044.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_045.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_046.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_047.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_048.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_049.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_050.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_051.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_052.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_053.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_054.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_055.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_056.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_057.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_058.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_059.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_060.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_061.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_062.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_063.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_064.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_065.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_066.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_067.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_068.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_069.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_070.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_071.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_072.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_073.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_074.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_075.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_076.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_077.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_078.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_079.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_080.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_081.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_082.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_083.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_084.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_085.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_086.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_087.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_088.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_089.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_090.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_091.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_092.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_093.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_094.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_095.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_096.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_097.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_098.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_099.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_100.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_101.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_102.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_103.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_104.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_105.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_106.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_107.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_108.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_109.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_110.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_111.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_112.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_113.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_114.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_115.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_116.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_117.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_118.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_119.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_120.obj
+  - examples/assets/object/DGN_2k/processed_data/core_jar_32dc55c3e945384dbc5e533ab711fd24/urdf/meshes/convex_piece_121.obj
+  nominal_dimensions_m:
+  - 0.132930054
+  - 0.30784000499999997
+  - 0.133256736
+  default_scale: 0.18
+  scale_range:
+  - 0.06
+  - 0.32
+  rpy_deg:
+  - 0
+  - 0
+  - 0
+  physics:
+    mass_kg: 0.1
+    friction:
+    - 0.8
+    - 0.02
+    - 0.001
+    assumptions: Existing config/simulation_scene.yaml diagnostic 100 g and friction;
+      not measured. Fixed mass across scales; equal mass per convex piece, uniform
+      density inertia.
+- id: core_bowl_b65cbede8f483d51f7de4d28691515e1
+  # Fixed support rotation in the tabletop frame, WXYZ.
+  support_quaternion_wxyz: [0.7071054472980365, -0.7071052580829251, 0.0014213987067061968, -0.0014212735978739665]
+  label: Bowl
+  mesh: examples/assets/object/DGN_2k/processed_data/core_bowl_b65cbede8f483d51f7de4d28691515e1/mesh/simplified.obj
+  mesh_sha256: 98298e1b0d646aec1f4324bfb2ce175ad39fc314ff5d24c862db3c770c072fc5
+  collision_meshes:
+  - examples/assets/object/DGN_2k/processed_data/core_bowl_b65cbede8f483d51f7de4d28691515e1/urdf/meshes/convex_piece_000.obj
+  - examples/assets/object/DGN_2k/processed_data/core_bowl_b65cbede8f483d51f7de4d28691515e1/urdf/meshes/convex_piece_001.obj
+  - examples/assets/object/DGN_2k/processed_data/core_bowl_b65cbede8f483d51f7de4d28691515e1/urdf/meshes/convex_piece_002.obj
+  - examples/assets/object/DGN_2k/processed_data/core_bowl_b65cbede8f483d51f7de4d28691515e1/urdf/meshes/convex_piece_003.obj
+  - examples/assets/object/DGN_2k/processed_data/core_bowl_b65cbede8f483d51f7de4d28691515e1/urdf/meshes/convex_piece_004.obj
+  - examples/assets/object/DGN_2k/processed_data/core_bowl_b65cbede8f483d51f7de4d28691515e1/urdf/meshes/convex_piece_005.obj
+  - examples/assets/object/DGN_2k/processed_data/core_bowl_b65cbede8f483d51f7de4d28691515e1/urdf/meshes/convex_piece_006.obj
+  - examples/assets/object/DGN_2k/processed_data/core_bowl_b65cbede8f483d51f7de4d28691515e1/urdf/meshes/convex_piece_007.obj
+  - examples/assets/object/DGN_2k/processed_data/core_bowl_b65cbede8f483d51f7de4d28691515e1/urdf/meshes/convex_piece_008.obj
+  - examples/assets/object/DGN_2k/processed_data/core_bowl_b65cbede8f483d51f7de4d28691515e1/urdf/meshes/convex_piece_009.obj
+  - examples/assets/object/DGN_2k/processed_data/core_bowl_b65cbede8f483d51f7de4d28691515e1/urdf/meshes/convex_piece_010.obj
+  - examples/assets/object/DGN_2k/processed_data/core_bowl_b65cbede8f483d51f7de4d28691515e1/urdf/meshes/convex_piece_011.obj
+  - examples/assets/object/DGN_2k/processed_data/core_bowl_b65cbede8f483d51f7de4d28691515e1/urdf/meshes/convex_piece_012.obj
+  - examples/assets/object/DGN_2k/processed_data/core_bowl_b65cbede8f483d51f7de4d28691515e1/urdf/meshes/convex_piece_013.obj
+  - examples/assets/object/DGN_2k/processed_data/core_bowl_b65cbede8f483d51f7de4d28691515e1/urdf/meshes/convex_piece_014.obj
+  nominal_dimensions_m:
+  - 0.303266988
+  - 0.22698823199999998
+  - 0.30275364959999995
+  default_scale: 0.24
+  scale_range:
+  - 0.06
+  - 0.32
+  rpy_deg:
+  - 0
+  - 0
+  - 0
+  physics:
+    mass_kg: 0.1
+    friction:
+    - 0.8
+    - 0.02
+    - 0.001
+    assumptions: Existing config/simulation_scene.yaml diagnostic 100 g and friction;
+      not measured. Fixed mass across scales; equal mass per convex piece, uniform
+      density inertia.
+- id: sem_Book_cc0e864645032185d2d64d0098518cf
+  # Fixed support rotation in the tabletop frame, WXYZ.
+  support_quaternion_wxyz: [0.7071067811865477, 0.7071067811865475, 0.0, 0.0]
+  label: Book
+  mesh: examples/assets/object/DGN_2k/processed_data/sem_Book_cc0e864645032185d2d64d0098518cf/mesh/simplified.obj
+  mesh_sha256: ac49f92cc5538430887d926bd907637b3c53cb4812244a3bdd81343bd6f73815
+  collision_meshes:
+  - examples/assets/object/DGN_2k/processed_data/sem_Book_cc0e864645032185d2d64d0098518cf/urdf/meshes/convex_piece_000.obj
+  - examples/assets/object/DGN_2k/processed_data/sem_Book_cc0e864645032185d2d64d0098518cf/urdf/meshes/convex_piece_001.obj
+  - examples/assets/object/DGN_2k/processed_data/sem_Book_cc0e864645032185d2d64d0098518cf/urdf/meshes/convex_piece_002.obj
+  nominal_dimensions_m:
+  - 0.309970375
+  - 0.42024357700000003
+  - 0.08393110699999999
+  default_scale: 0.26
+  scale_range:
+  - 0.06
+  - 0.32
+  rpy_deg:
+  - 0
+  - 0
+  - 0
+  physics:
+    mass_kg: 0.1
+    friction:
+    - 0.8
+    - 0.02
+    - 0.001
+    assumptions: Existing config/simulation_scene.yaml diagnostic 100 g and friction;
+      not measured. Fixed mass across scales; equal mass per convex piece, uniform
+      density inertia.
+- id: ddg_kit_HotPot2
+  # Fixed support rotation in the tabletop frame, WXYZ.
+  support_quaternion_wxyz: [-0.018936723106339964, 0.018374709858662363, 0.6961343436828917, 0.7174264743517577]
+  label: Container
+  mesh: examples/assets/object/DGN_2k/processed_data/ddg_kit_HotPot2/mesh/simplified.obj
+  mesh_sha256: 031ab45a3a7743aac4e0bb698ea0f7b52dc4613c4fe07e550b291737d0482581
+  collision_meshes:
+  - examples/assets/object/DGN_2k/processed_data/ddg_kit_HotPot2/urdf/meshes/convex_piece_000.obj
+  nominal_dimensions_m:
+  - 0.164822016
+  - 0.3598292544
+  - 0.2738655
+  default_scale: 0.24
+  scale_range:
+  - 0.06
+  - 0.32
+  rpy_deg:
+  - 0
+  - 0
+  - 0
+  physics:
+    mass_kg: 0.1
+    friction:
+    - 0.8
+    - 0.02
+    - 0.001
+    assumptions: Existing config/simulation_scene.yaml diagnostic 100 g and friction;
+      not measured. Fixed mass across scales; equal mass per convex piece, uniform
+      density inertia.

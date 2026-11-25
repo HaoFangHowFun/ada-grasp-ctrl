@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import asdict
+import json
+from typing import Callable
 import shutil
 
 import mujoco
@@ -148,7 +151,7 @@ class ObjectScene:
     def __init__(self, config: dict, output: Path) -> None:
         self.config, self.output = config, output
         self.robot = DualArmModel.load(resolve_from_root(config["scene"]["robot_snapshot"]))
-        obj, camera = config["object"], config["camera"]
+        obj, camera = config["object"], config.get("camera")
         scale = vector(obj["scale"], 3, "object.scale")
         if np.any(scale <= 0):
             raise ValueError("object.scale must be positive")
@@ -176,11 +179,22 @@ class ObjectScene:
                 raise ValueError("Physics requires explicit collision_meshes (visual mesh may be listed explicitly)")
         else:
             mass, friction = 0.0, np.zeros(3)
+        self.gravity_mode = config["scene"].get("gravity_mode", "world")
+        if self.gravity_mode not in ("world", "object_only"):
+            raise ValueError("scene.gravity_mode must be world or object_only")
+        if self.gravity_mode == "object_only" and not self.physics_available:
+            raise ValueError("object_only gravity requires a free object with declared mass")
         spec = self.robot.spec.copy()
+        if self.gravity_mode == "object_only":
+            spec.option.disableflags |= mujoco.mjtDisableBit.mjDSBL_GRAVITY
         exclude_adjacent_base_contacts(spec)
         table = None
         if "table_half_extents_xy_m" in config["scene"]:
             table = enlarge_table_footprint(spec, config["scene"]["table_half_extents_xy_m"])
+        if "table_plane" in config["scene"]:
+            from ada_grasp_ctrl.pipeline.simulation_scene import install_table
+
+            table = install_table(spec, config["scene"]["table_plane"], config["scene"]["table"])
         spec.add_mesh(name="phase2_visual", file=str(geometry / "visual.stl"))
         body = spec.worldbody.add_body(name="object", pos=position, quat=quat)
         if self.physics_available:
@@ -222,41 +236,61 @@ class ObjectScene:
                 group=3,
                 mass=0,
             )
-        eye = vector(camera["position_world_m"], 3, "camera.position")
-        center = vector(camera["look_at_world_m"], 3, "camera.look_at")
-        z = eye - center
-        if np.linalg.norm(z) < 1e-8:
-            raise ValueError("Camera position and look_at coincide")
-        z /= np.linalg.norm(z)
-        up = vector(camera.get("up_world", [0, 0, 1]), 3, "camera.up")
-        x = np.cross(up, z)
-        if np.linalg.norm(x) < 1e-8:
-            raise ValueError("Camera up is parallel to viewing direction")
-        x /= np.linalg.norm(x)
-        y = np.cross(z, x)
-        rotation = np.column_stack((x, y, z))
-        self.width, self.height = int(camera["width"]), int(camera["height"])
-        if self.width != camera["width"] or self.height != camera["height"] or min(self.width, self.height) < 2:
-            raise ValueError("Camera dimensions must be integers >= 2")
-        fovy = positive(camera["fovy_deg"], "camera.fovy")
-        if fovy >= 179:
-            raise ValueError("Camera fovy must be < 179 degrees")
-        self.near, self.far = positive(camera["near_m"], "near"), positive(camera["far_m"], "far")
-        if self.near >= self.far:
-            raise ValueError("camera.near_m must be below far_m")
-        self.camera_name = camera["name"]
-        spec.worldbody.add_camera(
-            name=self.camera_name, pos=eye, quat=Rotation.from_matrix(rotation).as_quat()[[3, 0, 1, 2]], fovy=fovy
-        )
+        if camera is not None:
+            eye = vector(camera["position_world_m"], 3, "camera.position")
+            center = vector(camera["look_at_world_m"], 3, "camera.look_at")
+            z = eye - center
+            if np.linalg.norm(z) < 1e-8:
+                raise ValueError("Camera position and look_at coincide")
+            z /= np.linalg.norm(z)
+            up = vector(camera.get("up_world", [0, 0, 1]), 3, "camera.up")
+            x = np.cross(up, z)
+            if np.linalg.norm(x) < 1e-8:
+                raise ValueError("Camera up is parallel to viewing direction")
+            x /= np.linalg.norm(x)
+            y = np.cross(z, x)
+            rotation = np.column_stack((x, y, z))
+            self.width, self.height = int(camera["width"]), int(camera["height"])
+            if self.width != camera["width"] or self.height != camera["height"] or min(self.width, self.height) < 2:
+                raise ValueError("Camera dimensions must be integers >= 2")
+            fovy = positive(camera["fovy_deg"], "camera.fovy")
+            if fovy >= 179:
+                raise ValueError("Camera fovy must be < 179 degrees")
+            self.near, self.far = positive(camera["near_m"], "near"), positive(camera["far_m"], "far")
+            if self.near >= self.far:
+                raise ValueError("camera.near_m must be below far_m")
+            self.camera_name = camera["name"]
+            spec.worldbody.add_camera(
+                name=self.camera_name, pos=eye, quat=Rotation.from_matrix(rotation).as_quat()[[3, 0, 1, 2]], fovy=fovy
+            )
         profile = apply_contact_profile(spec, config["scene"].get("contact_profile", "source"), friction)
-        self.sim = DualArmSimulation(self.robot, scene_spec=spec, object_bodies=("object",))
-        self.sim.model.vis.global_.offwidth = max(640, self.width)
-        self.sim.model.vis.global_.offheight = max(480, self.height)
-        self.sim.model.vis.map.znear = self.near / self.sim.model.stat.extent
-        self.sim.model.vis.map.zfar = self.far / self.sim.model.stat.extent
+        self.sim = DualArmSimulation(
+            self.robot,
+            scene_spec=spec,
+            object_bodies=("object",),
+            table_bodies=("calibration_table_surface", "simulation_table")
+            if "table_plane" in config["scene"]
+            else ("calibration_table_surface",),
+        )
+        if camera is not None:
+            self.sim.model.vis.global_.offwidth = max(640, self.width)
+            self.sim.model.vis.global_.offheight = max(480, self.height)
+            self.sim.model.vis.map.znear = self.near / self.sim.model.stat.extent
+            self.sim.model.vis.map.zfar = self.far / self.sim.model.stat.extent
         self.sim.reset(initial_configuration(self.robot, config["scene"]))
         self.initial_q = self.sim.configuration()
+        if self.gravity_mode == "object_only":
+            self.apply_forces()
         self.metadata = dict(
+            gravity_environment=dict(
+                mode=self.gravity_mode,
+                global_gravity_enabled=not bool(self.sim.model.opt.disableflags & mujoco.mjtDisableBit.mjDSBL_GRAVITY),
+                object_force_world_n=[0.0, 0.0, -10.0 * float(self.sim.model.body("object").mass[0])]
+                if self.gravity_mode == "object_only"
+                else [0.0, 0.0, 0.0],
+                arm_bias_compensation=self.gravity_mode == "world"
+                and bool(config.get("execution", {}).get("arm_bias_compensation", False)),
+            ),
             mesh_path=str(source),
             mesh_sha256=file_hash(source),
             scale=scale.tolist(),
@@ -275,17 +309,37 @@ class ObjectScene:
         if profile is not None:
             self.metadata["contact_profile"] = profile
 
-    def settle(self) -> None:
+    def apply_forces(self) -> None:
+        """Apply the configured gravity environment before every settling/execution step.
+
+        Historical object-only gravity disables MuJoCo gravity globally and applies
+        mass times 10 m/s² at the object's center of mass, without arm feedforward.
+        Legacy scenes retain their optional bounded arm bias compensation.
+        """
+        if self.gravity_mode == "object_only":
+            body = self.sim.model.body("object")
+            self.sim.data.xfrc_applied[body.id] = [0, 0, -10.0 * float(body.mass[0]), 0, 0, 0]
+            arm_dofs = self.sim.qvel[np.r_[0:6, 28:34]]
+            self.sim.data.qfrc_applied[arm_dofs] = 0
+        elif self.config.get("execution", {}).get("arm_bias_compensation", False):
+            apply_arm_bias_compensation(self.sim)
+
+    def settle(self, *, canceled: Callable[[], bool] | None = None) -> None:
         """Advance the actual object before perception; reject unstable or moved robot states."""
         placement = self.config["object"].get("placement", "explicit_pose")
         if placement == "explicit_pose":
             return
         if placement != "settle_on_table" or not self.physics_available:
             raise ValueError("settle_on_table requires declared free-object physics")
+        policy = self.config["scene"].get("settling")
+        if policy is not None:
+            self._settle_pose_window(policy, canceled)
+            return
         stable = 0
         for _ in range(2500):
-            if self.config.get("execution", {}).get("arm_bias_compensation", False):
-                apply_arm_bias_compensation(self.sim)
+            if canceled is not None and canceled():
+                raise RuntimeError("Scene settling canceled")
+            self.apply_forces()
             self.sim.step()
             if np.any(self.sim.data.warning.number):
                 raise RuntimeError("MuJoCo warning during settling")
@@ -294,6 +348,63 @@ class ObjectScene:
                 self.robot.configuration(self.sim.configuration())
                 return
         raise ValueError("Object did not settle within 5 s; check pose/table/physics")
+
+    def _settle_pose_window(self, settings: dict, canceled: Callable[[], bool] | None) -> None:
+        """Allow bounded contact jitter while retaining support, numerical and state checks."""
+        from .settling import PoseWindow, SettlingPolicy
+
+        policy = SettlingPolicy.from_config(settings)
+        window = PoseWindow(policy)
+        began = float(self.sim.data.time)
+        timestep = float(self.sim.model.opt.timestep)
+        steps = int(np.ceil(policy.timeout_s / timestep))
+        report = dict(schema_version=1, policy="pose_window", settings=asdict(policy), status="settling")
+        try:
+            for index in range(steps):
+                if canceled is not None and canceled():
+                    raise RuntimeError("Scene settling canceled")
+                self.apply_forces()
+                self.sim.step()
+                if np.any(self.sim.data.warning.number):
+                    raise RuntimeError("MuJoCo warning during settling")
+                supported = any(
+                    {self.sim.body_labels[int(self.sim.model.geom_bodyid[g])] for g in contact.geom}
+                    == {"object", "table"}
+                    for contact in self.sim.data.contact
+                )
+                now = float(self.sim.data.time)
+                window.add(now, self.sim.data.joint("object_free").qpos, supported)
+                # Sample every physics step; evaluate about every 20 ms to bound overhead.
+                if (index + 1) % max(1, round(0.02 / timestep)) and index + 1 != steps:
+                    continue
+                velocity = self.sim.data.joint("object_free").qvel
+                report.update(
+                    window.measure(),
+                    elapsed_s=now - began,
+                    linear_speed_m_s=float(np.linalg.norm(velocity[:3])),
+                    angular_speed_rad_s=float(np.linalg.norm(velocity[3:])),
+                )
+                if report["stable"]:
+                    self.robot.configuration(self.sim.configuration())
+                    report["status"] = "settled"
+                    self.metadata["settling"] = report.copy()
+                    return
+            report["status"] = "timeout"
+            raise ValueError(
+                f"Object did not settle within {policy.timeout_s:g} s: last {policy.window_s:g} s "
+                f"position span {report['position_span_m'] * 1000:.2f} mm "
+                f"(limit {policy.position_span_m * 1000:g}), rotation span "
+                f"{report['orientation_span_deg']:.2f} deg (limit {policy.orientation_span_deg:g}), "
+                f"table support={report['supported_throughout_window']}; "
+                "try another orientation; see settling_report.json"
+            )
+        except Exception as error:
+            if report["status"] != "timeout":
+                report["status"] = "canceled" if canceled is not None and canceled() else "failed"
+            report["error"] = str(error)
+            raise
+        finally:
+            (self.output / "settling_report.json").write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
 
     def cloud(self) -> tuple[np.ndarray, dict]:
         """Return a deterministic world-frame cloud from actual mesh or visible depth."""
@@ -321,7 +432,7 @@ class ObjectScene:
             frame_id="world",
             unit="m",
             T_world_object=pose.tolist(),
-            camera=self.config["camera"],
+            **({"camera": self.config["camera"]} if self.config.get("camera") is not None else {}),
         )
         np.savez_compressed(self.output / "object_cloud.npz", points_world_m=points, T_world_object=pose)
         return points, info

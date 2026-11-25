@@ -20,28 +20,12 @@ from .plan import validate_plan
 from .dual_scene import SideAdapter
 
 
-def export_dual_selection(
-    robot: object,
-    sim: object,
-    selection: dict,
-    state_path: Path,
-    object_root: Path,
-    config: dict,
-    output: Path,
-    candidates_path: Path,
-) -> Path:
-    """Export one selected side while retaining both measured branches in the reviewed plan."""
+def single_endpoints(
+    robot: object, sim: object, selection: dict, state_path: Path, object_root: Path, config: dict
+) -> tuple:
+    """Solve the existing single-side endpoints independently of transport construction."""
     chosen = selection["selected"]
-    if chosen is None:
-        raise ValueError("No feasible candidate on either enabled side")
-    if chosen["required_arms"] == ["left", "right"]:
-        from .paired_artifacts import export_paired_selection
-
-        return export_paired_selection(robot, sim, selection, state_path, object_root, config, output, candidates_path)
     side = chosen["selected_side"]
-    if chosen["required_arms"] != [side] or chosen["candidate"].get("mode", "").startswith("both_"):
-        raise ValueError("unsupported_simultaneous_hardware_execution")
-    passive = "left" if side == "right" else "right"
     state = read_json(state_path)
     q56 = robot.configuration(state["full_positions_rad"])
     adapter = SideAdapter(robot, sim, q56, side)
@@ -78,6 +62,35 @@ def export_dual_selection(
         lift["positions"][:6] + [0.0] * 22,
         start[:6] + [0.0] * 22,
     ]
+    return q56, adapter, start, poses, above, lift, phases, frames
+
+
+def export_dual_selection(
+    robot: object,
+    sim: object,
+    selection: dict,
+    state_path: Path,
+    object_root: Path,
+    config: dict,
+    output: Path,
+    candidates_path: Path,
+) -> Path:
+    """Export one selected side while retaining both measured branches in the reviewed plan."""
+    chosen = selection["selected"]
+    if chosen is None:
+        raise ValueError("No feasible candidate on either enabled side")
+    if chosen["required_arms"] == ["left", "right"]:
+        from .paired_artifacts import export_paired_selection
+
+        return export_paired_selection(robot, sim, selection, state_path, object_root, config, output, candidates_path)
+    side = chosen["selected_side"]
+    if chosen["required_arms"] != [side] or chosen["candidate"].get("mode", "").startswith("both_"):
+        raise ValueError("unsupported_simultaneous_hardware_execution")
+    q56, adapter, start, poses, above, lift, phases, frames = single_endpoints(
+        robot, sim, selection, state_path, object_root, config
+    )
+    state = read_json(state_path)
+    passive = "left" if side == "right" else "right"
     settings = bridge_config(
         dict(
             side=side,

@@ -38,3 +38,10 @@ inference_model:
   metadata:
     path: /home/hao-fang/hugs-dataset/BimanBODex_sharpa_1264k_v1/sharpa_right/right_full/metadata.json
     sha256: 284f272d6355f002cbaf3421c2b74ba18a7b986ba8a6ffeb37e738b13629f42e
+
+# Interactive MuJoCo only; shared hardware targets and receiver policies are unchanged.
+simulation:
+  squeeze_extrapolate_ratio: 2.0
+  stage_completion: timed
+  # Historical single-arm benchmark environment: no global gravity, object force = mass * -10 N/kg.
+  gravity_mode: object_only

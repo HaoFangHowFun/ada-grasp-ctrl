@@ -1,5 +1,9 @@
 # Live automatic left/right grasp pipeline
 
+For the ROS-free interactive MuJoCo environment in this same entry point, see
+[Dual MuJoCo simulation](dual-mujoco-simulation.md). It includes scene editing,
+reviewed execution to Hold, persistent Reset and placement-only orientation preview.
+
 Entry: `script/run_dual_grasp_pipeline.py`. Each invocation captures the current fixed camera,
 lets the operator select the current object, runs fresh right-full inference on the original and
 reflected object clouds, selects one feasible side/candidate, previews the full cycle, and executes

@@ -15,6 +15,7 @@ from ada_grasp_ctrl.grasp_selection.adapters.dexlearn import file_hash, read_jso
 from ada_grasp_ctrl.grasp_selection.cli import write_json
 from ada_grasp_ctrl.paths import resolve_from_root
 from .grasp_models import SINGLE_MODES, SOURCE_MODES
+from .observation import source_provenance
 
 
 def infer_live_sides(object_root: Path, config: dict, processes: object, output: Path) -> list[dict]:
@@ -42,8 +43,9 @@ def infer_live_sides(object_root: Path, config: dict, processes: object, output:
             source.mkdir()
             data = deepcopy(original)
             data["points_world_m"] = reflect_points(original["points_world_m"], plane)
-            world_color = original["T_world_color"]
-            data["points_color_m"] = (data["points_world_m"] - world_color[:3, 3]) @ world_color[:3, :3]
+            if "T_world_color" in original:
+                world_color = original["T_world_color"]
+                data["points_color_m"] = (data["points_world_m"] - world_color[:3, 3]) @ world_color[:3, :3]
             np.savez_compressed(source / "object.npz", **data)
             derived = deepcopy(info)
             derived.update(
@@ -83,8 +85,7 @@ def infer_live_sides(object_root: Path, config: dict, processes: object, output:
             inference="actual_checkpoint",
             checkpoint=payload["checkpoint"],
             metadata=payload["metadata"],
-            calibration=info["extrinsics"],
-            input_point_source="live_measured_object",
+            **source_provenance(info),
             source_object=str(object_root),
             source_object_sha256=info["object_sha256"],
             predictions=str(destination / "candidates.json"),

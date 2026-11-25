@@ -261,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="src/ada_grasp_ctrl/config/experiments/dual_grasp_pipeline.yaml")
     parser.add_argument("--output-root", required=True)
-    parser.add_argument("--environment", choices=("hardware", "mock"))
+    parser.add_argument("--environment", choices=("hardware", "mock", "simulation"))
     parser.add_argument("--ros-domain-id", type=int)
     parser.add_argument("--arms", choices=("auto", "left", "right"), default="auto")
     parser.add_argument("--selector", choices=("legacy", "hierarchical"), default="legacy")
@@ -281,6 +281,27 @@ def main(argv: list[str] | None = None) -> int:
     report = dict(schema_version=1, status="preflight", object_lifted=None, object_held=None)
     try:
         config = configuration(args.config)
+        if (args.environment or config["environment"]) == "simulation":
+            from .simulation_ui import run_simulation
+
+            if args.ros_domain_id is not None or args.roi is not None or args.cluster is not None or args.object_root:
+                raise ValueError("Simulation does not accept ROS domain, camera ROI/cluster, or captured --object-root")
+            if not args.placement_only and (args.uop_root or args.uop_python):
+                raise ValueError("Placement options require --placement-only")
+            if args.arms != "auto":
+                config["enabled_arms"] = [args.arms]
+            enabled_set(config["enabled_arms"])
+            config["grasp_mode"] = args.grasp_mode
+            if not args.placement_only:
+                configure_model(config, args.grasp_model, args.selector)
+                if args.grasp_mode == "both_only" and (
+                    args.grasp_model != "native_multimode" or set(config["enabled_arms"]) != {"left", "right"}
+                ):
+                    raise ValueError("--grasp-mode both_only requires native_multimode and both enabled arms")
+                inward_offset_limit(config.get("endpoint_inward_offset_m", 0.0))
+                if args.selector == "hierarchical" and args.grasp_model == "right_full":
+                    selector_settings(config.get("hierarchical_selector"))
+            return run_simulation(args, config, root)
         if args.placement_only:
             from ada_grasp_ctrl.placement.workflow import run_placement
 
