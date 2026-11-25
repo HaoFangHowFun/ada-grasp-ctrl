@@ -88,6 +88,44 @@ class PlacementTests(unittest.TestCase):
         np.testing.assert_array_equal(self.session.points, self.points)
         infer.assert_called_once()
 
+    def test_simulation_preview_grounds_rotated_cloud_and_round_trips_without_drift(self):
+        for normal in ([0, 0, 1], [0, 0.6, 0.8]):
+            for offset in (0.4, -0.4):
+                with self.subTest(normal=normal, offset=offset):
+                    metadata = {**self.session.metadata, "preview_table_plane_world": [*normal, offset]}
+                    session = PlacementSession(self.root, self.points, "sim-object", metadata)
+                    infer = Mock(return_value=[candidate(1, [1, 0, 0]), candidate(2, [0, 1, 0])])
+                    session.infer_once(infer)
+                    first = session.select("P01")
+                    for key in ("P02", "P01", "P02", "P01"):
+                        actual = session.select(key)
+                        distances = actual @ normal + offset
+                        self.assertGreaterEqual(distances.min(), -1e-12)
+                        self.assertAlmostEqual(distances.min(), 0, places=12)
+                        rotated = (self.points - session.center) @ np.array(session.selected.relative_rotation).T
+                        rotated += session.center
+                        np.testing.assert_array_equal(actual[:, :2], rotated[:, :2])
+                        _, shift = session.preview_geometry()
+                        if offset == 0.4:
+                            self.assertLess(shift[2], 0)
+                        else:
+                            self.assertGreater(shift[2], 0)
+                    np.testing.assert_array_equal(actual, first)
+                    saved = json.loads(session.confirm().read_text())
+                    np.testing.assert_array_equal(saved["preview_translation_world_m"], shift)
+                    self.assertEqual(saved["translation_status"], "undetermined")
+                    self.assertFalse(saved["stability_certified"])
+                    restored = PlacementSession.load(self.root)
+                    np.testing.assert_array_equal(restored.select("P01"), first)
+                    np.testing.assert_array_equal(session.select("P00"), self.points)
+                    np.testing.assert_array_equal(session.points, self.points)
+                    infer.assert_called_once()
+
+    def test_invalid_preview_table_plane_is_rejected(self):
+        for plane in ([0, 0, 0, 0], [0, 0, -1, 0], [1, 0, 0, 0], [0, 0, 2, 0], [0, 0, 1, float("nan")], [0, 1]):
+            with self.subTest(plane=plane), self.assertRaisesRegex(ValueError, "Preview table plane"):
+                PlacementSession(self.root, self.points, "id", {"preview_table_plane_world": plane})
+
     def test_serialization_and_confirmation_artifact(self):
         self.session.infer_once(lambda: [candidate(2, [0, 1, 0])])
         self.session.select("P01")

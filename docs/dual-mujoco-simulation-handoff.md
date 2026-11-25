@@ -382,3 +382,36 @@ digest `9a96b3bb4972b36c71914d49bdabca6167c95459a0d4e95a8ec07fedcdd65dbb`.
 No golden inventory was changed. Restart the interactive simulation process and
 confirm a new scene to load the new defaults; existing running attempts retain
 their compiled physics and reviewed reference rate.
+
+
+## Table-aligned placement previews (2026-11-24)
+
+New simulation placement sessions persist the actual world table plane in
+`metadata.preview_table_plane_world`. UOP candidate previews rotate the original
+observed cloud around its centroid, then shift only Z to place the lowest point
+on that plane. XY and orientation are preserved; P00 restores the exact source
+cloud. The display shift is recorded as `preview_translation_world_m` when
+confirming. Saved sessions reproduce it without inference. Old saved sessions
+without the plane and captured-camera workflows retain centroid-only previews.
+
+This adjusts display geometry only. It does not simulate settling, certify
+stability, enforce finite-table bounds, or create robot placement trajectories;
+`translation_status` remains `undetermined`. Regression tests cover lifting out
+of penetration and lowering from a gap on horizontal/tilted tables, repeated
+switching, immutable P00, serialization, invalid planes, and actual simulation
+session preparation.
+
+Replay of nine cached UOP candidates from three user simulation attempts under
+`output/simulation/placement_20261124_172130` verified this display correction in
+a fresh output root: `/tmp/ada_placement_ground_bsw2yaez/report.json`. Before
+correction, gaps ranged from -0.05108 m (penetration) to +0.16867 m (floating).
+After correction, every candidate's minimum signed table distance was below
+1e-12 m in magnitude. No model rerun or source attempt modification was needed.
+
+Validation: 15 placement-selection and 22 interactive-simulation tests pass.
+Full suite: 654 tests, 94 skips, one existing launcher test fails because the
+user's 8089 server is occupied. That launcher test passes in isolation with only
+the port probe mocked free. The running user server was preserved. Ruff check,
+changed-file format check, compileall and diff whitespace checks pass. No physics,
+controller or classification behavior changes, so no quick trajectory gate rerun
+was needed for this display-only change.

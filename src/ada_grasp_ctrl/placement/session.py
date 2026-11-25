@@ -95,6 +95,17 @@ class PlacementSession:
         self.points.setflags(write=False)
         self.center = self.points.mean(0)
         self.snapshot_id, self.metadata = snapshot_id, metadata
+        self.preview_plane = None
+        if "preview_table_plane_world" in metadata:
+            plane = np.asarray(metadata["preview_table_plane_world"], dtype=float)
+            if (
+                plane.shape != (4,)
+                or not np.isfinite(plane).all()
+                or not np.isclose(np.linalg.norm(plane[:3]), 1, atol=1e-6, rtol=0)
+                or plane[2] <= 1e-6
+            ):
+                raise ValueError("Preview table plane must have a finite upward unit normal and offset")
+            self.preview_plane = plane.copy()
         self.candidates = [PlacementCandidate("P00", "original", np.eye(3).tolist(), snapshot_id)]
         self.selected_id = "P00"
         self.confirmed_id: str | None = None
@@ -111,9 +122,23 @@ class PlacementSession:
         if candidate_id not in {c.candidate_id for c in self.candidates}:
             raise ValueError(f"Unknown placement candidate: {candidate_id}")
         self.selected_id = candidate_id
-        if candidate_id == "P00":
-            return self.points.copy()
-        return (self.points - self.center) @ rotation(self.selected.relative_rotation).T + self.center
+        points, _ = self.preview_geometry()
+        return points
+
+    def preview_geometry(self) -> tuple[np.ndarray, np.ndarray]:
+        """Rotate the source cloud and ground simulation candidates by a display-only Z shift.
+
+        P00 retains the observed pose. Sessions without a preview plane retain
+        centroid-only rotation, including old saved and captured-camera sessions.
+        """
+        shift = np.zeros(3)
+        if self.selected_id == "P00":
+            return self.points.copy(), shift
+        points = (self.points - self.center) @ rotation(self.selected.relative_rotation).T + self.center
+        if self.preview_plane is not None:
+            normal, offset = self.preview_plane[:3], self.preview_plane[3]
+            shift[2] = -float(np.min(points @ normal + offset)) / normal[2]
+        return points + shift, shift
 
     def infer_once(self, infer: Callable[[], list[dict]]) -> None:
         """Cache one inference attempt, including failure; P00 is always retained."""
@@ -176,6 +201,9 @@ class PlacementSession:
             candidates_file=candidates_file,
             candidates_sha256=candidates_hash,
         )
+        if self.preview_plane is not None:
+            _, shift = self.preview_geometry()
+            artifact["preview_translation_world_m"] = shift.tolist()
         # Keep each explicit confirmation, while selection.json names the latest one.
         artifact["confirmation_id"] = uuid4().hex
         path = self.root / f"selection_{artifact['confirmation_id']}.json"

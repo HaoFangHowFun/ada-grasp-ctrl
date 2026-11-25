@@ -183,8 +183,9 @@ def prepare_simulation_session(object_root: Path, root: Path, state: dict) -> Pl
         table_plane_sha256=info["plane_sha256"],
         snapshot_sha256=sha256(root / "snapshot.npz"),
         rotation_convention="active column vectors: v_new=R_relative@v; row points use @R_relative.T",
-        preview_transform="(points_world_m-observed_centroid)@R_relative.T+observed_centroid",
-        preview_translation="centroid retained for orientation review; contact height undetermined",
+        preview_transform="(points_world_m-observed_centroid)@R_relative.T+observed_centroid+preview_translation",
+        preview_table_plane_world=[*plane["normal_xyz"], plane["d"]],
+        preview_translation="Display-only Z shift puts the lowest rotated point on table; XY retained; P00 unchanged",
         target_support_normal=(-np.asarray(plane["normal_xyz"])).tolist(),
     )
     session = PlacementSession(root, points, info["object_sha256"], metadata)

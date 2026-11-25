@@ -37,10 +37,12 @@ class PlacementPanel:
         server.initial_camera.position = tuple(center + [0.55, -0.55, 0.4])
         server.initial_camera.look_at = tuple(center)
         server.initial_camera.up = (0, 0, 1)
-        server.gui.add_markdown(
-            "**Placement Selection**\n\nOrientation preview from the immutable observed cloud. "
-            "P00 preserves the original orientation. Stability, contact height and collision clearance are unverified."
-        )
+        description = "**Placement Selection**\n\nP00 shows the original pose. "
+        if session.preview_plane is not None:
+            description += "Other candidates are rotated and lowered or raised onto the tabletop for preview."
+        else:
+            description += "Other candidates rotate around the observed object center."
+        server.gui.add_markdown(description)
         self.run_button = server.gui.add_button("Run UOP-Net once")
         self.run_button.disabled = infer is None or session.inference_status != "not_run"
         self.choice = server.gui.add_dropdown(

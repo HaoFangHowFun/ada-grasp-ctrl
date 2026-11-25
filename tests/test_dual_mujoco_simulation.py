@@ -375,6 +375,15 @@ class SceneContracts(unittest.TestCase):
             self.assertTrue(settling["supported_throughout_window"])
             placement = prepare_simulation_session(obj, root / "placement", state)
             np.testing.assert_array_equal(placement.points, points)
+            np.testing.assert_array_equal(
+                placement.preview_plane, [*self.builder.plane["normal_xyz"], self.builder.plane["d"]]
+            )
+            from test_placement_selection import candidate
+
+            placement.infer_once(lambda: [candidate(1, [1, 0, 0])])
+            grounded = placement.select("P01")
+            self.assertAlmostEqual(np.min(grounded @ placement.preview_plane[:3] + placement.preview_plane[3]), 0)
+            np.testing.assert_array_equal(placement.select("P00"), points)
             saved = json.loads(placement.confirm().read_text())
             self.assertEqual(saved["translation_status"], "undetermined")
             self.assertEqual(saved["candidate_id"], "P00")

@@ -104,7 +104,13 @@ they automatically exit after exporting. Simulation rejects `--ros-domain-id`,
 In placement-only mode, Confirm Scene opens the reused placement panel with P00
 Original Pose selected. Run UOP-Net once invokes the existing model once for that
 scene. Switching candidates rotates the original cloud about its observed
-centroid for display. Confirm Placement saves only a relative rotation and
+centroid for display, then shifts world Z so the lowest rotated cloud point lies
+on the calibrated tabletop plane, including tilted tables. XY stays unchanged;
+P00 keeps the original observed pose. Switching always starts from the immutable
+cloud, so rotations and height shifts do not accumulate. This is a geometric
+point-cloud preview, not a stability or finite-table/collision check.
+Confirm Placement saves the relative rotation and the display-only
+`preview_translation_world_m`; execution translation remains
 `translation_status: undetermined`. It starts neither grasp inference nor motion.
 P00 remains available if UOP fails. Reset clears the panel and returns to the same
 scene builder and server; an obsolete UOP worker may finish writing only to its
