@@ -17,6 +17,7 @@ from ada_grasp_ctrl.paths import resolve_from_root
 from ada_grasp_ctrl.placement.session import write_json
 from ada_grasp_ctrl.placement.workflow import prepare_simulation_session, run_uop
 from ada_grasp_ctrl.placement.ui import PlacementPanel
+from ada_grasp_ctrl.placement.target_ui import PlacementTargetPanel
 from ada_grasp_ctrl.grasp_selection.adapters.dexlearn import read_json
 from .dual_viewer import create_server
 from .simulation_scene import SceneBuilder
@@ -30,6 +31,7 @@ class SimulationApp:
 
     def __init__(self, server: object, builder: SceneBuilder, args: object, root: Path) -> None:
         self.server, self.builder, self.args, self.root = server, builder, args, root
+        self.placement_aware = getattr(args, "placement_aware", False)
         self.lock = threading.RLock()
         self.generation = 0
         self.state = "EDITING"
@@ -92,12 +94,24 @@ class SimulationApp:
             self.defaults_button = server.gui.add_button("Reset edit controls")
             self.confirm = server.gui.add_button("Confirm Scene")
         self.reset_button = server.gui.add_button("Reset Scene")
-        self.execute_button = server.gui.add_button("Execute Grasp", disabled=True, visible=not args.placement_only)
+        self.execute_button = server.gui.add_button(
+            "Execute Grasp", disabled=True, visible=not (args.placement_only or self.placement_aware)
+        )
         self.progress = server.gui.add_slider(
-            "Playback (%)", min=0, max=100, step=0.1, initial_value=0, disabled=True, visible=not args.placement_only
+            "Playback (%)",
+            min=0,
+            max=100,
+            step=0.1,
+            initial_value=0,
+            disabled=True,
+            visible=not (args.placement_only or self.placement_aware),
         )
         self.phase = server.gui.add_dropdown(
-            "Phase", options=PHASES, initial_value=PHASES[0], disabled=True, visible=not args.placement_only
+            "Phase",
+            options=PHASES,
+            initial_value=PHASES[0],
+            disabled=True,
+            visible=not (args.placement_only or self.placement_aware),
         )
         self.phase.on_update(self.select_phase)
         self.summary = server.gui.add_markdown("")
@@ -128,7 +142,9 @@ class SimulationApp:
         self.status.content = f"**{state}**\n\n{detail}"
         for control in self.edit_controls:
             control.disabled = state != "EDITING"
-        self.execute_button.disabled = state != "PREVIEW_READY" or self.args.preview_only or self.args.export_only
+        self.execute_button.disabled = (
+            self.placement_aware or state != "PREVIEW_READY" or self.args.preview_only or self.args.export_only
+        )
         self.progress.disabled = state != "PREVIEW_READY"
         self.phase.disabled = state != "PREVIEW_READY"
         record = dict(
@@ -250,7 +266,7 @@ class SimulationApp:
                     if generation != self.generation:
                         return
                     self.scene = scene
-                    if self.args.placement_only:
+                    if self.args.placement_only or self.placement_aware:
                         session = prepare_simulation_session(obj, root / "placement", state)
                         uop = resolve_from_root(self.args.uop_root or os.getenv("UOP_NET_ROOT") or "../uop-net")
                         python = (
@@ -261,11 +277,16 @@ class SimulationApp:
                         )
                         self.placement_folder = self.server.gui.add_folder("Placement")
                         with self.placement_folder:
-                            self.panel = PlacementPanel(
-                                self.server, session, lambda: run_uop(session, uop, python, request["seed"])
-                            )
+
+                            def infer() -> list[dict]:
+                                return run_uop(session, uop, python, request["seed"])
+
+                            if self.placement_aware:
+                                self.panel = PlacementTargetPanel(self, session, infer, state)
+                            else:
+                                self.panel = PlacementPanel(self.server, session, infer)
                         self.object_handle.visible = False
-                        self.transition("PLACEMENT_READY")
+                        self.transition("PLACEMENT_EDITING" if self.placement_aware else "PLACEMENT_READY")
                         return
                     self.transition("INFERENCE/PLANNING")
                 plan = prepare_plan(self.builder.config, self.args.selector, root, processes, state)
@@ -309,7 +330,7 @@ class SimulationApp:
     def execute(self, _: object = None) -> None:
         """Require explicit review, unchanged artifacts and exactly one physics owner."""
         with self.lock:
-            if self.state != "PREVIEW_READY" or self.execute_button.disabled:
+            if self.placement_aware or self.state != "PREVIEW_READY" or self.execute_button.disabled:
                 return
             try:
                 verify_plan(self.plan)
@@ -368,6 +389,8 @@ class SimulationApp:
                 self.transition("ERROR", "Physics worker has not stopped; reset refused")
                 return
             if self.panel:
+                if self.placement_aware:
+                    self.panel.remove()
                 self.panel.cloud.remove()
                 self.placement_folder.remove()
             self.panel = self.placement_folder = None
@@ -394,6 +417,10 @@ class SimulationApp:
                     if self.state == "PREVIEW_READY"
                     else sim.configuration()
                 )
+                if self.placement_aware and self.panel is not None:
+                    endpoint_q = self.panel.preview_q()
+                    if endpoint_q is not None:
+                        q = endpoint_q
                 display = self.builder.display
                 display.data.qpos[display.qpos] = q
                 mujoco.mj_forward(display.model, display.data)

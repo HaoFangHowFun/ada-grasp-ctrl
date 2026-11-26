@@ -60,6 +60,7 @@ def select_hierarchical(
     enabled_modes: Sequence[str] | None = None,
     weights_by_arm: dict[str, object] | None = None,
     max_nfev: int = 200,
+    endpoint_gate: object = None,
 ) -> dict[str, Any]:
     """Select within the first feasible externally ranked mode; never compare modes by effort.
 
@@ -75,6 +76,8 @@ def select_hierarchical(
         enabled_modes: Optional subset of supported modes; defaults to all supported modes.
         weights_by_arm: Optional six-joint nonnegative weights for each available arm.
         max_nfev: Incumbent per-seed IK evaluation budget.
+        endpoint_gate: Optional single-arm post-grasp gate forwarded before mode selection.
+            Callers must exclude paired modes when using a single-arm-only gate.
 
     Returns:
         Schema-1 report with ``SELECTED`` and a data-only plan, or ``NO_FEASIBLE_GRASP``
@@ -174,7 +177,16 @@ def select_hierarchical(
             result = (
                 select_paired_candidates(robot, sim, candidates, available, current, max_nfev)
                 if side == "both"
-                else select_candidates(robot, sim, candidates, available, current, weights[side], max_nfev)
+                else select_candidates(
+                    robot,
+                    sim,
+                    candidates,
+                    available,
+                    current,
+                    weights[side],
+                    max_nfev,
+                    **({"endpoint_gate": endpoint_gate} if endpoint_gate is not None else {}),
+                )
             )
             entry["evaluated_candidate_count"] += len(candidates)
             for diagnostic in result["evaluations"]:

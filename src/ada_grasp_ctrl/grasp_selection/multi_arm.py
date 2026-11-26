@@ -321,11 +321,16 @@ def select_candidates(
     q_current: object,
     weights: object = None,
     max_nfev: int = 200,
+    *,
+    endpoint_gate: object = None,
 ) -> dict:
     """Evaluate bounded seeds and all endpoints, then select one globally minimum effort.
 
     Cost is squared six-joint displacement from the supplied current state, in rad².
     Equal costs break by candidate ID then seed index; static success is not execution readiness.
+    Optional ``endpoint_gate(row, side, squeeze_q56)`` runs only after all original
+    checks pass. Its diagnostic must contain ``accepted``; rejection excludes the
+    branch before ranking without changing the original grasp cost.
     """
     enabled = enabled_set(enabled_arms)
     current = robot.configuration(q_current)
@@ -395,6 +400,13 @@ def select_candidates(
             if not np.isfinite(cost):
                 attempt["reasons"].append("nonfinite_cost")
                 continue
+            if endpoint_gate is not None:
+                attempt["grasp_feasible"] = True
+                attempt["grasp_effort"] = cost
+                attempt["placement"] = endpoint_gate(row, side, stage_q["squeeze"].copy())
+                if not attempt["placement"]["accepted"]:
+                    attempt["reasons"].append(attempt["placement"].get("reason", "place_endpoint_ik_rejected"))
+                    continue
             attempt["effort"] = cost
             feasible.append(
                 dict(
@@ -407,6 +419,7 @@ def select_candidates(
                     seed_index=index,
                     crx_target_rad=stage_q["grasp"][arm].tolist(),
                     stages=attempt["stages"],
+                    **({"placement": attempt["placement"]} if endpoint_gate is not None else {}),
                     candidate=row,
                 )
             )

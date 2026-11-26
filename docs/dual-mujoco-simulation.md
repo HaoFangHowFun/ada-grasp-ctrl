@@ -29,7 +29,10 @@ or `--arms right` to restrict eligibility. Native inference requires the
 hierarchical selector. The existing `--grasp-model right_full` supports both
 `--selector legacy` and `--selector hierarchical`.
 
-Placement remains a separate development invocation:
+The opt-in [placement-aware endpoint preview](placement-aware-preview.md) combines
+orientation/XY confirmation with single-arm grasp and place IK in this same viewer.
+Use `--placement-aware --selector hierarchical --grasp-model native_multimode`;
+it never executes motion. Standalone orientation-only placement remains separate:
 
 ```bash
 env -u LD_LIBRARY_PATH python3 script/run_dual_grasp_pipeline.py \
@@ -42,7 +45,7 @@ both retain the interactive scene builder and preview server in simulation;
 they save the reference and disable Execute Grasp. They do not execute, nor do
 they automatically exit after exporting. Simulation rejects `--ros-domain-id`,
 `--roi`, `--cluster`, and captured `--object-root`. UOP path options require
-`--placement-only`.
+`--placement-only` or `--placement-aware`.
 
 ## Interaction
 
@@ -222,6 +225,7 @@ pose, inertia and collision meshes are kept in physics evidence. A simulation
 reference is a distinct artifact, never a relabeled hardware/mock packet.
 
 This implementation does not certify grasp success or physical hardware parity.
-It adds no MPC, tactile control, camera simulation, placement-aware ranking,
-placement translation, planning or execution. See
+The normal grasp workflow adds no MPC, tactile control or camera simulation.
+Placement-aware endpoint selection is a separate opt-in preview, with no transport
+planning or placement execution. See
 [implementation and validation evidence](dual-mujoco-simulation-handoff.md).

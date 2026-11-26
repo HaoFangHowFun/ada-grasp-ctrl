@@ -183,9 +183,13 @@ def select_live_hierarchical(
     *,
     native_diagnostics: dict | None = None,
     grasp_mode: str = "auto",
+    endpoint_gate: object = None,
+    single_only: bool = False,
 ) -> tuple[dict, dict, dict]:
     """Call the existing selector and return legacy selection, canonical batch and audit report."""
     native = native_diagnostics is not None
+    if single_only and grasp_mode == "both_only":
+        raise ValueError("Single-arm endpoint selection is incompatible with both_only")
     if grasp_mode not in ("auto", "both_only") or (
         grasp_mode == "both_only" and (not native or enabled_set(available_arms) != {"left", "right"})
     ):
@@ -212,7 +216,10 @@ def select_live_hierarchical(
         available_arms,
         q_current,
         supported_modes=settings["supported_modes"],
-        enabled_modes=SOURCE_MODES[3:] if grasp_mode == "both_only" else None,
+        enabled_modes=(SINGLE_MODES if native else MODES)
+        if single_only
+        else (SOURCE_MODES[3:] if grasp_mode == "both_only" else None),
+        **({"endpoint_gate": endpoint_gate} if endpoint_gate is not None else {}),
     )
     if native:
         if enabled_set(available_arms) != {"left", "right"}:

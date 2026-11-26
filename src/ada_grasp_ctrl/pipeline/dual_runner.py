@@ -273,6 +273,7 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--export-only", action="store_true")
     mode.add_argument("--preview-only", action="store_true")
     mode.add_argument("--placement-only", action="store_true", help="Select placement in 8089; no grasp or execution")
+    mode.add_argument("--placement-aware", action="store_true", help="Simulation-only grasp/place endpoint IK preview")
     parser.add_argument("--object-root", help="Placement only: reuse an explicitly selected captured object")
     parser.add_argument("--uop-root", help="Existing UOP-Net checkout (or UOP_NET_ROOT)")
     parser.add_argument("--uop-python", help="Existing UOP Python (defaults to checkout/.venv/bin/python)")
@@ -281,13 +282,18 @@ def main(argv: list[str] | None = None) -> int:
     report = dict(schema_version=1, status="preflight", object_lifted=None, object_held=None)
     try:
         config = configuration(args.config)
+        if args.placement_aware:
+            if (args.environment or config["environment"]) != "simulation":
+                raise ValueError("--placement-aware requires --environment simulation")
+            if args.grasp_mode == "both_only":
+                raise ValueError("--placement-aware supports single-arm candidates only; both_only is incompatible")
         if (args.environment or config["environment"]) == "simulation":
             from .simulation_ui import run_simulation
 
             if args.ros_domain_id is not None or args.roi is not None or args.cluster is not None or args.object_root:
                 raise ValueError("Simulation does not accept ROS domain, camera ROI/cluster, or captured --object-root")
-            if not args.placement_only and (args.uop_root or args.uop_python):
-                raise ValueError("Placement options require --placement-only")
+            if not (args.placement_only or args.placement_aware) and (args.uop_root or args.uop_python):
+                raise ValueError("Placement options require --placement-only or --placement-aware")
             if args.arms != "auto":
                 config["enabled_arms"] = [args.arms]
             enabled_set(config["enabled_arms"])
