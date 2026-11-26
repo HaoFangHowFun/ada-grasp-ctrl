@@ -7,14 +7,11 @@ from typing import Any
 import numpy as np
 
 from ada_grasp_ctrl.contact.compatibility import contact_frame
+from ada_grasp_ctrl.contact.force_display import BLUE, GREEN, ORANGE, update_arrow
 from ada_grasp_ctrl.optimization import friction_cone_slack
 from .adapter import FingerObservation
 from .data import FINGERS
 from .viewer import Preview
-
-ORANGE = (255, 140, 20)
-BLUE = (40, 100, 255)
-GREEN = (30, 210, 60)
 
 
 def contact_diagnostic(result: FingerObservation, mu: float, source_issue: str = "") -> dict:
@@ -156,8 +153,7 @@ class ForcePreview(Preview):
                     (self.object_arrows[finger], "f_object", self.scale.value),
                     (self.normals[finger], "normal", self.normal_length.value),
                 ):
-                    handle.points = np.array([[point, point + scale * np.asarray(diagnostic[field])]])
-                    handle.visible = True
+                    update_arrow(handle, point, np.asarray(diagnostic[field]), scale)
                 self.markers[finger].position = point
                 self.markers[finger].visible = True
 

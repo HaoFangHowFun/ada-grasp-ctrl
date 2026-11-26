@@ -20,6 +20,7 @@ from ada_grasp_ctrl.robot_environment.kinematics import residual
 from ada_grasp_ctrl.ros_execution.settings import DEFAULTS
 from ada_grasp_ctrl.ros_execution.motion import arrival_reached
 from .simulation_plan import reference, verify_plan
+from .fingertip_forces import FingertipForceSource, unavailable
 
 
 class SimulationExecutor:
@@ -89,6 +90,13 @@ class SimulationExecutor:
             effort=plan["effort"],
         )
         self.latest = {}
+        self.force_source = None
+        self.force_snapshot = None
+        self.force_error = ""
+        try:
+            self.force_source = FingertipForceSource(self.sim.model, self.sim.data)
+        except Exception as error:
+            self.force_error = f"Contact forces: {type(error).__name__}: {str(error)[:180]}"
         if self.placement:
             self.result.pop("success_criterion")
             self.result["hold_evaluation"] = "not_evaluated_no_hold_stage"
@@ -192,6 +200,18 @@ class SimulationExecutor:
                 relative_wrist_error=relative_error,
                 numerical_warning_counts=self.sim.data.warning.number.tolist(),
             )
+            # Display-only sampling shares this exact measured state and clock.
+            # Keep failures outside safety checks and force payloads outside logs.
+            try:
+                self.force_snapshot = (
+                    self.force_source.sample()
+                    if self.force_source is not None
+                    else unavailable(float(self.sim.data.time), self.force_error)
+                )
+            except Exception as error:
+                self.force_snapshot = unavailable(
+                    float(self.sim.data.time), f"Contact forces: {type(error).__name__}: {str(error)[:180]}"
+                )
             stream.write(json.dumps(self.latest, allow_nan=False) + "\n")
             return arrived
 
@@ -273,6 +293,8 @@ class SimulationExecutor:
         except (RuntimeError, ValueError) as error:
             self.result.update(status="motion_failed", error=str(error))
         finally:
+            with self.lock:
+                self.force_snapshot = None
             self.result.update(
                 final_object_pose=body_pose(self.sim).tolist(),
                 last_observation=self.latest,

@@ -425,7 +425,26 @@ class SceneContracts(unittest.TestCase):
                 executor = SimulationExecutor(scene, plan, self.config, root)
                 initial_targets = sim.targets.copy()
                 initial_pose = body_pose(sim).copy()
-                with patch.object(sim, "reset", side_effect=AssertionError("execution reset/teleport")):
+                sample = executor.force_source.sample
+                sampled_phases = set()
+                coherent_samples = []
+
+                def measured_sample():
+                    snapshot = sample()
+                    # Assert outside the display boundary, which intentionally catches failures.
+                    coherent_samples.append(
+                        not snapshot.errors
+                        and snapshot.timestamp == executor.latest["time_s"]
+                        and np.array_equal(sim.configuration(), executor.latest["q56"])
+                        and len(snapshot.fingers) == 10
+                    )
+                    sampled_phases.add(executor.latest["phase"])
+                    return snapshot
+
+                with (
+                    patch.object(sim, "reset", side_effect=AssertionError("execution reset/teleport")),
+                    patch.object(executor.force_source, "sample", side_effect=measured_sample),
+                ):
                     result = executor.run(realtime=False, continue_hold=False)
                 self.assertTrue(result["pipeline_completed"], result)
                 self.assertFalse(result["scheduled_hold_success"])
@@ -435,6 +454,30 @@ class SceneContracts(unittest.TestCase):
                 for side in set(("left", "right")) - set(arms):
                     np.testing.assert_array_equal(sim.targets[side_slice(side)], initial_targets[side_slice(side)])
                 self.assertTrue((root / "physics.jsonl").stat().st_size > 0)
+                self.assertEqual(sampled_phases, set(PHASES))
+                self.assertTrue(coherent_samples and all(coherent_samples))
+                self.assertIsNone(executor.force_snapshot)
+                self.assertNotIn("force_snapshot", executor.latest)
+
+    def test_force_sampling_failure_does_not_stop_physics_or_hide_safety_errors(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            scene, _, _ = self.scene(root)
+            executor = SimulationExecutor(scene, idle_reference(scene, ["right"]), self.config, root)
+            stage = executor.plan["schedule"]["stages"][0]
+            before = scene.sim.data.time
+            with patch.object(executor.force_source, "sample", side_effect=RuntimeError("force-only failure")):
+                executor.tick(stage, 0, io.StringIO())
+                self.assertGreater(scene.sim.data.time, before)
+                self.assertTrue(all(r.status == "UNAVAILABLE" for r in executor.force_snapshot.fingers))
+                self.assertIn("force-only failure", executor.force_snapshot.errors[0])
+                with patch(
+                    "ada_grasp_ctrl.pipeline.simulation_executor.forbidden_contacts", return_value=["collision"]
+                ):
+                    with self.assertRaisesRegex(ValueError, "live_collision"):
+                        executor.tick(stage, 0, io.StringIO())
+            executor.tick(stage, 0, io.StringIO())
+            self.assertFalse(executor.force_snapshot.errors)
 
     def test_timed_progression_ignores_arrival_but_keeps_fixed_dwell_and_failure_checks(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -512,6 +555,8 @@ class SceneContracts(unittest.TestCase):
             def cancel_after_hold(*args, **kwargs):
                 value = tick(*args, **kwargs)
                 if kwargs.get("post_hold"):
+                    self.assertIsNotNone(executor.force_snapshot)
+                    self.assertEqual(executor.force_snapshot.timestamp, scene.sim.data.time)
                     after.append(scene.sim.data.time)
                     if len(after) == 3:
                         executor.cancel.set()
@@ -525,6 +570,7 @@ class SceneContracts(unittest.TestCase):
             self.assertTrue(result["post_hold_retention_failure_latched"])
             self.assertFalse(result["post_hold_drop_latched"])
             self.assertEqual(result["status"], "canceled")
+            self.assertIsNone(executor.force_snapshot)
 
 
 class IsolationContracts(unittest.TestCase):

@@ -49,6 +49,100 @@ they automatically exit after exporting. Simulation rejects `--ros-domain-id`,
 
 ## Interaction
 
+### Live fingertip forces
+
+The **Contact Forces** folder on the same 8089 viewer controls enable, left/right
+visibility, reaction/object/normal arrows, and one shared force scale (default
+0.01 m/N). Red marks the equivalent contact position; orange is the reaction on
+the finger, blue is the force on the object, and green is the hand-to-object
+normal (fixed visual length 0.025 m). The table shows resultant magnitudes in N.
+
+The upper-left panel reuses the single-arm dashboard's HTML presentation and
+shows live **Total fingertip ΣFn**, **Left ΣFn** and **Right ΣFn** in N. These
+values sum the original compressive normal loads at all selected fingertip
+contacts; they are not the magnitude of the vector sum or the sum of arrow
+magnitudes. Opposing 5 N contacts contribute 10 N even when their vectors cancel.
+Table support, gravity, palms and non-pad links are excluded. Five healthy
+no-contact fingers give a side total of 0 N; an unavailable/degenerate finger
+makes that side and the combined total unavailable (`—`), while the healthy
+side remains visible. A degenerate weighted normal still permits a valid ΣFn.
+Arrow visibility and scale do not change these measurements. The main enable
+switch, preview/editing, Reset, cancellation and execution errors hide and clear
+the panel. It updates through grasp, Hold and placement using the same snapshot;
+it does not import or infer a single-arm MPC completion measurement.
+
+Each side maps `thumb`, `index`, `middle`, `ring`, and `pinky` to the exact body
+`{side}_{finger}_elastomer` and geom `{side}_{finger}_elastomer_collision_0` in
+the compiled execution model. These are distinct from `_DP` shells, palm links,
+visual geoms and the table. The canonical snapshot's source Sharpa URDFs use
+`elastomer_HB1_TH.STL` for thumbs and `elastomer_HB1_4F.STL` for the other fingers.
+The existing MuJoCo mesh collision representation of each elastomer is the
+sensing-region approximation: it is not the hardware taxel/UV validity mask,
+and neither collision geometry nor physics parameters are changed.
+
+Two existing contact adapters sample actual physics after step/forward at the
+reference cadence (currently 25 Hz), under the same lock as measured-state
+rendering. Positive compressive contacts contribute their full world force;
+position and normal are weighted by normal load. These equivalent contacts are
+visualization only, not wrench-preserving contacts or MPC inputs. No force
+payload is added to execution logs. `NO_CONTACT` has no measured force;
+`DEGENERATE` indicates an unresolved numerical aggregate. A genuine zero
+resultant hides force arrows. A degenerate weighted normal leaves the force
+visible and omits green. Adapter/validation failure marks all five fingers on
+that side `UNAVAILABLE`, with a diagnostic; it never displays a partial sum.
+The unchanged adapter can also reject a side because of a malformed environment
+record, although environment forces are never included in the display.
+
+Arrows follow actual execution through all grasp phases, persistent Hold and
+placement's continuing physics after `COMPLETED`. Preview/editing, contact loss,
+Reset, cancellation, scene replacement and execution errors clear old arrows.
+Display failures leave physics/control running and expose a diagnostic; existing
+simulation safety errors retain their original behavior.
+
+Local validation against executor baseline `24ee740` used the unchanged CLI with
+the native multimode model, restricting arms to left, right, and paired
+(`--arms auto --grasp-mode both_only`). All three runs reached successful scheduled
+Hold. Actual Viser WebSocket messages contained force arrows during grasp,
+squeeze, lift and persistent Hold; preview, the enable toggle and Reset hid them.
+These are automated wire-protocol checks, not a manual browser appearance review.
+
+Replaying each saved scene/plan without real-time pacing produced byte-identical
+`physics.jsonl` files with the baseline executor, the new display disabled, and
+the new display enabled. One local timing sample per condition was:
+
+| Active arms | Baseline (s) | Display disabled (s) | Display enabled (s) |
+|---|---:|---:|---:|
+| Left | 1.293 | 1.770 | 1.972 |
+| Right | 1.085 | 1.470 | 1.628 |
+| Paired | 3.634 | 4.637 | 6.544 |
+
+This comparison includes executor work and real Viser handle updates once per
+physics snapshot, excludes scene construction, and has no browser client. The
+GUI disable switch hides rendering but continues sampling. These single-run
+wall times do not establish browser frame rate or a general performance bound.
+
+The focused simulation/contact/tactile/placement regression run completed 120
+tests: 118 passed, none failed, and two skipped (opt-in ROS DDS and the unavailable
+exact historical contact-reference scene). Ruff checks and compile checks passed;
+changed files passed formatting. Repository-wide formatting still reports eight
+unrelated pre-existing files. No hardware was used.
+
+The force-display change is confined to these files:
+
+- New [display contract and overlay](../src/ada_grasp_ctrl/contact/force_display.py)
+  and [fingertip sampler](../src/ada_grasp_ctrl/pipeline/fingertip_forces.py), plus
+  the [shared HUD helper](../src/ada_grasp_ctrl/contact/force_hud.py) extracted from
+  the [single-arm dashboard](../src/ada_grasp_ctrl/pipeline/dashboard.py).
+- Integration in [executor](../src/ada_grasp_ctrl/pipeline/simulation_executor.py)
+  and [UI](../src/ada_grasp_ctrl/pipeline/simulation_ui.py); the existing
+  [single-arm viewer](../src/ada_grasp_ctrl/tactile_preview/force_viewer.py) reuses
+  the extracted arrow helper without changing its behavior.
+- [Focused tests](../tests/test_fingertip_forces.py),
+  [simulation tests](../tests/test_dual_mujoco_simulation.py),
+  [WebSocket tests](../tests/test_dual_mujoco_web.py), and this document.
+
+### Scene and execution controls
+
 1. Choose one of the ten local meshes. Edit world X/Y in metres, Yaw in degrees
    around the measured table normal, and uniform Scale within the object's manifest
    range. Each object retains its fixed support orientation; Roll and Pitch are

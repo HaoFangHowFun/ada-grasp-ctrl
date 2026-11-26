@@ -34,6 +34,8 @@ class SimulationWebTests(unittest.TestCase):
                 continue
             for message in messages:
                 props = message.get("props", {})
+                if message["type"] == "GuiHtmlMessage":
+                    self.gui["Force HUD"] = message
                 if "label" in props and "uuid" in message:
                     if "value" in message:
                         props["value"] = message["value"]
@@ -42,7 +44,7 @@ class SimulationWebTests(unittest.TestCase):
                     node = self.nodes.setdefault(message["name"], {})
                     node.update(props)
                     node.update(message.get("updates", {}))
-                    for key in ("position", "wxyz"):
+                    for key in ("position", "wxyz", "visible"):
                         if key in message:
                             node[key] = message[key]
                 if message["type"] == "GuiUpdateMessage":
@@ -164,6 +166,11 @@ with patch.object(dual_runner,'validate_domain',side_effect=AssertionError('ROS 
             with self.viewer(root):
                 self.assertIn("Yaw (deg)", self.gui)
                 self.assertIn("Scale", self.gui)
+                self.wait_for(lambda: "Enable contact forces" in self.gui)
+                self.wait_for(lambda: "Force HUD" in self.gui)
+                self.assertFalse(self.gui["Force HUD"]["props"]["visible"])
+                self.wait_for(lambda: "visible" in self.nodes.get("/contact_forces", {}))
+                self.assertFalse(self.nodes["/contact_forces"]["visible"])
                 for removed in ("Roll (deg)", "Pitch (deg)"):
                     self.assertNotIn(removed, self.gui)
                 self.update("X (m)", 0.46)
@@ -172,7 +179,9 @@ with patch.object(dual_runner,'validate_domain',side_effect=AssertionError('ROS 
                 attempt = self.confirm_scene(root, "PREVIEW_READY")
                 self.assertEqual(json.loads((attempt / "requested_scene.json").read_text())["xy_m"][0], 0.46)
                 self.assertFalse((attempt / "physics.jsonl").exists())
+                self.assertFalse(self.nodes["/contact_forces"]["visible"])
                 self.update("Playback (%)", 80)
+                self.assertFalse(self.gui["Force HUD"]["props"]["visible"])
                 time.sleep(0.1)
                 self.assertFalse((attempt / "physics.jsonl").exists())
                 self.update("Execute Grasp", True)
@@ -181,7 +190,19 @@ with patch.object(dual_runner,'validate_domain',side_effect=AssertionError('ROS 
                 report = json.loads((attempt / "execution_report.json").read_text())
                 self.assertTrue(report["pipeline_completed"])
                 self.assertFalse(report["scheduled_hold_success"])
+                self.wait_for(lambda: self.nodes["/contact_forces"].get("visible"))
+                self.wait_for(lambda: self.gui["Force HUD"]["props"]["visible"])
+                for text in ("Total fingertip ΣFn", "Left ΣFn: 0.00 N", "Right ΣFn: 0.00 N"):
+                    self.assertIn(text, self.gui["Force HUD"]["props"]["content"])
+                self.update("Enable contact forces", False)
+                self.wait_for(lambda: not self.nodes["/contact_forces"].get("visible"))
+                self.wait_for(lambda: not self.gui["Force HUD"]["props"]["visible"])
+                self.update("Enable contact forces", True)
+                self.wait_for(lambda: self.nodes["/contact_forces"].get("visible"))
                 self.reset_scene(root)
+                self.wait_for(lambda: not self.nodes["/contact_forces"].get("visible"))
+                self.wait_for(lambda: not self.gui["Force HUD"]["props"]["visible"])
+                self.assertEqual(self.gui["Force HUD"]["props"]["content"], "")
                 second = self.confirm_scene(root, "PREVIEW_READY")
                 self.assertNotEqual(attempt, second)
                 self.update("Execute Grasp", True)

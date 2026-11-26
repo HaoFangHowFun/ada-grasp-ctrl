@@ -13,6 +13,7 @@ from mjviser import ViserMujocoScene
 import yaml
 
 from ada_grasp_ctrl.calibration import calibrated_snapshot, DEFAULT_CALIBRATION
+from ada_grasp_ctrl.contact.force_display import ForceOverlay
 from ada_grasp_ctrl.paths import resolve_from_root
 from ada_grasp_ctrl.placement.session import write_json
 from ada_grasp_ctrl.placement.workflow import prepare_simulation_session, run_uop
@@ -119,6 +120,13 @@ class SimulationApp:
         )
         self.phase.on_update(self.select_phase)
         self.summary = server.gui.add_markdown("")
+        self.force_overlay = None
+        self.force_generation = None
+        self.force_diagnostic = server.gui.add_markdown("")
+        try:
+            self.force_overlay = ForceOverlay(server)
+        except Exception as error:
+            self.force_diagnostic.content = f"Contact forces unavailable: {type(error).__name__}: {str(error)[:180]}"
         self.edit_controls = [
             self.choice,
             *self.xy,
@@ -143,6 +151,8 @@ class SimulationApp:
     def transition(self, state: str, detail: str = "") -> None:
         """Publish guarded lifecycle state and persist same-attempt diagnostics."""
         self.state = state
+        if state not in ("EXECUTING", "HOLDING", "COMPLETED"):
+            self.render_forces()
         self.status.content = f"**{state}**\n\n{detail}"
         for control in self.edit_controls:
             control.disabled = state != "EDITING"
@@ -356,6 +366,7 @@ class SimulationApp:
                     self.object_handle.visible = True
                 self.executor = executor
                 generation = self.generation
+                self.force_generation = generation
                 self.transition("EXECUTING")
             except Exception as error:
                 self.transition("ERROR", str(error))
@@ -398,6 +409,7 @@ class SimulationApp:
             executor, worker, processes = self.executor, self.worker, self.processes
             if executor:
                 executor.cancel.set()
+                executor.force_snapshot = None
             if self.panel:
                 self.panel.active = False
         if processes:
@@ -426,11 +438,36 @@ class SimulationApp:
             self.transition("EDITING")
             self.update_object()
 
+    def render_forces(self) -> None:
+        """Render only this generation's live physics; isolate display failures under the app lock."""
+        if self.force_overlay is None:
+            return
+        executor = self.executor
+        active = (
+            self.state in ("EXECUTING", "HOLDING", "COMPLETED")
+            and executor is not None
+            and executor.scene is self.scene
+            and self.force_generation == self.generation
+            and not executor.cancel.is_set()
+            and executor.result["status"] in ("executing", "holding", "completed")
+        )
+        try:
+            self.force_overlay.update(executor.force_snapshot if active else None)
+            self.force_diagnostic.content = ""
+        except Exception as error:
+            # Clear the parent first, so even a broken child handle cannot retain arrows.
+            try:
+                self.force_overlay.clear()
+            except Exception:
+                pass
+            self.force_diagnostic.content = f"Contact forces unavailable: {type(error).__name__}: {str(error)[:180]}"
+
     def render(self) -> None:
         """Copy measured geometry under lock; no physics work or mesh retransmission here."""
         counter = 0
         while not self.closed.wait(1 / 30):
             with self.lock:
+                self.render_forces()
                 if self.scene is None:
                     continue
                 sim = self.scene.sim

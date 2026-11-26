@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections import deque
-from html import escape
 import json
 import math
 import os
@@ -17,6 +16,7 @@ from typing import Any
 import numpy as np
 import yaml
 
+from ada_grasp_ctrl.contact.force_hud import force_overlay
 from ada_grasp_ctrl.experiments.crx_sharpa_right_model import matrix_pose, pose_matrix
 from ada_grasp_ctrl.experiments.fixed_camera import load_plane, load_snapshot, verify_calibration_acceptance
 from ada_grasp_ctrl.experiments.fixed_camera_geometry import file_hash
@@ -236,23 +236,6 @@ def object_surface(root: Path, object_root: Path) -> tuple[np.ndarray, np.ndarra
     with np.load(root / "surface.npz", allow_pickle=False) as archive:
         vertices = transform_points(archive["vertices"], rigid_transform(archive["T_world_asset"]))
         return vertices, archive["faces"].copy(), archive["colors_rgb"].copy()
-
-
-def force_overlay(live: float | None, completed: float | None, status: str) -> str:
-    """Read-only viewport overlay: live estimate and the latched native completion measurement."""
-    live_text = "—" if live is None else f"{live:.2f} N"
-    completed_text = "—" if completed is None else f"{completed:.2f} N"
-    return (
-        '<div id="contact-force-overlay" style="position:fixed;top:16px;left:16px;z-index:1000;'
-        "pointer-events:none;background:rgba(255,255,255,.96);color:#17212b;padding:16px 22px;"
-        'border-radius:10px;box-shadow:0 2px 14px #0002;min-width:240px;font-family:sans-serif">'
-        '<div style="font-size:15px;font-weight:600">Live contact ΣFn</div>'
-        f'<div style="font-size:34px;font-weight:700;color:#c45b00">{live_text}</div>'
-        f'<div style="font-size:11px;color:#58616b">{escape(status)}</div>'
-        '<div style="margin-top:14px;font-size:15px;font-weight:600">Grasp complete ΣFn</div>'
-        f'<div style="font-size:34px;font-weight:700;color:#087b51">{completed_text}</div>'
-        '<div style="font-size:11px;color:#58616b">Native completion · saved value</div></div>'
-    )
 
 
 class Dashboard:
