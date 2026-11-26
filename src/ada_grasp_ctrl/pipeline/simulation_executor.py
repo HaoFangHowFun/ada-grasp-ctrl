@@ -1,4 +1,4 @@
-"""One actual MuJoCo owner for single and paired six-stage linear execution."""
+"""One actual MuJoCo owner for reviewed single/paired linear simulation schedules."""
 
 from __future__ import annotations
 
@@ -30,6 +30,7 @@ class SimulationExecutor:
     ) -> None:
         verify_plan(plan)
         self.scene, self.sim, self.plan, self.root = scene, scene.sim, deepcopy(plan), root
+        self.placement = plan.get("workflow") == "grasp_to_place"
         self.lock = lock or threading.RLock()
         self.cancel = threading.Event()
         # Older reviewed plans retain their recorded arrival-gated semantics.
@@ -45,8 +46,11 @@ class SimulationExecutor:
         self.substeps = round(self.reference_interval_s / self.dt)
         if self.substeps < 1 or not np.isclose(self.substeps * self.dt, self.reference_interval_s, atol=1e-12, rtol=0):
             raise ValueError("Physics timestep must divide the reviewed reference interval")
-        if (root / "settled_state.npz").exists():
-            with np.load(root / "settled_state.npz", allow_pickle=False) as snapshot:
+        snapshot_path = next(
+            (Path(p) for p in plan["references"] if Path(p).name == "settled_state.npz"), root / "settled_state.npz"
+        )
+        if snapshot_path.exists():
+            with np.load(snapshot_path, allow_pickle=False) as snapshot:
                 for field in ("qpos", "qvel", "ctrl", "qfrc_applied", "xfrc_applied"):
                     if field not in snapshot and field.endswith("applied"):
                         continue
@@ -85,6 +89,9 @@ class SimulationExecutor:
             effort=plan["effort"],
         )
         self.latest = {}
+        if self.placement:
+            self.result.pop("success_criterion")
+            self.result["hold_evaluation"] = "not_evaluated_no_hold_stage"
         self.hold_min, self.hold_speed, self.hold_contact = float("inf"), 0.0, True
         self.peak_lift = 0.0
         self.ever_retained = False
@@ -113,9 +120,19 @@ class SimulationExecutor:
             if overshoot > 0.01:
                 raise ValueError(f"live_joint_limit_overshoot: {overshoot}")
             rows = live_contacts(self.sim)
-            if forbidden_contacts(
-                rows, self.plan["active_arms"], phase="pregrasp" if phase == "above_object" else phase
+            contact_phase = "pregrasp" if phase == "above_object" else phase
+            if self.placement and phase in (
+                "reorient",
+                "transport",
+                "place",
+                "settle",
+                "release_1",
+                "release_2",
+                "retreat_lift",
+                "retreat",
             ):
+                contact_phase = "squeeze"
+            if forbidden_contacts(rows, self.plan["active_arms"], phase=contact_phase):
                 raise ValueError("live_collision")
             errors = {
                 side: (actual[side_slice(side)] - stage["arms"][side]["positions_rad"]).tolist()
@@ -131,13 +148,13 @@ class SimulationExecutor:
                 any(c["category"] == "robot_object" and side in c["sides"] for c in rows)
                 for side in self.plan["active_arms"]
             )
-            retained = lift >= 0.03 and speed <= 0.02 and contact
+            retained = None if self.placement else lift >= 0.03 and speed <= 0.02 and contact
             if phase == "hold" and not post_hold:
                 self.hold_min = min(self.hold_min, lift)
                 self.hold_speed = max(self.hold_speed, speed)
                 self.hold_contact &= contact
             self.peak_lift = max(self.peak_lift, lift)
-            if post_hold:
+            if post_hold and not self.placement:
                 self.result["post_hold_retained"] = retained
                 self.result["post_hold_retention_failure_latched"] |= not retained
                 self.result["post_hold_drop_latched"] |= self.ever_retained and (lift < 0.03 or not contact)
@@ -192,7 +209,7 @@ class SimulationExecutor:
 
         try:
             with (self.root / "physics.jsonl").open("w", buffering=1) as stream:
-                for stage in self.plan["schedule"]["stages"][:6]:
+                for stage in self.plan["schedule"]["stages"][: len(self.plan["execution_phases"])]:
                     if self.cancel.is_set():
                         break
                     if stage["phase"] == "lift":
@@ -229,19 +246,22 @@ class SimulationExecutor:
                         arrival_reached=self.latest.get("arrival_reached"),
                     )
                 if not self.cancel.is_set():
-                    success = self.hold_min >= 0.03 and self.hold_speed <= 0.02 and self.hold_contact
-                    self.result.update(
-                        status="holding",
-                        pipeline_completed=True,
-                        scheduled_hold_success=bool(success),
-                        minimum_retained_lift_m=self.hold_min,
-                        maximum_hold_speed_m_s=self.hold_speed,
-                        retained_contact_every_hold_sample=bool(self.hold_contact),
-                    )
+                    if self.placement:
+                        self.result.update(status="completed", pipeline_completed=True)
+                    else:
+                        success = self.hold_min >= 0.03 and self.hold_speed <= 0.02 and self.hold_contact
+                        self.result.update(
+                            status="holding",
+                            pipeline_completed=True,
+                            scheduled_hold_success=bool(success),
+                            minimum_retained_lift_m=self.hold_min,
+                            maximum_hold_speed_m_s=self.hold_speed,
+                            retained_contact_every_hold_sample=bool(self.hold_contact),
+                        )
                     write_json(self.root / "execution_report.json", self.result)
                     count = 0
                     while continue_hold and not self.cancel.is_set():
-                        self.tick(stage, stage["duration_s"], stream, post_hold=True)
+                        self.tick(stage, stage["duration_s"], stream, post_hold=not self.placement)
                         count += 1
                         if count % 100 == 0:
                             write_json(self.root / "execution_report.json", self.result)

@@ -52,6 +52,7 @@ class PlacementAwareWebTests(unittest.TestCase):
             SimpleNamespace(
                 placement_only=False,
                 placement_aware=True,
+                placement_execute=getattr(self, "placement_execute", False),
                 preview_only=False,
                 export_only=False,
                 uop_root=None,
@@ -78,6 +79,7 @@ class PlacementAwareWebTests(unittest.TestCase):
                 return None
             q = engine.state["full_positions_rad"]
             result = dict(
+                target_revision=target["target_revision"],
                 arm="right",
                 mode="fixture",
                 candidate_id="synthetic_ui_only",
@@ -196,6 +198,86 @@ class PlacementAwareWebTests(unittest.TestCase):
                 self.release.set()
                 self.assertFalse(old.active)
                 self.assertEqual(json.loads((old.session.root / "target_state.json").read_text())["status"], "canceled")
+                self.assertEqual(app.state, "EDITING")
+
+    def test_execution_modifier_failure_retry_scrub_edit_execute_and_reset(self):
+        from test_dual_mujoco_simulation import idle_reference
+        from ada_grasp_ctrl.pipeline.placement_schedule import PHASES, build_schedule
+        from ada_grasp_ctrl.pipeline.paired_artifacts import named_state
+
+        self.placement_execute = True
+        fail = True
+
+        def preparation(engine, endpoint, destination, canceled):
+            if fail:
+                raise ValueError("retreat: synthetic preparation failure; selected candidate retained")
+            plan = idle_reference(self.app.scene, ["right"])
+            q = self.app.scene.sim.configuration()
+            plan.update(
+                workflow="grasp_to_place",
+                execution_phases=list(PHASES),
+                accepted_place_q56=q.tolist(),
+                target_revision=endpoint["target_revision"],
+                target=endpoint["target"],
+                preparation_s=0.1,
+                T_world_hand_source_held=engine.robot.fk(q, "right").tolist(),
+                schedule=build_schedule(
+                    plan["schedule"]["plan"],
+                    named_state(q),
+                    {p: {"right": named_state(q)["right"]} for p in PHASES},
+                    {},
+                ),
+            )
+            write_json(destination / "simulation_plan.json", plan)
+            return plan
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("ada_grasp_ctrl.placement.target_ui.prepare_execution", side_effect=preparation),
+        ):
+            root = Path(directory)
+            with self.viewer(root) as app:
+                self.confirm_scene(root, "PLACEMENT_EDITING")
+                self.wait_for(lambda: "Confirm Placement Target" in self.gui)
+                self.release.set()
+                self.update("Confirm Placement Target", True)
+                self.wait_for(lambda: app.state == "PLACEMENT_ERROR")
+                self.assertIsNone(app.plan)
+                self.assertTrue(app.execute_button.disabled)
+                self.assertEqual(len(self.calls), 1)
+                fail = False
+                self.update("Edit Placement Target", True)
+                self.wait_for(lambda: app.state == "PLACEMENT_EDITING")
+                self.update("Confirm Placement Target", True)
+                self.wait_for(lambda: app.state == "PREVIEW_READY")
+                initial_time = app.scene.sim.data.time
+                initial_qpos = app.scene.sim.data.qpos.copy()
+                for phase in PHASES:
+                    self.update("Phase", phase)
+                    self.wait_for(lambda: app.phase.value == phase)
+                    np.testing.assert_array_equal(app.scene.sim.data.qpos, initial_qpos)
+                    self.assertEqual(app.scene.sim.data.time, initial_time)
+                reviewed = app.plan_root
+                self.update("Destination X (m)", 0.43)
+                self.wait_for(lambda: app.state == "PLACEMENT_EDITING")
+                self.assertIsNone(app.plan)
+                app.execute()
+                self.assertIsNone(app.executor)
+                self.update("Confirm Placement Target", True)
+                self.wait_for(lambda: app.state == "PREVIEW_READY")
+                self.assertNotEqual(app.plan_root, reviewed)
+                self.assertTrue((reviewed / "simulation_plan.json").exists())
+                self.update("Execute Grasp-to-Place", True)
+                self.wait_for(lambda: app.state == "EXECUTING")
+                self.wait_for(lambda: app.scene.sim.data.time > initial_time)
+                revision = app.panel.revision
+                app.panel.edit_target()
+                self.assertEqual(app.panel.revision, revision)
+                self.assertTrue(app.object_handle.visible)
+                self.assertFalse(app.panel.cloud.visible)
+                owner = app.executor
+                self.reset_scene(root)
+                self.assertTrue(owner.cancel.is_set())
                 self.assertEqual(app.state, "EDITING")
 
 

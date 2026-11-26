@@ -1,0 +1,126 @@
+"""Simulation-only extension of the shared linear schedule, with explicit release dwell."""
+
+import argparse
+from copy import deepcopy
+
+from ada_grasp_ctrl.experiments.right_ros_contract import side_names
+from ada_grasp_ctrl.experiments.right_ros_sender import motion_duration
+from .shared_timing import build_stage_schedule, _duration, _named
+
+PHASES = (
+    "above_object",
+    "pregrasp",
+    "grasp",
+    "squeeze",
+    "lift",
+    "reorient",
+    "transport",
+    "place",
+    "settle",
+    "release_1",
+    "release_2",
+    "retreat_lift",
+    "retreat",
+)
+PREVIOUS_PHASES = tuple(phase for phase in PHASES if phase != "retreat_lift")
+LEGACY_PHASES = tuple(phase for phase in PREVIOUS_PHASES if phase != "reorient")
+PHASE_SEQUENCES = (PHASES, PREVIOUS_PHASES, LEGACY_PHASES)
+DEFAULT_PARAMETERS = dict(
+    preplace_height_m=0.15,
+    settle_s=0.5,
+    release_1_s=0.5,
+    release_2_s=1.0,
+    retreat_distance_m=0.10,
+    retreat_s=2.0,
+)
+RETREAT_LIFT_PARAMETERS = dict(retreat_lift_height_m=0.10, retreat_lift_s=2.0)
+
+
+def parameters(overrides: dict, *, include_retreat_lift: bool = True) -> dict:
+    """Resolve positive finite simulation parameters without changing motion policies."""
+    defaults = {**DEFAULT_PARAMETERS, **(RETREAT_LIFT_PARAMETERS if include_retreat_lift else {})}
+    if set(overrides) - set(defaults):
+        raise ValueError("Unknown simulation.placement parameter")
+    return {key: _duration(overrides.get(key, value), key) for key, value in defaults.items()}
+
+
+def build_schedule(grasp: dict, start: dict, targets: dict, settings: dict) -> dict:
+    """Preserve the original first five stages and append the winner's solved endpoints.
+
+    Reorient/Transport/Place use the existing duration policy. Fixed-duration stages have
+    no extra endpoint dwell; the explicit Settle stage owns the Place dwell.
+    """
+    phases = next((p for p in PHASE_SEQUENCES if set(targets) == set(p)), None)
+    if phases is None or len(grasp["active_arms"]) != 1:
+        raise ValueError("Placement requires the complete single-arm phase sequence")
+    settings = parameters(settings, include_retreat_lift="retreat_lift" in phases)
+    schedule = build_stage_schedule(grasp, start, {p: targets[p] for p in PHASES[:5]})
+    side = schedule["active_arms"][0]
+    names = list(sum(side_names(side), ()))
+    held = schedule["stages"][-1]["arms"][side]["positions_rad"][6:]
+    cursor = schedule["end_time"]
+    previous = schedule["stages"][-1]["arms"][side]["positions_rad"]
+    place = _named(targets["place"][side], side, "place")
+    for phase in phases[5:]:
+        if set(targets[phase]) != {side}:
+            raise ValueError(f"{phase}: targets must match the single active arm")
+        end = _named(targets[phase][side], side, phase)
+        fingers = held
+        if phase in ("release_1", "release_2", "retreat_lift", "retreat"):
+            source = "grasp" if phase == "release_1" else "pregrasp"
+            fingers = [grasp["targets"][side][source]["joint_positions_rad"][n] for n in names[6:]]
+        if end[6:] != fingers:
+            raise ValueError(f"{phase}: incorrect finger endpoint")
+        if phase in ("settle", "release_1", "release_2") and end[:6] != place[:6]:
+            raise ValueError(f"{phase}: must retain the exact Place arm")
+        duration = (
+            motion_duration(previous, end, argparse.Namespace(**schedule["policies_by_arm"][side]))
+            if phase in ("reorient", "transport", "place")
+            else settings[phase + "_s"]
+        )
+        duration = _duration(duration, phase + ".duration_s")
+        # Place is immediately followed by the explicit 0.5s stationary Settle.
+        dwell = schedule["settle_time_s"] if phase in ("reorient", "transport") else 0.0
+        schedule["stages"].append(
+            dict(
+                phase=phase,
+                stage_start_time=cursor,
+                stage_end_time=cursor + duration,
+                settled_time=cursor + duration + dwell,
+                duration_s=duration,
+                required_durations_s={side: duration},
+                arms={side: dict(joint_names=names, start_positions_rad=previous, positions_rad=end)},
+            )
+        )
+        previous, cursor = end, cursor + duration + dwell
+    schedule.update(
+        kind="ada_simulation_placement_schedule",
+        parameters=settings,
+        end_time=cursor,
+        timeline="timed_simulation_reference",
+        completion_policy="timed_with_explicit_dwell",
+    )
+    schedule.pop("hold_s")
+    return schedule
+
+
+def validate_schedule(schedule: dict) -> None:
+    """Rebuild and compare the simulation variant; leave the hardware validator unchanged."""
+    if (
+        not isinstance(schedule, dict)
+        or type(schedule.get("schema_version")) is not int
+        or schedule["schema_version"] != 1
+    ):
+        raise ValueError("placement schedule.schema_version: expected 1")
+    try:
+        if tuple(s["phase"] for s in schedule["stages"]) not in PHASE_SEQUENCES:
+            raise ValueError("Incorrect grasp-to-place phase sequence")
+        side = schedule["active_arms"][0]
+        names = list(sum(side_names(side), ()))
+        start = {side: dict(zip(names, schedule["stages"][0]["arms"][side]["start_positions_rad"]))}
+        targets = {s["phase"]: {side: dict(zip(names, s["arms"][side]["positions_rad"]))} for s in schedule["stages"]}
+        expected = build_schedule(schedule["plan"], start, targets, schedule["parameters"])
+    except (KeyError, TypeError, IndexError) as error:
+        raise ValueError(f"Malformed placement schedule: {error}") from error
+    if deepcopy(schedule) != expected:
+        raise ValueError("Placement schedule differs from its endpoints or timing policy")

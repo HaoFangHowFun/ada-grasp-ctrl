@@ -47,3 +47,16 @@ simulation:
   stage_completion: timed
   # Historical single-arm benchmark environment: no global gravity, object force = mass * -10 N/kg.
   gravity_mode: object_only
+  # Complete the source-oriented lift before Reorient, then Transport and Place.
+  placement_lift_height_m: 0.15
+  # Winner-only stages; Reorient/Transport/Place reuse the shared duration policy.
+  placement:
+    preplace_height_m: 0.15
+    settle_s: 0.5
+    release_1_s: 0.5
+    release_2_s: 1.0
+    # Open fingers first, then lift along the upward table normal before withdrawing.
+    retreat_lift_height_m: 0.10
+    retreat_lift_s: 2.0
+    retreat_distance_m: 0.10
+    retreat_s: 2.0

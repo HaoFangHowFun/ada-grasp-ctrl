@@ -226,6 +226,7 @@ reference is a distinct artifact, never a relabeled hardware/mock packet.
 
 This implementation does not certify grasp success or physical hardware parity.
 The normal grasp workflow adds no MPC, tactile control or camera simulation.
-Placement-aware endpoint selection is a separate opt-in preview, with no transport
-planning or placement execution. See
+Placement-aware endpoint selection remains an opt-in preview. The additional
+`--placement-execute` modifier enables [reviewed grasp-to-place simulation](grasp-to-place-execution.md)
+through release and retreat, using the same executor. See
 [implementation and validation evidence](dual-mujoco-simulation-handoff.md).

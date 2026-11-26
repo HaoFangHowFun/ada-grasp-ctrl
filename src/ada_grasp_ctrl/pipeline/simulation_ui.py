@@ -32,12 +32,14 @@ class SimulationApp:
     def __init__(self, server: object, builder: SceneBuilder, args: object, root: Path) -> None:
         self.server, self.builder, self.args, self.root = server, builder, args, root
         self.placement_aware = getattr(args, "placement_aware", False)
+        self.placement_execute = getattr(args, "placement_execute", False)
         self.lock = threading.RLock()
         self.generation = 0
         self.state = "EDITING"
         self.attempt = None
         self.scene = self.plan = self.executor = self.processes = self.panel = None
         self.placement_folder = None
+        self.plan_root = None
         self.worker = None
         self.closed = threading.Event()
         self.requested = builder.defaults()
@@ -95,7 +97,9 @@ class SimulationApp:
             self.confirm = server.gui.add_button("Confirm Scene")
         self.reset_button = server.gui.add_button("Reset Scene")
         self.execute_button = server.gui.add_button(
-            "Execute Grasp", disabled=True, visible=not (args.placement_only or self.placement_aware)
+            "Execute Grasp-to-Place" if self.placement_execute else "Execute Grasp",
+            disabled=True,
+            visible=not args.placement_only and (not self.placement_aware or self.placement_execute),
         )
         self.progress = server.gui.add_slider(
             "Playback (%)",
@@ -104,14 +108,14 @@ class SimulationApp:
             step=0.1,
             initial_value=0,
             disabled=True,
-            visible=not (args.placement_only or self.placement_aware),
+            visible=not args.placement_only and (not self.placement_aware or self.placement_execute),
         )
         self.phase = server.gui.add_dropdown(
             "Phase",
             options=PHASES,
             initial_value=PHASES[0],
             disabled=True,
-            visible=not (args.placement_only or self.placement_aware),
+            visible=not args.placement_only and (not self.placement_aware or self.placement_execute),
         )
         self.phase.on_update(self.select_phase)
         self.summary = server.gui.add_markdown("")
@@ -143,7 +147,10 @@ class SimulationApp:
         for control in self.edit_controls:
             control.disabled = state != "EDITING"
         self.execute_button.disabled = (
-            self.placement_aware or state != "PREVIEW_READY" or self.args.preview_only or self.args.export_only
+            (self.placement_aware and not self.placement_execute)
+            or state != "PREVIEW_READY"
+            or self.args.preview_only
+            or self.args.export_only
         )
         self.progress.disabled = state != "PREVIEW_READY"
         self.phase.disabled = state != "PREVIEW_READY"
@@ -163,7 +170,7 @@ class SimulationApp:
         """Scrub the existing reference endpoint without advancing physical state."""
         with self.lock:
             if self.state == "PREVIEW_READY":
-                stages = self.plan["schedule"]["stages"][:6]
+                stages = self.plan["schedule"]["stages"][: len(self.plan["execution_phases"])]
                 stage = next(s for s in stages if s["phase"] == self.phase.value)
                 self.progress.value = stage["stage_end_time"] / stages[-1]["settled_time"] * 100
 
@@ -330,13 +337,23 @@ class SimulationApp:
     def execute(self, _: object = None) -> None:
         """Require explicit review, unchanged artifacts and exactly one physics owner."""
         with self.lock:
-            if self.placement_aware or self.state != "PREVIEW_READY" or self.execute_button.disabled:
+            if self.state != "PREVIEW_READY" or self.execute_button.disabled:
                 return
             try:
                 verify_plan(self.plan)
-                if read_json(self.attempt / "simulation_plan.json") != self.plan:
+                plan_root = self.plan_root or self.attempt
+                if read_json(plan_root / "simulation_plan.json") != self.plan:
                     raise ValueError("Reviewed plan changed")
-                executor = SimulationExecutor(self.scene, self.plan, self.builder.config, self.attempt, self.lock)
+                if self.placement_execute and (
+                    self.panel is None
+                    or self.panel.revision != self.plan["target_revision"]
+                    or self.panel.endpoint is None
+                ):
+                    raise ValueError("Reviewed target revision changed")
+                executor = SimulationExecutor(self.scene, self.plan, self.builder.config, plan_root, self.lock)
+                if self.placement_execute:
+                    self.panel.begin_execution()
+                    self.object_handle.visible = True
                 self.executor = executor
                 generation = self.generation
                 self.transition("EXECUTING")
@@ -352,7 +369,10 @@ class SimulationApp:
                 write_json(executor.root / "execution_report.json", result)
             with self.lock:
                 if generation == self.generation:
-                    self.transition("ERROR" if result["status"] != "holding" else "HOLDING", result.get("error", ""))
+                    self.transition(
+                        {"holding": "HOLDING", "completed": "COMPLETED"}.get(result["status"], "ERROR"),
+                        result.get("error", ""),
+                    )
 
         with self.lock:
             if generation != self.generation or self.executor is not executor:
@@ -395,10 +415,12 @@ class SimulationApp:
                 self.placement_folder.remove()
             self.panel = self.placement_folder = None
             self.scene = self.plan = self.executor = self.processes = self.worker = None
+            self.plan_root = None
             self.attempt = None
             self.builder.display.reset(self.builder.initial)
             self.view.update_from_mjdata(self.builder.display.data)
             self.progress.value = 0
+            self.phase.options = PHASES
             self.phase.value = PHASES[0]
             self.summary.content = ""
             self.transition("EDITING")
@@ -418,9 +440,13 @@ class SimulationApp:
                     else sim.configuration()
                 )
                 if self.placement_aware and self.panel is not None:
-                    endpoint_q = self.panel.preview_q()
-                    if endpoint_q is not None:
-                        q = endpoint_q
+                    if self.placement_execute:
+                        if self.state == "PREVIEW_READY":
+                            self.panel.update_preview(q, float(self.progress.value))
+                    else:
+                        endpoint_q = self.panel.preview_q()
+                        if endpoint_q is not None:
+                            q = endpoint_q
                 display = self.builder.display
                 display.data.qpos[display.qpos] = q
                 mujoco.mj_forward(display.model, display.data)
@@ -432,8 +458,18 @@ class SimulationApp:
                 if self.executor and counter % 3 == 0:
                     if self.executor.result["status"] == "holding" and self.state == "EXECUTING":
                         self.transition("HOLDING")
+                    if self.executor.result["status"] == "completed" and self.state == "EXECUTING":
+                        self.transition(
+                            "COMPLETED", "Schedule completed; physics continues until Reset. Hold not evaluated."
+                        )
                     latest = self.executor.latest
                     if latest:
+                        if self.placement_execute:
+                            self.summary.content = (
+                                f"**{latest['phase']}** · {self.executor.result['status']}\n\n"
+                                "Actual MuJoCo state. Hold not evaluated; no placement success criterion."
+                            )
+                            continue
                         self.summary.content = (
                             f"**{latest['phase']}** · lift {latest['lift_height_m']:.3f} m\n\n"
                             f"Scheduled hold success: {self.executor.result['scheduled_hold_success']}\n\n"

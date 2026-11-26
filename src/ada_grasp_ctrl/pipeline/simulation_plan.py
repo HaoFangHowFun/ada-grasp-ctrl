@@ -171,9 +171,31 @@ def verify_plan(plan: dict) -> None:
     hz = float(plan.get("reference_hz", 100))
     if not np.isfinite(hz) or hz <= 0:
         raise ValueError("Simulation reference_hz must be finite and positive")
-    validate_stage_schedule(plan["schedule"])
-    if plan["execution_phases"] != list(PHASES) or tuple(s["phase"] for s in plan["schedule"]["stages"][:6]) != PHASES:
-        raise ValueError("Simulation must execute the identical six-stage prefix")
+    if plan.get("workflow") == "grasp_to_place":
+        from .placement_schedule import validate_schedule
+
+        validate_schedule(plan["schedule"])
+        if (
+            plan["execution_phases"] != [s["phase"] for s in plan["schedule"]["stages"]]
+            or plan.get("stage_completion") != "timed"
+        ):
+            raise ValueError("Placement must execute the complete timed schedule")
+        if plan["active_arms"] != plan["schedule"]["active_arms"]:
+            raise ValueError("Placement active arm changed")
+        side = plan["active_arms"][0]
+        stages = plan["schedule"]["stages"]
+        if stages[0]["arms"][side]["start_positions_rad"] != plan["initial_q56"][side_slice(side)]:
+            raise ValueError("Placement schedule initial joints changed")
+        place = next(s for s in stages if s["phase"] == "place")
+        if not np.array_equal(reference(plan, place, place["duration_s"]), plan["accepted_place_q56"]):
+            raise ValueError("Placement schedule changed the accepted Place solution")
+    else:
+        validate_stage_schedule(plan["schedule"])
+        if (
+            plan["execution_phases"] != list(PHASES)
+            or tuple(s["phase"] for s in plan["schedule"]["stages"][:6]) != PHASES
+        ):
+            raise ValueError("Simulation must execute the identical six-stage prefix")
     for path, digest in plan["references"].items():
         if file_hash(Path(path)) != digest:
             raise ValueError(f"Stale reviewed source: {path}")
@@ -190,8 +212,14 @@ def reference(plan: dict, stage: dict, elapsed: float) -> np.ndarray:
 
 
 def preview(plan: dict, progress: float) -> np.ndarray:
-    """Scrub only the six executed stages, leaving the physics data untouched."""
-    stages = plan["schedule"]["stages"][:6]
+    """Scrub the executed stages, leaving the physics data untouched."""
+    stage, elapsed = preview_stage(plan, progress)
+    return reference(plan, stage, elapsed)
+
+
+def preview_stage(plan: dict, progress: float) -> tuple[dict, float]:
+    """Resolve the on-demand timeline location shared by joint and object previews."""
+    stages = plan["schedule"]["stages"][: len(plan["execution_phases"])]
     now = np.clip(progress, 0, 100) / 100 * stages[-1]["settled_time"]
     stage = next((s for s in stages if now <= s["settled_time"]), stages[-1])
-    return reference(plan, stage, now - stage["stage_start_time"])
+    return stage, now - stage["stage_start_time"]

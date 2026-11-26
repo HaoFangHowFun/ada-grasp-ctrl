@@ -1,6 +1,7 @@
 """Drive the actual simulation CLI, UOP and native HUGS through the 8089 wire protocol."""
 
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
@@ -9,6 +10,7 @@ import socket
 import subprocess
 import sys
 import time
+from urllib.request import urlopen
 
 import msgspec
 import numpy as np
@@ -19,10 +21,80 @@ from ada_grasp_ctrl.paths import project_root
 from ada_grasp_ctrl.placement.session import write_json, sha256
 
 
+def capture_browser(root: Path, label: str) -> None:
+    """Wait for the real page to receive its controls before capturing local Chrome."""
+    chrome = "/usr/bin/google-chrome"
+    if not Path(chrome).exists():
+        return
+    profile = root / (label + "_chrome_profile")
+    with (root / (label + "_chrome.log")).open("w") as log:
+        browser = subprocess.Popen(
+            [
+                chrome,
+                "--headless",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--use-angle=swiftshader",
+                "--enable-unsafe-swiftshader",
+                "--remote-debugging-port=0",
+                "--user-data-dir=" + str(profile),
+                "--window-size=1600,1100",
+                "http://127.0.0.1:8089",
+            ],
+            stdout=log,
+            stderr=log,
+        )
+        try:
+            deadline = time.monotonic() + 60
+            port_file = profile / "DevToolsActivePort"
+            while not port_file.exists():
+                if browser.poll() is not None or time.monotonic() > deadline:
+                    raise RuntimeError("Chrome debug endpoint unavailable")
+                time.sleep(0.1)
+            port = int(port_file.read_text().splitlines()[0])
+            with urlopen(f"http://127.0.0.1:{port}/json/list", timeout=5) as response:
+                pages = json.load(response)
+            page = next(p for p in pages if p["type"] == "page")
+            with connect(page["webSocketDebuggerUrl"], max_size=None) as devtools:
+                serial = 0
+
+                def call(method: str, params: dict) -> dict:
+                    nonlocal serial
+                    serial += 1
+                    devtools.send(json.dumps(dict(id=serial, method=method, params=params)))
+                    while True:
+                        result = json.loads(devtools.recv(timeout=10))
+                        if result.get("id") == serial:
+                            if "error" in result:
+                                raise RuntimeError(str(result["error"]))
+                            return result["result"]
+
+                while True:
+                    content = call("Runtime.evaluate", dict(expression="document.body.innerText", returnByValue=True))
+                    if "Confirm Placement Target" in content["result"].get("value", ""):
+                        break
+                    if time.monotonic() > deadline:
+                        raise RuntimeError("Chrome page controls did not load")
+                    time.sleep(0.2)
+                time.sleep(2)
+                png = call("Page.captureScreenshot", dict(format="png"))
+                (root / (label + ".png")).write_bytes(base64.b64decode(png["data"]))
+        finally:
+            browser.terminate()
+            try:
+                browser.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                browser.kill()
+                browser.wait(timeout=5)
+
+
 def main() -> None:
     """Retain fresh actual-model evidence; never stop another owner's viewer."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument(
+        "--placement-execute", action="store_true", help="Review full schedules and execute the final target"
+    )
     args = parser.parse_args()
     root = args.output_root.resolve()
     with socket.socket() as probe:
@@ -62,7 +134,10 @@ raise SystemExit(main())
         str(run),
     ]
     write_json(root / "invocation.json", dict(command=command))
-    report = dict(schema_version=1, actual_models=True, preview_only=True, targets=[])
+    if args.placement_execute:
+        command.append("--placement-execute")
+        write_json(root / "invocation.json", dict(command=command))
+    report = dict(schema_version=1, actual_models=True, preview_only=not args.placement_execute, targets=[])
     with (root / "cli.log").open("w") as log:
         child = subprocess.Popen(command, cwd=project_root(), env=environment, stdout=log, stderr=log)
         try:
@@ -77,7 +152,13 @@ raise SystemExit(main())
             from test_object_placement_web import receive
 
             client = SimulationWebTests()
-            with connect("ws://127.0.0.1:8089", subprotocols=[f"viser-v{viser.__version__}"], max_size=None) as ws:
+            with connect(
+                "ws://127.0.0.1:8089",
+                subprotocols=[f"viser-v{viser.__version__}"],
+                max_size=None,
+                max_queue=None,
+                ping_timeout=None,
+            ) as ws:
                 client.ws, client.gui, client.nodes = ws, {}, {}
                 ws.send(
                     msgspec.msgpack.encode(
@@ -128,6 +209,7 @@ raise SystemExit(main())
                     if index:
                         client.update("Edit Placement Target", True)
                         wait(lambda: client.state(run)["state"] == "PLACEMENT_EDITING")
+                    if index or args.placement_execute:
                         selected = next(c for c in candidates["candidates"] if c["candidate_id"] == candidate_id)
                         label = (
                             f"{candidate_id} — UOP-Net instance {selected['instance_id']}"
@@ -136,13 +218,19 @@ raise SystemExit(main())
                         )
                         client.update("Placement candidate", label)
                     for j, axis in enumerate(("X", "Y")):
-                        client.update("Destination " + axis + " (m)", float(xy[j] + (0.04 if index and j == 0 else 0)))
+                        offset = 0.02 if args.placement_execute else 0.04 if index else 0
+                        client.update("Destination " + axis + " (m)", float(xy[j] + (offset if j == 0 else 0)))
                     time.sleep(0.3)
                     client.update("Confirm Placement Target", True)
                     wait(
                         lambda: (
                             client.state(run)["state"]
-                            in ("PLACEMENT_PREVIEW_READY", "PLACEMENT_NO_FEASIBLE_GRASP", "PLACEMENT_ERROR")
+                            in (
+                                "PREVIEW_READY",
+                                "PLACEMENT_PREVIEW_READY",
+                                "PLACEMENT_NO_FEASIBLE_GRASP",
+                                "PLACEMENT_ERROR",
+                            )
                         )
                     )
                     state = client.state(run)
@@ -162,37 +250,42 @@ raise SystemExit(main())
                         for endpoint in ("Grasp", "Place"):
                             client.update("Endpoint", endpoint)
                             time.sleep(0.2)
-                    if index == 0:
-                        chrome = "/usr/bin/google-chrome"
-                        if Path(chrome).exists():
-                            with (root / "chrome.log").open("w") as browser_log:
-                                subprocess.run(
-                                    [
-                                        chrome,
-                                        "--headless",
-                                        "--no-sandbox",
-                                        "--disable-dev-shm-usage",
-                                        "--use-angle=swiftshader",
-                                        "--enable-unsafe-swiftshader",
-                                        "--user-data-dir=" + str(root / "chrome_profile"),
-                                        "--window-size=1600,1100",
-                                        "--virtual-time-budget=5000",
-                                        "--screenshot=" + str(root / "preview.png"),
-                                        "http://127.0.0.1:8089",
-                                    ],
-                                    stdout=browser_log,
-                                    stderr=browser_log,
-                                    timeout=45,
-                                    check=True,
-                                )
+                    if state["state"] == "PREVIEW_READY":
+                        plan = json.loads((target_root / "simulation_plan.json").read_text())
+                        entry["preparation_s"] = plan["preparation_s"]
+                        for phase in plan["execution_phases"]:
+                            client.update("Phase", phase)
+                            time.sleep(0.1)
+                        for progress in (0, 37, 80, 100, 37):
+                            client.update("Playback (%)", progress)
+                            time.sleep(0.1)
+                        assert not (target_root / "physics.jsonl").exists()
+                    if index == 0 or args.placement_execute and state["state"] == "PREVIEW_READY":
+                        capture_browser(root, candidate_id + "_preview")
                 if len(candidates["candidates"]) == 1:
                     report["limitation"] = "UOP supplied no candidate; only P00 reviewed"
                 assert sha256(attempt / "object/object.npz") == source_hash
                 assert sha256(attempt / "settled_state.npz") == settled_hash
+                if args.placement_execute and client.state(run)["state"] == "PREVIEW_READY":
+                    client.update("Execute Grasp-to-Place", True)
+                    wait(lambda: client.state(run)["state"] in ("COMPLETED", "ERROR"), timeout=600)
+                    report["execution_state"] = client.state(run)
+                    capture_browser(root, "execution_end")
+                    wait(lambda: (target_root / "execution_report.json").exists())
+                    report["execution"] = json.loads((target_root / "execution_report.json").read_text())
+                    time.sleep(0.5)
+                    report["physics_log_bytes"] = (target_root / "physics.jsonl").stat().st_size
+                    client.update("Reset Scene", True)
+                    wait(lambda: client.state(run)["state"] == "EDITING")
+                    report["reset_after_execution"] = True
+                elif args.placement_execute:
+                    report["execution_blocked"] = client.state(run)
                 assert not (attempt / "physics.jsonl").exists()
                 assert not (attempt / "simulation_plan.json").exists()
                 assert not (attempt / "export").exists()
-                report.update(source_unchanged=True, settled_artifact_unchanged=True, execution_artifacts_absent=True)
+                report.update(source_unchanged=True, settled_artifact_unchanged=True)
+                if not args.placement_execute:
+                    report["execution_artifacts_absent"] = True
                 write_json(root / "smoke_report.json", report)
         finally:
             if child.poll() is None:

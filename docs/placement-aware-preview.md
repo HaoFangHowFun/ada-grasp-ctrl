@@ -4,6 +4,10 @@ This opt-in simulation workflow selects one left **or** right grasp whose existi
 grasp checks and nominal placement endpoint IK both pass. It uses the existing
 8089 viewer. It never executes a grasp, lift, transport, release or return.
 
+For full trajectory review and physical simulation, explicitly add
+`--placement-execute`; see [Phase 3 grasp-to-place execution](grasp-to-place-execution.md).
+The endpoint-only behavior described here remains the default without that modifier.
+
 ```bash
 cd /home/hao-fang/hugs-workspace/ada-grasp-ctrl
 env -u LD_LIBRARY_PATH python3 script/run_dual_grasp_pipeline.py \
