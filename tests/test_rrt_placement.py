@@ -682,13 +682,14 @@ class MuJoCoPlanningTests(unittest.TestCase):
         target = dict(Delta_T=np.eye(4).tolist(), target_revision=1, target_sha256="synthetic_target")
         chosen = dict(
             candidate_id="no_grasp_fixture",
-            required_arms=[side],
+            required_arms=["left", "right"] if side == "both" else [side],
             effort=0.0,
             candidate=dict(execution_mode=side + "_full"),
             stages={p: dict(q56=q) for p in ("pregrasp", "grasp", "squeeze")},
         )
         endpoint = dict(
             arm=side,
+            active_arms=chosen["required_arms"],
             candidate_id=chosen["candidate_id"],
             mode=side + "_full",
             place_q56=q,

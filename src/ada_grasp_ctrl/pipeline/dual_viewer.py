@@ -110,16 +110,21 @@ def main() -> None:
         scene.geom_groups_visible[0] = False
         scene.geom_groups_visible[3] = False
         scene._sync_visibilities()
-        with np.load(root / "object/object.npz", allow_pickle=False) as data:
-            points = data["points_world_m"]
-        server.scene.add_point_cloud(
-            "/object", points=points, colors=np.tile([80, 200, 80], (len(points), 1)), point_size=0.003
-        )
-        with np.load(root / "capture/snapshot.npz", allow_pickle=False) as data:
-            points = data["points_world_m"][::10]
-        server.scene.add_point_cloud(
-            "/environment", points=points, colors=np.tile([160, 160, 160], (len(points), 1)), point_size=0.002
-        )
+        if config.get("multi_camera"):
+            from ada_grasp_ctrl.experiments.multi_camera_preview import add_layers
+
+            add_layers(server, root / "multi_camera")
+        else:
+            with np.load(root / "object/object.npz", allow_pickle=False) as data:
+                points = data["points_world_m"]
+            server.scene.add_point_cloud(
+                "/object", points=points, colors=np.tile([80, 200, 80], (len(points), 1)), point_size=0.003
+            )
+            with np.load(root / "capture/snapshot.npz", allow_pickle=False) as data:
+                points = data["points_world_m"][::10]
+            server.scene.add_point_cloud(
+                "/environment", points=points, colors=np.tile([160, 160, 160], (len(points), 1)), point_size=0.002
+            )
         server.gui.add_markdown(
             f"**Selected: {side_label.upper()} · {plan['candidate_id']}**\n\n"
             "Review the full cycle, then press Enter in the pipeline terminal to execute."

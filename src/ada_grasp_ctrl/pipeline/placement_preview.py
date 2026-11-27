@@ -65,7 +65,8 @@ class PlacementPreview:
                 self.state["full_positions_rad"],
                 self.config["hierarchical_selector"],
                 native_diagnostics=self.native,
-                single_only=True,
+                single_only=self.config.get("simulation", {}).get("placement_planner") != "rrt_connect",
+                grasp_mode=self.config.get("grasp_mode", "auto"),
                 endpoint_gate=gate,
             )
             write_json(destination / "canonical_candidates.json", batch)
@@ -137,6 +138,7 @@ class PlacementPreview:
             source_snapshot_sha256=target["source_sha256"],
             candidate_id=chosen["candidate_id"],
             arm=chosen["selected_side"],
+            active_arms=chosen["required_arms"],
             mode=chosen["candidate"].get(
                 "mode", chosen["candidate"]["provenance"].get("source_model_mode", "right_full")
             ),

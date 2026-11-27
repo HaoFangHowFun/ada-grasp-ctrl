@@ -1,4 +1,4 @@
-"""Single-arm placement IK with the existing static contact policy; no transport planner."""
+"""Placement endpoint IK with existing static contact policies; no transport search."""
 
 import numpy as np
 
@@ -20,6 +20,8 @@ class PlacementGate:
         """Test the adjusted terminal squeeze wrist, keeping its fingers and passive arm."""
         if self.canceled():
             raise RuntimeError("Placement evaluation canceled")
+        if side == "both":
+            return self.paired(row, held)
         source = rigid(row["targets"][side]["squeeze"]["T_world_hand"])
         destination = self.delta @ source
         coverage = self.face_coverage.check(side, held, destination) if self.face_coverage else None
@@ -90,4 +92,67 @@ class PlacementGate:
         if valid:
             _, index, q, diagnostic = min(valid, key=lambda item: item[:2])
             result.update(q56=q.tolist(), arm_positions_rad=q[arm].tolist(), ik=diagnostic, seed_index=index)
+        return result
+
+    def paired(self, row: dict, held: np.ndarray) -> dict:
+        """Combine independent bounded IK branches and check the complete endpoint.
+
+        Paired hands may cover the support face. Grasp ranking remains owned by
+        the selector; this gate only chooses the nearest feasible Place branch.
+        """
+        from itertools import product
+
+        sides = ["left", "right"]
+        source = {s: rigid(row["targets"][s]["squeeze"]["T_world_hand"]) for s in sides}
+        destination = {s: self.delta @ source[s] for s in sides}
+        branches, attempts = {}, []
+        for side in sides:
+            arm = side_slice(side, True)
+            branches[side] = []
+            for index, seed in enumerate([held[arm], *SEEDS]):
+                if self.canceled():
+                    raise RuntimeError("Placement evaluation canceled")
+                q = held.copy()
+                q[arm] = seed
+                try:
+                    q, diagnostic = self.robot.solve_arm_ik(self.robot.configuration(q), side, destination[side])
+                    q = self.robot.configuration(q)
+                    mask = np.ones(56, dtype=bool)
+                    mask[arm] = False
+                    if not np.array_equal(q[mask], held[mask]):
+                        raise ValueError("Placement IK changed other joints")
+                    attempts.append(dict(side=side, seed_index=index, ik=diagnostic))
+                    if diagnostic["accepted"] and not any(np.allclose(q[arm], b[0]) for b in branches[side]):
+                        branches[side].append((q[arm].copy(), diagnostic, index))
+                except (ValueError, RuntimeError) as error:
+                    attempts.append(dict(side=side, seed_index=index, error=str(error)))
+        valid, combined = [], []
+        for left, right in product(branches["left"], branches["right"]):
+            if self.canceled():
+                raise RuntimeError("Placement evaluation canceled")
+            q = held.copy()
+            for side, branch in zip(sides, (left, right)):
+                q[side_slice(side, True)] = branch[0]
+            rows = self.static.check_static_contacts(q)
+            bad = forbidden_contacts(rows, sides, phase="squeeze")
+            combined.append(dict(forbidden_contacts=bad, accepted=not bad))
+            if not bad:
+                effort = sum(float(np.sum((q[side_slice(s, True)] - held[side_slice(s, True)]) ** 2)) for s in sides)
+                valid.append((effort, q, {s: b[1] for s, b in zip(sides, (left, right))}))
+        result = dict(
+            accepted=bool(valid),
+            reason="accepted" if valid else "place_endpoint_collision" if combined else "place_endpoint_ik_rejected",
+            source_held_q56=held.tolist(),
+            T_world_hand_source_held={s: source[s].tolist() for s in sides},
+            T_world_hand_place={s: destination[s].tolist() for s in sides},
+            attempts=attempts,
+            combined_endpoints=combined,
+            collision_checked=bool(combined),
+            face_coverage=dict(skipped=True, reason="paired_support_face_contact_allowed"),
+            target_revision=self.target["target_revision"],
+            target_sha256=self.target["target_sha256"],
+        )
+        if valid:
+            _, q, diagnostic = min(valid, key=lambda item: item[0])
+            result.update(q56=q.tolist(), ik=diagnostic)
         return result

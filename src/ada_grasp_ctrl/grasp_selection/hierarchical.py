@@ -76,8 +76,8 @@ def select_hierarchical(
         enabled_modes: Optional subset of supported modes; defaults to all supported modes.
         weights_by_arm: Optional six-joint nonnegative weights for each available arm.
         max_nfev: Incumbent per-seed IK evaluation budget.
-        endpoint_gate: Optional single-arm post-grasp gate forwarded before mode selection.
-            Callers must exclude paired modes when using a single-arm-only gate.
+        endpoint_gate: Optional post-grasp gate forwarded before mode selection.
+            Paired candidates pass side="both" and the combined Squeeze configuration.
 
     Returns:
         Schema-1 report with ``SELECTED`` and a data-only plan, or ``NO_FEASIBLE_GRASP``
@@ -175,7 +175,9 @@ def select_hierarchical(
             if not candidates:
                 continue
             result = (
-                select_paired_candidates(robot, sim, candidates, available, current, max_nfev)
+                select_paired_candidates(
+                    robot, sim, candidates, available, current, max_nfev, endpoint_gate=endpoint_gate
+                )
                 if side == "both"
                 else select_candidates(
                     robot,

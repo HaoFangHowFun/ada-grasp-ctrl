@@ -1,4 +1,4 @@
-# Opt-in single-arm RRT-Connect placement
+# Opt-in single-arm and paired RRT-Connect placement
 
 This experimental simulation mode now prioritizes completing grasp-to-place while
 retaining the object. New plans use `execution_policy: complete_with_warnings`.
@@ -20,6 +20,164 @@ Python modules. Confirm the scene and placement target, review the approach, the
 click **Execute Grasp-to-Place**. Lift, transport, descent and retreat are planned
 from measured state when their stages begin. Reset cancels the existing execution
 owner. No extra approval screen, physics thread or server is introduced.
+
+## Minimal paired placement, 2026-11-27
+
+The RRT placement workflow now admits native `both_three` and `both_full` candidates
+with `--arms auto` or `--arms both_only` (an alias for `--grasp-mode both_only`).
+The non-RRT placement workflow remains single-arm. Use the existing 8089 scene,
+placement target, review, **Execute Grasp-to-Place**, and Reset controls:
+
+```bash
+env -u LD_LIBRARY_PATH -u PYTHONPATH .conda/bin/python script/run_dual_grasp_pipeline.py \
+  --environment simulation --placement-aware --placement-execute \
+  --placement-planner rrt_connect --selector hierarchical \
+  --arms both_only --grasp-model native_multimode \
+  --output-root "output/simulation/bimanual_placement_$(date +%Y%m%d_%H%M%S)"
+```
+
+Replace `both_only` with `auto` to retain the native hierarchy across single and
+paired modes. Restart the Python viewer to load changes. A running user's server
+must be left alone unless they authorize its termination.
+
+### Implementation and decisions
+
+- `placement/feasibility.py` independently solves both requested Place wrists,
+  combines valid branches, and checks full paired endpoint geometry. The native
+  hierarchy and summed squared CRX grasp effort are unchanged. Paired candidates
+  skip support-face coverage only; single-arm coverage is unchanged.
+- `PlanningScene` and the existing RRT-Connect search use canonical arm indices
+  `0:6, 28:34`, holding the 44 fingers at the phase reference. Both arms share every
+  segment duration. Inter-arm and inter-hand collision diagnostics remain active.
+- Approach tries the original direct edge and RRT first. If paired search fails,
+  it tries the existing geometry-derived above-object endpoint, then plans both
+  connecting legs using the same search and deadline. Any unchecked connector is
+  explicitly reported as `overhead_fallback`; this is not collision certification.
+  If overhead IK fails, the original explicit direct fallback remains available.
+  This small reuse prevents some direct fallback approaches from pushing the
+  object away before grasping; it is not an object-path search during carrying.
+- `pipeline/bimanual_placement.py` captures both attachments together after Squeeze:
+  `A_side = inverse(T_world_object_actual) @ T_world_wrist_actual`. These attachments
+  remain fixed across Lift, Transport and Place. Each stage starts from measured
+  state, interpolates one object translation and shortest-arc SLERP rotation, and
+  warm-starts both arm IK solutions. Initial object samples are at most 5 mm / 0.03
+  rad apart; a branch jump over 0.5 rad retries the existing bounded seeds. The
+  complete path must have valid, bounded IK before any carry motion is executed.
+- Both Squeeze finger commands remain unchanged through Settle. Dense carry
+  waypoints use one duration based on accumulated joint travel and the existing
+  speed/acceleration policy, rather than applying the minimum stage duration at
+  each waypoint. References still use the shared linear interpolator at 25 Hz.
+  Sampled connectors report wrist and relative-wrist residuals; runtime physics
+  also records each measured attachment error. This is not exact closed-chain
+  control and does not prevent object slip.
+- Collision samples use one explicit object pose in isolated planning `MjData`.
+  Collision/clearance observations remain warnings under `complete_with_warnings`.
+  Invalid IK, a discontinuous branch, or exhausted shared IK budget holds the
+  current grasp, records `planning_failed_hold`, and permits Reset. No partial
+  carry, independent-arm fallback, automatic reselection, weld or object teleport
+  is used. Planning calls are not forcibly interrupted, so the 3 s stage budget is
+  not a strict wall-clock guarantee.
+- Actual MuJoCo soft-limit overshoot up to the existing 0.01 rad execution limit
+  can occur even with valid commands. Paired stage preparation bounds only the
+  planning seed and records `bounded_measured_seed`; live state and physics are
+  untouched. Larger measured overshoot still stops execution.
+- One-sided contact loss is a warning. Either hand regaining contact resets the
+  both-no-contact timer. Confirmed loss requires both hands absent for 0.5 s and
+  at least 20 mm displacement from the midpoint of both wrist-predicted object
+  poses. Cleanup opens both hands and returns both arms to their captured initial
+  configurations; it is never reported as placement completion.
+
+The existing 15 mm lift/preplace geometry, 5 mm transport planning margin, 2 mm
+object/table tolerance, physics step, finger targets, release durations, controller,
+gains, friction, target identity and force HUD are retained. Both release phases
+run simultaneously. Retreat uses a static/free object, never a carry attachment.
+
+### Physical evidence and limitations
+
+Evidence is in `output/simulation/bimanual_validation_20261127/audit.json`; drivers
+are archived alongside it. Source scene: the existing 0.2-scale can at
+`live_20261124_165945/attempt_0019`, with its actual settled snapshot and actuator
+commands restored. A new native checkpoint invocation is recorded in
+`bimanual_fresh_20261127_v1` (2.805 s including subprocess startup); it produced ten
+`both_full` candidates and no available `both_three` candidates. Selection was
+rerun against the placement target. These are fresh physical replays on a cached
+observation, not new camera captures. The validation targets explicitly use the
+source orientation plus 35 mm world-X translation (or a 10-degree table-normal
+rotation), with height resolved by existing collision support geometry; UOP-Net
+was not rerun for these replay targets.
+
+| Run under `output/simulation/` | Selection / target | Observed result |
+| --- | --- | --- |
+| `bimanual_20261127_v7` | `both_only`, `both_full:c0473`, unchanged orientation | Full grasp, lift, transport, place, settle, release and retreat; 15.55 mm / 1.70° final pose error |
+| `bimanual_20261127_final` | `auto`, `both_full:c0473`, unchanged orientation | Full pipeline; 15.27 mm / 1.70° final pose error; 2.433 s total planning |
+| `bimanual_20261127_v8` | `auto`, same candidate, 10° rotation | Transport IK rejected on right arm; grasp held, no partial transport executed |
+| `bimanual_20261127_v5` | Fresh 0.3-scale can at (0.45, -0.4), `both_full:c0440`, before overhead reuse | Both hands acquired contact, Lift completed, Transport dropped; both releases and Retreat completed as cleanup |
+| `bimanual_20261127_v6` | Same larger can, overhead reuse | Measured joint overshoot 0.01185 rad stopped execution during approach; not a success |
+| `bimanual_single_20261127_v1/release/placement` | Existing left `c0235` replay | Full pipeline; all 2,121 samples exactly match the earlier successful replay's joints, references, object poses, contacts and phases |
+
+Final paired planning times: Approach preparation 0.121 s, approach revalidation
+0.060 s, Lift 0.048 s, Transport 0.178 s, Place 0.049 s and Retreat 1.870 s; total
+also includes retained transitions and preparation overhead. Both hands contact
+the object at every recorded Lift/Transport/Place/Settle sample (63/183/57/13
+samples), with zero Squeeze finger-reference change. Retreat completes with no
+hand/object contact. Initial, immutable target and final object transforms, every
+stage time and contact counts are in the audit and original physics logs.
+
+The successful case still slips: maximum measured attachment translation errors
+through carrying/Settle are 8.13 mm left and 27.92 mm right, with orientation errors
+up to 0.0893 rad. Reference residuals can also be large at a measured stage start
+because the fixed attachments differ from the slipped actual object. These are
+reported warnings, not proof of rigid tracking. The 10° target's right-arm IK
+residual exceeded the unchanged tolerances despite bounded seed retries. Neither
+that hold nor dropped-grasp cleanup counts as success. `both_three` is covered by
+selection/path tests but has no physical success claim because actual inference
+in these scenes did not make that mode available. This is a minimal working
+pipeline, not a robust placement or retention benchmark.
+
+Reproduce the final physical run in a **new** output directory:
+
+```bash
+env -u LD_LIBRARY_PATH PYTHONPATH=src .conda/bin/python \
+  output/simulation/bimanual_validation_20261127/bimanual_replay.py \
+  output/simulation/live_20261124_165945/attempt_0019 \
+  "output/simulation/bimanual_replay_$(date +%Y%m%d_%H%M%S)" \
+  output/simulation/bimanual_fresh_20261127_v1 auto
+```
+
+Use `both_only` in place of `auto`, or append `10` after `auto` to reproduce the
+rotated-target test. The archived `bimanual_fresh.py NEW_OUTPUT_ROOT` reruns native
+inference on that attributed observation; `bimanual_scene.py NEW_OUTPUT_ROOT`
+creates the separate larger-can scene and invokes native inference. No historical
+outputs or golden trajectories are overwritten.
+
+
+### Validation checks
+
+Final full suite: **757 tests, 90 skipped, zero failures**. The focused RRT and
+placement-viewer run passed **37 tests**, including the paired 8089 review,
+cleanup, cancellation and Reset lifecycle. The last paired-only regression run
+passed **10 tests**, including the shared IK deadline. Port 8089 was available
+for these tests; the historical occupied-port failure below did not recur, and
+no user's server was terminated. Existing dual fingertip HUD tests also pass in
+the full suite.
+
+Canonical Ruff check, compileall and `git diff --check` pass. Formatting reports
+the same eight unchanged files outside this task; changed files are formatted.
+The maintained quick gate at `/tmp/bimanual-quick-20261127-v1` reproduces the three
+known Shadow inventory mismatches (mug failure→success, tape degraded→success,
+pizza degraded→failure): 100 outputs, 68 success, 4 failure, 21 invalid, 7 degraded,
+zero execution errors. Later hands are not reached. Golden data is unchanged.
+Exact differences and copied logs are in the validation directory.
+
+```bash
+env -u LD_LIBRARY_PATH PYTHONPATH=src:tests .conda/bin/python -m unittest \
+  test_bimanual_placement test_rrt_placement test_placement_aware_web -v
+env -u LD_LIBRARY_PATH PYTHONPATH=src MPLCONFIGDIR=/tmp/ada_grasp_ctrl_mpl \
+  .conda/bin/python -m unittest discover -s tests -v
+env -u LD_LIBRARY_PATH -u PYTHONPATH PYTHON_BIN=.conda/bin/python \
+  ADA_GRASP_CTRL_RELEASE_GATE_ROOT=/tmp/bimanual-quick-NEW-RUN \
+  bash script/run_release_gate.sh quick
+```
 
 ## Lightweight placement-face selection filter, 2026-11-27
 

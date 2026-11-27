@@ -90,6 +90,21 @@ def load_plane(path: Path, require_accepted: bool = False) -> dict:
     return plane
 
 
+def calibration_digest_matches(provenance: dict, digest: str) -> bool:
+    """Accept the current digest or a verified, geometry-identical camera extension predecessor."""
+    return digest == provenance["sha256"] or digest in provenance.get("compatible_sha256", [])
+
+
+def calibration_file_matches(path: Path, digest: str) -> bool:
+    """Reject changed/malformed files unless verified additive-camera lineage matches."""
+    if file_hash(path) == digest:
+        return True
+    try:
+        return calibration_digest_matches(load_extrinsics(path)[1], digest)
+    except (ValueError, KeyError, TypeError):
+        return False
+
+
 def verify_calibration_acceptance(plane_path: Path, acceptance_path: Path) -> dict:
     """Verify an explicit operator attestation against unchanged calibration files."""
     acceptance = read_json(acceptance_path)
@@ -102,7 +117,7 @@ def verify_calibration_acceptance(plane_path: Path, acceptance_path: Path) -> di
         or plane.get("quality_passed") is not True
         or acceptance.get("plane_sha256") != file_hash(plane_path)
         or acceptance.get("extrinsics_sha256") != extrinsics["sha256"]
-        or file_hash(resolve_from_root(extrinsics["path"])) != extrinsics["sha256"]
+        or not calibration_file_matches(resolve_from_root(extrinsics["path"]), extrinsics["sha256"])
     ):
         raise ValueError("Calibration acceptance missing, changed, or not quality-passed")
     return dict(path=str(acceptance_path), sha256=file_hash(acceptance_path), **acceptance)
@@ -277,8 +292,15 @@ def extract_object(
     if automatic and calibration_acceptance is not None:
         acceptance = verify_calibration_acceptance(plane_path, calibration_acceptance)
     plane = load_plane(plane_path, require_accepted=not allow_unaccepted and acceptance is None)
-    if plane["extrinsics"]["sha256"] != metadata["extrinsics"]["sha256"] or plane["serial"] != metadata["serial"]:
+    if (
+        not calibration_digest_matches(metadata["extrinsics"], plane["extrinsics"]["sha256"])
+        or plane["serial"] != metadata["serial"]
+    ):
         raise ValueError("Object capture and table must share camera and calibration")
+    if plane["extrinsics"]["sha256"] != metadata["extrinsics"]["sha256"] and not np.allclose(
+        rigid(plane["T_world_color"]), rigid(metadata["T_world_color"]), atol=1e-8, rtol=0
+    ):
+        raise ValueError("Additive calibration changed the measured D415/table transform")
     if not allow_unaccepted and metadata["capture_stamp_s"] <= plane["capture_stamp_s"]:
         raise ValueError("Object capture must be newer than the accepted empty-table capture")
     if automatic:

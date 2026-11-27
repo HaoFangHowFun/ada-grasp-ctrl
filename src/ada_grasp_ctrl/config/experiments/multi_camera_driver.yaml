@@ -1,0 +1,27 @@
+# Opt-in override for the existing bimanual cameras.launch.py.
+# All cameras are stationary. Historical wrist role names are retained for compatibility.
+# 640x480x30 color/depth support was queried on all three devices on 2026-11-27.
+fixed:
+  serial_no: '347322060270'
+  color_profile: '640x480x30'
+  depth_profile: '640x480x30'
+  enable_depth: true
+  enable_pointcloud: true  # Preserve the established D415-only capture path.
+  publish_tf: true
+  enable_sync: true
+wrist_left:
+  serial_no: '260522275388'
+  color_profile: '640x480x30'
+  depth_profile: '640x480x30'
+  enable_depth: true
+  enable_pointcloud: false
+  publish_tf: true
+  enable_sync: true
+wrist_right:
+  serial_no: '260522273536'
+  color_profile: '640x480x30'
+  depth_profile: '640x480x30'
+  enable_depth: true
+  enable_pointcloud: false
+  publish_tf: true
+  enable_sync: true

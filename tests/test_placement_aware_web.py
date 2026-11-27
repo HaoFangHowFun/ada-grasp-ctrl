@@ -82,7 +82,8 @@ class PlacementAwareWebTests(unittest.TestCase):
             q = engine.state["full_positions_rad"]
             result = dict(
                 target_revision=target["target_revision"],
-                arm="right",
+                arm="both" if getattr(self, "paired", False) else "right",
+                active_arms=["left", "right"] if getattr(self, "paired", False) else ["right"],
                 mode="fixture",
                 candidate_id="synthetic_ui_only",
                 effort=0.0,
@@ -107,9 +108,11 @@ class PlacementAwareWebTests(unittest.TestCase):
                     dict(
                         selected=dict(
                             candidate_id=result["candidate_id"],
-                            required_arms=["right"],
+                            required_arms=result["active_arms"],
                             effort=0.0,
-                            candidate=dict(execution_mode="right_full"),
+                            candidate=dict(
+                                execution_mode="both_full" if getattr(self, "paired", False) else "right_full"
+                            ),
                             stages={p: dict(q56=q) for p in ("pregrasp", "grasp", "squeeze")},
                         )
                     ),
@@ -305,6 +308,10 @@ class PlacementAwareWebTests(unittest.TestCase):
                 self.assertTrue(owner.cancel.is_set())
                 self.assertEqual(app.state, "EDITING")
 
+    def test_paired_rrt_review_cleanup_and_reset_share_existing_viewer(self):
+        self.paired = True
+        self.test_rrt_pending_review_actual_state_failure_and_reset_during_planning()
+
     def test_rrt_pending_review_actual_state_failure_and_reset_during_planning(self):
         from ada_grasp_ctrl.pipeline.rrt_placement import PlacementPlanner
 
@@ -318,6 +325,9 @@ class PlacementAwareWebTests(unittest.TestCase):
                 self.update("Confirm Placement Target", True)
                 self.wait_for(lambda: app.state == "PREVIEW_READY")
                 self.assertEqual(app.plan["pending_segments"], ["lift", "carry", "place", "retreat"])
+                if getattr(self, "paired", False):
+                    self.assertEqual(app.plan["active_arms"], ["left", "right"])
+                    self.assertEqual(set(app.plan["schedule"]["stages"][0]["arms"]), {"left", "right"})
                 self.assertIn("pending actual-state planning", app.summary.content)
                 self.assertNotIn("place", app.phase.options)
                 clock = app.scene.sim.data.time

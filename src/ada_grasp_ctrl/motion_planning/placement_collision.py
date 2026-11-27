@@ -42,7 +42,7 @@ def separating(previous: dict, current: dict) -> bool:
 class PlanningScene:
     """Reuse a compiled physics model with independent MjData; never step live data."""
 
-    def __init__(self, sim: object, side: str, static: object | None = None) -> None:
+    def __init__(self, sim: object, side: str | list[str], static: object | None = None) -> None:
         self.sim, self.model, self.robot, self.side, self.static = sim, sim.model, sim.robot, side, static
         self.data = mujoco.MjData(self.model)
         self.proxy = SimpleNamespace(
@@ -54,8 +54,13 @@ class PlanningScene:
         )
         self.object_joint = int(self.model.joint("object_free").qposadr[0])
         self.object_body = self.model.body("object").id
-        self.wrist_body = self.model.body(side + "_hand_flange").id
-        self.arm = side_slice(side, True)
+        self.wrist_body = self.model.body(self.sides[0] + "_hand_flange").id
+        self.arm = (
+            side_slice(self.sides[0], True)
+            if len(self.sides) == 1
+            else np.concatenate([np.arange(56)[side_slice(s, True)] for s in self.sides])
+        )
+        self.object_path_pose = None
         self.queries = 0
         self.fixed = sim.configuration()
         self.pose = self.body_pose(sim.data, self.object_body)
@@ -92,6 +97,11 @@ class PlanningScene:
             raise ValueError("Planning requires actual object and table collision geometry")
         self.snapshot()
 
+    @property
+    def sides(self) -> list[str]:
+        """Return canonical active sides for either supported invocation form."""
+        return [self.side] if isinstance(self.side, str) else list(self.side)
+
     @staticmethod
     def body_pose(data: object, body: int) -> np.ndarray:
         """Read a finite proper world body transform."""
@@ -118,6 +128,7 @@ class PlanningScene:
         """Freeze all nonsearched joints and the static pose or measured attachment."""
         if mode not in ("approach", "pregrasp", "grasp", "squeeze", "carry", "settle", "release", "retreat"):
             raise ValueError("Unknown planning collision mode")
+        self.object_path_pose = None
         self.fixed = self.robot.configuration(fixed)
         self.mode, self.pose = mode, rigid(pose)
         self.attachment = None if attachment is None else rigid(attachment)
@@ -254,7 +265,8 @@ class PlanningScene:
                 bad.extend(forbidden_contacts([row], self.side, phase="squeeze"))
                 continue
             intended = bool(
-                row["sides"] == [self.side]
+                len(row["sides"]) == 1
+                and row["sides"][0] in self.sides
                 and row["hand_bodies"]
                 and not forbidden_contacts([{**row, "penetration_m": 1.0}], self.side, phase="squeeze")
             )
@@ -278,7 +290,8 @@ class PlanningScene:
         result = self._query(q)
         if self.measured_hand is not None:
             measured = np.array(q, copy=True)
-            measured[side_slice(self.side)][6:] = self.measured_hand[side_slice(self.side)][6:]
+            for side in self.sides:
+                measured[side_slice(side)][6:] = self.measured_hand[side_slice(side)][6:]
             if not np.array_equal(measured, q):
                 other = self._query(measured)
                 result.forbidden.extend(other.forbidden)
@@ -293,7 +306,9 @@ class PlanningScene:
         self.data.qpos[self.sim.qpos] = q
         self.data.qvel[:] = 0
         pose = self.pose
-        if self.attachment is not None:
+        if self.object_path_pose is not None:
+            pose = self.object_path_pose
+        elif self.attachment is not None:
             # MuJoCo wrist FK ensures the attachment and object use identical frames.
             mujoco.mj_forward(self.model, self.data)
             pose = self.body_pose(self.data, self.wrist_body) @ self.attachment

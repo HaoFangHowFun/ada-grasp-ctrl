@@ -1,0 +1,30 @@
+# Passive, simultaneous snapshots; all distances are metres in leftbase/Ada world.
+capture_timeout_s: 20.0
+max_age_s: 0.5
+sync_tolerance_s: 0.1
+voxel_m: 0.003
+association_distance_m: 0.01
+min_seed_support: 0.6
+# Reuse the full D415 calibrated field of view, never the selected object ROI.
+# Optional explicit [min_xyz, max_xyz] bounds additionally restrict that workspace.
+workspace_bounds_m: null
+exclude_bounds_m: []
+cameras:
+  fixed:
+    serial: '347322060270'
+    min_points: 300
+    min_valid_fraction: 0.25
+    min_depth_m: 0.15
+    max_depth_m: 2.0
+  wrist_left:
+    serial: '260522275388'
+    min_points: 100
+    min_valid_fraction: 0.01
+    min_depth_m: 0.07
+    max_depth_m: 0.5
+  wrist_right:
+    serial: '260522273536'
+    min_points: 100
+    min_valid_fraction: 0.01
+    min_depth_m: 0.07
+    max_depth_m: 0.5

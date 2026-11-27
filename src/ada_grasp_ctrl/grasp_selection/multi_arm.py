@@ -215,6 +215,8 @@ def select_paired_candidates(
     enabled_arms: object,
     q_current: object,
     max_nfev: int = 200,
+    *,
+    endpoint_gate: object = None,
 ) -> dict:
     """Evaluate native pairs with combined stage collision checks and summed CRX effort."""
     from itertools import product
@@ -286,6 +288,13 @@ def select_paired_candidates(
                 effort = float(sum(np.dot(d, d) for d in deltas.values()))
                 if not np.isfinite(effort):
                     raise ValueError("nonfinite_cost")
+                if endpoint_gate is not None:
+                    attempt["grasp_feasible"] = True
+                    attempt["grasp_effort"] = effort
+                    attempt["placement"] = endpoint_gate(row, "both", stage_q["squeeze"].copy())
+                    if not attempt["placement"]["accepted"]:
+                        attempt["reasons"].append(attempt["placement"]["reason"])
+                        continue
                 attempt["effort"] = effort
                 feasible.append(
                     dict(
@@ -298,6 +307,7 @@ def select_paired_candidates(
                         seed_index=index,
                         crx_target_rad={s: stage_q["grasp"][side_slice(s, True)].tolist() for s in hands},
                         stages=attempt["stages"],
+                        **({"placement": attempt["placement"]} if endpoint_gate is not None else {}),
                         candidate=row,
                     )
                 )

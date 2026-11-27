@@ -65,7 +65,7 @@ def arm_path(
     direct_only: bool = False,
     allow_fallback: bool = False,
 ) -> tuple[list, dict]:
-    """Plan only six joints and include preceding snapshot/IK time in the deadline."""
+    """Plan active arm joints and include preceding snapshot/IK time in the deadline."""
     if allow_fallback:
         scene.robot.configuration(scene.fixed)
         scene.robot.configuration(goal)
@@ -169,8 +169,9 @@ def prepare_execution(engine: object, endpoint: dict, destination: Path, cancele
 
     began = time.monotonic()
     chosen = read_json(destination / "placement_selection_report.json")["selected"]
-    side = endpoint["arm"]
-    if chosen["candidate_id"] != endpoint["candidate_id"] or chosen["required_arms"] != [side]:
+    sides = endpoint.get("active_arms", [endpoint["arm"]])
+    side = sides[0] if len(sides) == 1 else sides
+    if chosen["candidate_id"] != endpoint["candidate_id"] or chosen["required_arms"] != sides:
         raise ValueError("Placement winner identity changed")
     initial = engine.robot.configuration(sim.configuration())
     if not np.array_equal(initial, engine.state["full_positions_rad"]):
@@ -182,12 +183,25 @@ def prepare_execution(engine: object, endpoint: dict, destination: Path, cancele
     endpoints = {
         phase: engine.robot.configuration(chosen["stages"][phase]["q56"]) for phase in ("pregrasp", "grasp", "squeeze")
     }
-    passive = side_slice("right" if side == "left" else "left")
+    passive = np.ones(56, dtype=bool)
+    for active in sides:
+        passive[side_slice(active)] = False
     if any(not np.array_equal(q[passive], initial[passive]) for q in endpoints.values()):
         raise ValueError("Selected endpoint changed passive arm")
     approach_goal = initial.copy()
     approach_goal[scene.arm] = endpoints["pregrasp"][scene.arm]
-    path, report = arm_path(scene, approach_goal, options, canceled, time.monotonic(), allow_fallback=True)
+    approach_began = time.monotonic()
+    path, report = arm_path(scene, approach_goal, options, canceled, approach_began, allow_fallback=True)
+    if len(sides) == 2 and report.get("fallback_applied"):
+        from .bimanual_placement import approach_fallback
+
+        try:
+            path, overhead = approach_fallback(engine, scene, approach_goal, options, canceled, approach_began)
+            report.update(overhead=overhead, execution_method="overhead_fallback", simplified_waypoints=len(path))
+            report["collision_queries"] += sum(leg["collision_queries"] for leg in overhead["legs"])
+        except ValueError as error:
+            report["overhead_failure"] = str(error)
+        report["wall_s"] = time.monotonic() - approach_began
     report["segment"] = "approach"
     write_json(destination / "path_checks.json", report)
     if report["status"] != "success" and not report.get("fallback_applied"):
@@ -230,7 +244,7 @@ def prepare_execution(engine: object, endpoint: dict, destination: Path, cancele
         schedule=dict(
             schema_version=1,
             kind="ada_rrt_placement_prefix",
-            active_arms=[side],
+            active_arms=sides,
             stages=stages,
             settle_time_s=DEFAULTS["settle_time"],
             end_time=stages[-1]["settled_time"],
@@ -245,10 +259,12 @@ def prepare_execution(engine: object, endpoint: dict, destination: Path, cancele
         source_object_pose=source_pose.tolist(),
         target_object_pose=(rigid(endpoint["target"]["Delta_T"]) @ source_pose).tolist(),
         candidate_id=chosen["candidate_id"],
-        active_arms=[side],
+        active_arms=sides,
         effort=chosen["effort"],
         source_mode=endpoint["mode"],
-        execution_mode=chosen["candidate"].get("execution_mode", side + "_full"),
+        execution_mode=chosen["candidate"].get(
+            "execution_mode", "both_full" if len(sides) == 2 else sides[0] + "_full"
+        ),
         pose_adjustment=endpoint.get("simulation_pose_adjustment"),
         target=deepcopy(endpoint["target"]),
         target_revision=endpoint["target_revision"],
@@ -275,9 +291,11 @@ class PlacementPlanner:
     def __init__(self, executor: object, static: object) -> None:
         self.executor, self.plan = executor, executor.plan
         self.side = self.plan["active_arms"][0]
-        self.scene = PlanningScene(executor.sim, self.side, static)
+        self.scene = PlanningScene(executor.sim, self.sides, static)
+        self.attachments = None
         self.options = self.plan["planner_settings"]
         self.arm, self.block = self.scene.arm, side_slice(self.side)
+        self.fingers = np.concatenate([np.arange(56)[side_slice(s)][6:] for s in self.sides])
         self.reports = deepcopy(self.plan["planning_reports"])
         self.accepted = []
         self.cursor = 0.0
@@ -296,6 +314,11 @@ class PlacementPlanner:
             maximum_contact_absence_s=0.0,
         )
         self.contact_absent_since = None
+
+    @property
+    def sides(self) -> list[str]:
+        """Resolve active sides from the reviewed plan."""
+        return self.plan.get("active_arms", [self.side])
 
     @property
     def completion_first(self) -> bool:
@@ -332,7 +355,21 @@ class PlacementPlanner:
             self.executor.result["planning_segment"] = mode
             self.executor.force_snapshot = None
             self.scene.snapshot()
-            q = self.scene.robot.configuration(self.executor.sim.configuration())
+            measured = self.executor.sim.configuration()
+            if len(self.sides) == 2:
+                # MuJoCo soft limits permit small measured overshoot. Bound only
+                # the planning seed/reference; never write back to live physics.
+                measured = self.scene.robot.configuration(measured, check_limits=False)
+                bounded = np.clip(measured, self.scene.robot.limits[:, 0], self.scene.robot.limits[:, 1])
+                overshoot = float(np.max(np.abs(bounded - measured)))
+                if overshoot > 0.01:
+                    raise ValueError(f"live_joint_limit_overshoot: {overshoot}")
+                if overshoot:
+                    self.warn(
+                        "bounded_measured_seed", dict(max_adjustment_rad=overshoot, measured_q56=measured.tolist())
+                    )
+                measured = bounded
+            q = self.scene.robot.configuration(measured)
             pose = self.scene.body_pose(self.executor.sim.data, self.scene.object_body)
         return q, pose
 
@@ -381,6 +418,8 @@ class PlacementPlanner:
             ),
             reports=self.reports,
             stages=self.accepted,
+            attachments={s: a.tolist() for s, a in self.attachments.items()} if self.attachments else None,
+            active_arms=self.sides,
             preview_preparation_s=self.plan["preparation_s"],
             total_planning_s=self.plan["preparation_s"]
             + sum(r["wall_s"] for r in self.reports[len(self.plan["planning_reports"]) :]),
@@ -394,7 +433,7 @@ class PlacementPlanner:
         """Build a stage with the existing interpolator and initialize live contact latches."""
         if self.executor.cancel.is_set():
             raise RuntimeError("Planning canceled")
-        stage = planned_stage(self.side, phase, path, self.cursor, fixed_duration=fixed_duration, dwell=dwell)
+        stage = planned_stage(self.sides, phase, path, self.cursor, fixed_duration=fixed_duration, dwell=dwell)
         self.cursor = stage["settled_time"]
         self.accepted.append(stage)
         self.stage = stage
@@ -488,6 +527,10 @@ class PlacementPlanner:
         self, q: np.ndarray, pose: np.ndarray, object_goal: np.ndarray | None, segment: str, began: float
     ) -> tuple[list, np.ndarray, set]:
         """Plan from actual arm/attachment while retaining the Squeeze command."""
+        if len(getattr(self, "sides", [self.side])) == 2:
+            from .bimanual_placement import carry_path
+
+            return carry_path(self, q, pose, object_goal, segment, began)
         table_clearance = TRANSPORT_CLEARANCE_M if segment == "carry" else 0.0
         held, attachment, pairs = self.held_state(q, pose, table_clearance=table_clearance)
         if object_goal is None:
@@ -644,7 +687,8 @@ class PlacementPlanner:
         path = [q.copy()]
         for row in first["waypoints_rad"]:
             point = q.copy()
-            point[self.block] = row[self.side]
+            for side in self.sides:
+                point[side_slice(side)] = row[side]
             path.append(point)
         policy = EdgePolicy(
             self.scene,
@@ -670,7 +714,8 @@ class PlacementPlanner:
             self.scene.configure(q, "pregrasp" if phase == "pregrasp_fingers" else phase, pose)
             goal = q.copy()
             nominal = "pregrasp" if phase == "pregrasp_fingers" else phase
-            goal[self.block] = np.asarray(self.plan["nominal_endpoints"][nominal])[self.block]
+            for side in self.sides:
+                goal[side_slice(side)] = np.asarray(self.plan["nominal_endpoints"][nominal])[side_slice(side)]
             self.validate_transition(q, goal)
             yield self.accept(phase, [q, goal], dwell=DEFAULTS["settle_time"])
 
@@ -687,7 +732,7 @@ class PlacementPlanner:
             self.scene.configure(q, "release", pose)
             end = q.copy()
             end[self.arm] = goal[self.arm]
-            end[self.block][6:] = np.asarray(self.plan["nominal_endpoints"][source])[self.block][6:]
+            end[self.fingers] = np.asarray(self.plan["nominal_endpoints"][source])[self.fingers]
             self.validate_transition(q, end)
             yield self.accept(phase, [q, end], fixed_duration=values[phase + "_s"])
         began = time.monotonic()
@@ -729,15 +774,27 @@ class PlacementPlanner:
         """Confirm loss only after sustained absence and displacement; never weld the object."""
         now = float(self.executor.sim.data.time)
         if contacts(observed.hand):
+            if getattr(self, "attachments", None):
+                from .bimanual_placement import contact_sides
+
+                present = contact_sides(self, observed)
+                if len(present) == 1:
+                    self.warn("one_sided_contact_loss", dict(contact_sides=sorted(present)))
             self.contact_absent_since = None
             return
         if self.contact_absent_since is None:
             self.contact_absent_since = now
         absent = now - self.contact_absent_since
         self.grasp_evidence["maximum_contact_absence_s"] = max(self.grasp_evidence["maximum_contact_absence_s"], absent)
-        wrist = self.scene.body_pose(self.executor.sim.data, self.scene.wrist_body)
         pose = self.scene.body_pose(self.executor.sim.data, self.scene.object_body)
-        deviation = float(np.linalg.norm(pose[:3, 3] - (wrist @ self.last_attachment)[:3, 3]))
+        if getattr(self, "attachments", None):
+            from .bimanual_placement import predicted_object
+
+            expected = predicted_object(self)
+        else:
+            wrist = self.scene.body_pose(self.executor.sim.data, self.scene.wrist_body)
+            expected = wrist @ self.last_attachment
+        deviation = float(np.linalg.norm(pose[:3, 3] - expected[:3, 3]))
         if absent >= 0.5 and deviation >= 0.02 and not self.grasp_evidence["drop_confirmed"]:
             self.grasp_evidence.update(
                 outcome="dropped",

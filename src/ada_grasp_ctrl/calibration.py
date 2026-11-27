@@ -16,6 +16,42 @@ from ada_grasp_ctrl.paths import resolve_from_root
 DEFAULT_CALIBRATION = "src/ada_grasp_ctrl/config/calibration/dual_system_calibration.json"
 
 
+def compatible_camera_calibration_hashes(data: dict) -> list[str]:
+    """Verify preserved predecessors that differ only by stationary-camera entries.
+
+    Backups are hash-bound actual input files, not declarations that arbitrary
+    old calibration is equivalent. Changes to any legacy field invalidate this
+    compatibility path, including D415, bases, mounts, conventions and metadata.
+    """
+
+    def legacy(value: dict) -> dict:
+        return {
+            **value,
+            "authoritative": {key: item for key, item in value["authoritative"].items() if key != "stationary_cameras"},
+        }
+
+    expected, pending, accepted, visited = legacy(data), [data], set(), set()
+    while pending:
+        current = pending.pop()
+        for camera in current["authoritative"].get("stationary_cameras", {}).values():
+            reference = camera.get("provenance", {}).get("previous_calibration")
+            if not reference or reference.get("sha256") in visited:
+                continue
+            visited.add(reference.get("sha256"))
+            try:
+                source = resolve_from_root(reference["path"])
+                if file_hash(source) != reference["sha256"]:
+                    continue
+                previous = json.loads(source.read_text())
+                if legacy(previous) != expected:
+                    continue
+            except (OSError, KeyError, TypeError, ValueError):
+                continue
+            accepted.add(reference["sha256"])
+            pending.append(previous)
+    return sorted(accepted)
+
+
 def load_calibration(path: str | Path = DEFAULT_CALIBRATION) -> dict:
     """Load only authoritative base, optical-camera and hand-mount geometry.
 
@@ -47,7 +83,16 @@ def load_calibration(path: str | Path = DEFAULT_CALIBRATION) -> dict:
             base=placement(source["dual_crx"]["T_leftbase_rightbase"]),
             camera=rigid(source["camera"]["T_leftbase_color_optical"]["matrix_4x4"], "T_leftbase_color_optical"),
             mounts={side: placement(source["hand_mounts"][side]) for side in ("left", "right")},
-            provenance=dict(path=str(path), sha256=file_hash(path), calibration_id=data["calibration_id"]),
+            provenance=dict(
+                path=str(path),
+                sha256=file_hash(path),
+                calibration_id=data["calibration_id"],
+                **(
+                    {"compatible_sha256": compatible_camera_calibration_hashes(data)}
+                    if source.get("stationary_cameras")
+                    else {}
+                ),
+            ),
         )
     except (KeyError, TypeError) as error:
         raise ValueError(f"Malformed authoritative calibration: {error}") from error

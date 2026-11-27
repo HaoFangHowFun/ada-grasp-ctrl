@@ -6,6 +6,7 @@ import argparse
 import os
 from pathlib import Path
 import socket
+import shutil
 import sys
 import time
 
@@ -72,7 +73,33 @@ def run(args: argparse.Namespace, config: dict, root: Path, processes: Processes
     group = dict(group="live")
     timings = report.setdefault("timings", {})
     began = time.monotonic()
-    obj = perceive(group, perceive_args, config, processes, root, infer=False)
+    if config.get("multi_camera"):
+        observation_root = root / "multi_camera"
+        command = [
+            config["ros_python"],
+            "-m",
+            "ada_grasp_ctrl.experiments.multi_camera",
+            "observe",
+            "--config",
+            str(resolve_from_root(config["multi_camera_config"])),
+            "--camera-config",
+            str(resolve_from_root(config["camera_config"])),
+            "--calibration",
+            str(resolve_from_root(config.get("extrinsics") or DEFAULT_CALIBRATION)),
+            "--plane",
+            str(resolve_from_root(config["table_plane"])),
+            "--output-root",
+            str(observation_root),
+        ]
+        if args.roi is not None:
+            command += ["--roi", *map(str, args.roi)]
+        if args.cluster is not None:
+            command += ["--cluster", str(args.cluster)]
+        processes.run(command, "multi_camera_observation", ros=True)
+        obj = observation_root / "object"
+        report["multi_camera"] = read_json(observation_root / "run_report.json")
+    else:
+        obj = perceive(group, perceive_args, config, processes, root, infer=False)
     timings["capture_s"] = time.monotonic() - began
     began = time.monotonic()
     rows = infer_live_sides(obj, config, processes, root)
@@ -263,12 +290,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output-root", required=True)
     parser.add_argument("--environment", choices=("hardware", "mock", "simulation"))
     parser.add_argument("--ros-domain-id", type=int)
-    parser.add_argument("--arms", choices=("auto", "left", "right"), default="auto")
+    parser.add_argument("--arms", choices=("auto", "left", "right", "both_only"), default="auto")
     parser.add_argument("--selector", choices=("legacy", "hierarchical"), default="legacy")
     parser.add_argument("--grasp-model", choices=("right_full", "native_multimode"), default="right_full")
     parser.add_argument("--grasp-mode", choices=("auto", "both_only"), default="auto")
     parser.add_argument("--roi", nargs=4, type=int)
     parser.add_argument("--cluster", type=int)
+    parser.add_argument(
+        "--multi-camera", action="store_true", help="Opt-in stationary D415 + two D405 observation (hardware)"
+    )
+    parser.add_argument("--multi-camera-config", help="Override multi-camera capture/fusion settings")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--export-only", action="store_true")
     mode.add_argument("--preview-only", action="store_true")
@@ -282,10 +313,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--uop-root", help="Existing UOP-Net checkout (or UOP_NET_ROOT)")
     parser.add_argument("--uop-python", help="Existing UOP Python (defaults to checkout/.venv/bin/python)")
     args = parser.parse_args(argv)
+    if args.arms == "both_only":
+        args.arms, args.grasp_mode = "auto", "both_only"
     root, processes, created = resolve_from_root(args.output_root, "output"), None, False
     report = dict(schema_version=1, status="preflight", object_lifted=None, object_held=None)
     try:
         config = configuration(args.config)
+        if args.multi_camera_config and not args.multi_camera:
+            raise ValueError("--multi-camera-config requires --multi-camera")
+        if args.multi_camera:
+            if (args.environment or config["environment"]) != "hardware":
+                raise ValueError("--multi-camera supports hardware only; simulation/mock remain unchanged")
+            if args.placement_only:
+                raise ValueError("--multi-camera --placement-only is not supported")
+            config["multi_camera"] = True
+            config["multi_camera_config"] = (
+                args.multi_camera_config or "src/ada_grasp_ctrl/config/experiments/multi_camera.yaml"
+            )
         if args.placement_planner and not (args.placement_execute and args.placement_aware):
             raise ValueError(
                 "--placement-planner requires --placement-aware --placement-execute --environment simulation"
@@ -295,8 +339,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.placement_aware:
             if (args.environment or config["environment"]) != "simulation":
                 raise ValueError("--placement-aware requires --environment simulation")
-            if args.grasp_mode == "both_only":
-                raise ValueError("--placement-aware supports single-arm candidates only; both_only is incompatible")
+            if args.grasp_mode == "both_only" and args.placement_planner != "rrt_connect":
+                raise ValueError("Paired placement requires --placement-planner rrt_connect")
         if (args.environment or config["environment"]) == "simulation":
             from .simulation_ui import run_simulation
 
@@ -348,6 +392,14 @@ def main(argv: list[str] | None = None) -> int:
             selector_settings(config.get("hierarchical_selector"))
         root.mkdir(parents=True, exist_ok=False)
         created = True
+        if args.multi_camera:
+            from ada_grasp_ctrl.experiments.multi_camera import load_config as load_multi_config
+            from ada_grasp_ctrl.experiments.multi_camera_calibration import load_cameras
+
+            calibration_copy = root / "calibration.json"
+            shutil.copyfile(resolve_from_root(config.get("extrinsics") or DEFAULT_CALIBRATION), calibration_copy)
+            load_cameras(calibration_copy, load_multi_config(resolve_from_root(config["multi_camera_config"])))
+            config["extrinsics"] = str(calibration_copy)
         config["robot_snapshot"] = str(
             calibrated_snapshot(
                 config["robot_snapshot"], root / "robot_snapshot", config.get("extrinsics") or DEFAULT_CALIBRATION

@@ -208,6 +208,12 @@ class SimulationExecutor:
                 relative_actual = np.linalg.inv(wrists["left"]) @ wrists["right"]
                 relative_expected = np.linalg.inv(self.scene.robot.fk(q, "left")) @ self.scene.robot.fk(q, "right")
                 relative_error = residual(relative_actual, relative_expected)
+            attachment_errors = None
+            if self.planner and self.planner.attachments:
+                attachment_errors = {
+                    side: residual(np.linalg.solve(pose, wrists[side]), self.planner.attachments[side])
+                    for side in self.plan["active_arms"]
+                }
             self.latest = dict(
                 time_s=float(self.sim.data.time),
                 phase=phase,
@@ -227,6 +233,7 @@ class SimulationExecutor:
                 relative_wrist=(np.linalg.inv(wrists["left"]) @ wrists["right"]).tolist() if len(wrists) == 2 else None,
                 relative_wrist_reference=relative_expected.tolist() if relative_expected is not None else None,
                 relative_wrist_error=relative_error,
+                **({"attachment_errors": attachment_errors} if attachment_errors is not None else {}),
                 numerical_warning_counts=self.sim.data.warning.number.tolist(),
             )
             # Display-only sampling shares this exact measured state and clock.

@@ -129,7 +129,13 @@ def validate_schedule(schedule: dict) -> None:
 
 
 def planned_stage(
-    side: str, phase: str, path: list, cursor: float, *, fixed_duration: float | None = None, dwell: float = 0.0
+    side: str | list[str],
+    phase: str,
+    path: list,
+    cursor: float,
+    *,
+    fixed_duration: float | None = None,
+    dwell: float = 0.0,
 ) -> dict:
     """Project a checked full-configuration path onto the existing linear reference.
 
@@ -143,12 +149,28 @@ def planned_stage(
         raise ValueError("Expected a finite full-configuration path")
     if len(points) == 1:
         points = np.repeat(points, 2, axis=0)
-    block = side_slice(side)
-    policy = _policies(None, [side])[side]
+    sides = [side] if isinstance(side, str) else list(side)
+    policies = _policies(None, sides)
     durations = [
-        _duration(motion_duration(a[block], b[block], argparse.Namespace(**policy)), "edge duration")
+        max(
+            _duration(
+                motion_duration(a[side_slice(s)], b[side_slice(s)], argparse.Namespace(**policies[s])), "edge duration"
+            )
+            for s in sides
+        )
         for a, b in zip(points, points[1:])
     ]
+    if len(sides) == 2 and phase in ("lift", "transport", "place"):
+        # Dense object-path samples are one motion, not separately stopped moves.
+        # Apply the existing duration policy once to accumulated joint travel and
+        # allocate a common clock using the larger arm increment on each edge.
+        travel = np.sum(np.abs(np.diff(points, axis=0)), axis=0)
+        total = max(
+            motion_duration(np.zeros(28), travel[side_slice(s)], argparse.Namespace(**policies[s])) for s in sides
+        )
+        weights = np.max(np.abs(np.diff(points, axis=0)), axis=1)
+        weights = np.maximum(weights, 1e-12)
+        durations = (total * weights / weights.sum()).tolist()
     if fixed_duration is not None:
         if len(durations) != 1:
             raise ValueError("Fixed duration is only for existing settle/release transitions")
@@ -160,15 +182,16 @@ def planned_stage(
         stage_end_time=cursor + duration,
         settled_time=cursor + duration + dwell,
         duration_s=duration,
-        required_durations_s={side: duration},
+        required_durations_s={s: duration for s in sides},
         arms={
-            side: dict(
-                joint_names=list(sum(side_names(side), ())),
-                start_positions_rad=points[0, block].tolist(),
-                positions_rad=points[-1, block].tolist(),
+            s: dict(
+                joint_names=list(sum(side_names(s), ())),
+                start_positions_rad=points[0, side_slice(s)].tolist(),
+                positions_rad=points[-1, side_slice(s)].tolist(),
             )
+            for s in sides
         },
-        waypoints_rad=[{side: point[block].tolist()} for point in points[1:]],
+        waypoints_rad=[{s: point[side_slice(s)].tolist() for s in sides} for point in points[1:]],
         segment_durations_s=durations,
         fixed_q56=points[0].tolist(),
     )
@@ -180,9 +203,9 @@ def validate_rrt_schedule(plan: dict) -> None:
     from ada_grasp_ctrl.robot_environment.kinematics import rigid
 
     schedule, sides = plan["schedule"], plan["active_arms"]
-    if sides not in (["left"], ["right"]) or schedule["active_arms"] != sides:
-        raise ValueError("RRT placement requires exactly one active arm")
-    side, cursor = sides[0], 0.0
+    if sides not in (["left"], ["right"], ["left", "right"]) or schedule["active_arms"] != sides:
+        raise ValueError("RRT placement requires canonical active arms")
+    cursor = 0.0
     stages = schedule["stages"]
     phases = [s["phase"] for s in stages]
     if phases != ["pregrasp", "pregrasp_fingers", "grasp", "squeeze"]:
@@ -203,7 +226,7 @@ def validate_rrt_schedule(plan: dict) -> None:
     ):
         raise ValueError("Confirmed object target changed")
     previous = np.asarray(plan["initial_q56"])
-    block = side_slice(side)
+    blocks = [side_slice(s) for s in sides]
     for stage in stages:
         fixed = np.asarray(stage["fixed_q56"])
         if not np.array_equal(fixed, previous):
@@ -211,22 +234,28 @@ def validate_rrt_schedule(plan: dict) -> None:
         points = [fixed.copy()]
         for row in stage["waypoints_rad"]:
             q = fixed.copy()
-            if set(row) != {side}:
+            if set(row) != set(sides):
                 raise ValueError("Waypoint active arm changed")
-            q[block] = row[side]
+            for side in sides:
+                q[side_slice(side)] = row[side]
             points.append(q)
         dwell = schedule["settle_time_s"]
-        expected = planned_stage(side, stage["phase"], points, cursor, dwell=dwell)
+        expected = planned_stage(sides, stage["phase"], points, cursor, dwell=dwell)
         if expected != stage:
             raise ValueError("Reviewed path timing or endpoints changed")
-        if stage["phase"] == "pregrasp" and any(not np.array_equal(q[block][6:], fixed[block][6:]) for q in points):
+        if stage["phase"] == "pregrasp" and any(
+            not np.array_equal(q[block][6:], fixed[block][6:]) for q in points for block in blocks
+        ):
             raise ValueError("Approach must hold fingers fixed")
         if stage["phase"] in ("pregrasp_fingers", "grasp", "squeeze"):
             endpoint = "pregrasp" if stage["phase"] == "pregrasp_fingers" else stage["phase"]
             if points[-1].tolist() != plan["nominal_endpoints"][endpoint]:
                 raise ValueError("Selected grasp endpoints changed")
         if stage["phase"] == "pregrasp":
-            if not np.array_equal(points[-1][block][:6], np.asarray(plan["nominal_endpoints"]["pregrasp"])[block][:6]):
+            if any(
+                not np.array_equal(points[-1][block][:6], np.asarray(plan["nominal_endpoints"]["pregrasp"])[block][:6])
+                for block in blocks
+            ):
                 raise ValueError("Selected pregrasp arm endpoint changed")
         previous, cursor = points[-1], stage["settled_time"]
     if cursor != schedule["end_time"]:
