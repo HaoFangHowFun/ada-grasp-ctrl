@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from copy import deepcopy
+import json
 import tempfile
 import threading
 import time
@@ -705,6 +706,21 @@ class MuJoCoPlanningTests(unittest.TestCase):
             root=root, robot=scene.robot, static=self.builder.static, state=state, config=self.config
         )
         return scene, prepare_execution(engine, endpoint, root, lambda: False, scene.sim)
+
+    def test_collision_fallback_plan_matches_its_reviewed_json(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            collision = dict(category="robot_object", pair=(20, 146), distance_m=-0.001)
+            with patch.object(PlanningScene, "query", return_value=Observation({}, {}, [collision])):
+                scene, plan = self.stationary_plan(root)
+            saved = json.loads((root / "simulation_plan.json").read_text())
+            self.assertEqual(saved, plan)
+            report = plan["planning_reports"][0]
+            self.assertTrue(report["fallback_applied"])
+            self.assertEqual(report["last_collision"][0]["pair"], [20, 146])
+            self.assertEqual(plan["preparation_warnings"][0]["reason"][0]["pair"], [20, 146])
+            np.testing.assert_array_equal(scene.sim.configuration(), plan["initial_q56"])
+            SimulationExecutor(scene, plan, self.config, root)
 
     def test_pending_preview_target_identity_missing_grasp_failure_and_cancellation(self):
         with tempfile.TemporaryDirectory() as directory:

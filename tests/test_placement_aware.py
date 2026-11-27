@@ -29,6 +29,21 @@ from scipy.spatial.transform import Rotation
 
 
 class TargetTests(unittest.TestCase):
+    def test_resolved_target_carries_support_patch_in_its_identity(self):
+        session, geometry = self.fixture()
+        geometry.support = session.center + np.array(
+            [[x, y, z] for x in (-0.02, 0.02) for y in (-0.02, 0.02) for z in (-0.01, 0.01)]
+        )
+        geometry.footprint = geometry.support.copy()
+        target = geometry.resolve(session, [0.4, -0.3], 1)
+        points = np.asarray(target["contact_patch_world_m"])
+        self.assertEqual(points.shape, (4, 3))
+        np.testing.assert_allclose(points @ geometry.plane[:3] + geometry.plane[3], 0, atol=1e-12)
+        changed = {k: v for k, v in target.items() if k != "target_sha256"}
+        self.assertEqual(target["target_sha256"], digest(changed))
+        changed["contact_patch_world_m"] = []
+        self.assertNotEqual(target["target_sha256"], digest(changed))
+
     def fixture(self, normal=(0, 0, 1)):
         points = np.array([[0.3, -0.4, 0.1], [0.34, -0.38, 0.2], [0.28, -0.42, 0.14]])
         directory = tempfile.TemporaryDirectory()

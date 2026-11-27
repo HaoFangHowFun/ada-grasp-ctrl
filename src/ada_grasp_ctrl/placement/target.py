@@ -9,6 +9,7 @@ import numpy as np
 
 from ada_grasp_ctrl.robot_environment.kinematics import rigid
 from .session import rotation
+from .face_coverage import contact_patch
 
 
 def digest(value: dict) -> str:
@@ -117,6 +118,7 @@ class TargetGeometry:
             clearance_m=self.clearance,
             clearance_policy="nominal collision support contact; no destination settling",
             support_geometry=self.source,
+            contact_patch_world_m=contact_patch(self.support @ R.T + delta[:3, 3], self.plane),
             stability_validated=False,
         )
         return {**value, "target_sha256": digest(value)}

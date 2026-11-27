@@ -21,7 +21,74 @@ click **Execute Grasp-to-Place**. Lift, transport, descent and retreat are plann
 from measured state when their stages begin. Reset cancels the existing execution
 owner. No extra approval screen, physics thread or server is introduced.
 
+## Lightweight placement-face selection filter, 2026-11-27
+
+New placement targets include `contact_patch_world_m` in their hashed identity.
+It is the convex projected footprint of compiled object collision vertices within
+2 mm of the intended table-contact plane. This filter is shared by placement
+candidate selection with either execution planner; it is not an execution stop.
+
+Before Place IK, `placement/face_coverage.py` reuses the selector's existing Squeeze
+static FK and rigidly transforms only the active hand's collision meshes to the
+requested wrist pose. For each mesh, vertices at or below 2 mm above the table
+are projected onto the contact patch. Reject `placement_face_covered` only if one
+mesh's overlapping convex footprint has **at least 50 mm² area and 10 mm span**.
+Small fingertip/edge overlaps are admitted. Rejection selects another candidate
+through the existing selector and skips all Place IK seeds for the rejected grasp.
+No contact gates, reference motion or physics behavior are changed.
+
+Mesh vertices are cached once per target selection. Results are cached by active
+side, finger angles and requested wrist pose, so changing the arm IK branch does
+not repeat the coverage calculation. No additional FK, physics steps, collision
+queries, IK calls, RRT searches, release simulation or inference are introduced.
+Targets saved before this field existed retain legacy selection behavior; restart
+the viewer and confirm a new target to enable the new filter.
+
+This is a coarse coverage heuristic, not exact mesh intersection or a release
+certificate. Convex footprints can bridge concavities/gaps; point/line support
+patches have no area and are not filtered. It checks nominal Squeeze geometry, so
+actual finger deflection and object slip can still change placement feasibility.
+
+Fresh geometry audit: `output/simulation/placement_face_audit_20261127_final/audit.json`.
+Seven explicitly attributed cached grasps were checked without inference or
+physics rollout. Six pass, including the five earlier replay cases. The latest
+`rrt_placement_20261127_112121/attempt_0003` winner `right:right_full:c0251` is rejected:
+its middle distal mesh covers 78.0 mm² over 15.89 mm and its ring distal mesh covers
+94.6 mm² over 15.91 mm. This is evidence of nominal support-face obstruction, not
+proof that it caused a particular physical drop. A replacement grasp was not
+executed in this geometry audit.
+
+On this machine the seven first checks took 0.46–3.00 ms each, with 0.58–6.06 ms
+one-time mesh/patch cache construction per selection. Median repeated cached
+checks (100 per case) took about 0.002 ms. These are local measurements, not a
+hardware-independent performance guarantee.
+
+Validation: 47 focused placement/RRT tests pass, including small versus broad
+coverage, tilted planes, both hands, target identity, cache invalidation, static
+state isolation and selection of another candidate without extra Place IK for
+blocked grasps. The broader run executed 725 tests with 97 skipped and the same
+single occupied-port-8089 launcher failure. The final cache and target-identity
+assertions were also checked in the focused run. Ruff check, compileall and diff
+checks pass; repository formatting still reports eight unchanged files. The fresh
+quick gate at `/tmp/ada-face-quick-20261127-v1` has the same three known Shadow
+inventory mismatches described below (100 outputs, 68 success, 4 failure, 21
+invalid, 7 degraded, zero execution errors); later hands are not reached.
+
 ## Current execution policy
+
+Review serialization fix (2026-11-27): the two recent selections in
+`rrt_placement_20261127_114205/attempt_0003/placement/target_0024` and
+`attempt_0005/placement/target_0012` selected `left:right_full:c0223` and prepared
+an Approach fallback. Collision pairs remained tuples in the in-memory planning
+report but became lists in JSON, falsely triggering the UI's `Reviewed plan changed`
+check before physics started. RRT preparation now normalizes the complete returned
+plan with the existing `jsonable` helper before validation and saving. The strict
+review comparison remains unchanged; commands and collision policies are unchanged.
+Fresh attributed preparations in `output/simulation/rrt_review_comparison_20261127_before`
+reproduce the mismatch for both cases. The corresponding `_after` preparations
+match their saved plans exactly and construct the executor successfully. These
+checks do not run the full physical trajectory. The new collision-warning/fallback
+round-trip regression fails before the fix; all 53 focused tests pass afterward.
 
 The sequence remains Approach, Pregrasp fingers, Grasp, Squeeze, Lift, Transport,
 Place, Settle, Release 1, Release 2 and Retreat. All arm motion through Settle keeps

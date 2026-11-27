@@ -9,6 +9,7 @@ from typing import Callable, Generator, Iterator
 import numpy as np
 
 from ada_grasp_ctrl.grasp_selection.adapters.dexlearn import read_json, file_hash
+from ada_grasp_ctrl.grasp_selection.types import jsonable
 from ada_grasp_ctrl.motion_planning.rrt_connect import PlanResult, plan as search
 from ada_grasp_ctrl.motion_planning.placement_collision import (
     PlanningScene,
@@ -258,6 +259,9 @@ def prepare_execution(engine: object, endpoint: dict, destination: Path, cancele
         label=LABEL,
         preparation_s=time.monotonic() - began,
     )
+    # Collision diagnostics contain tuple pairs; normalize the in-memory review
+    # to the same representation as its JSON file before the UI compares them.
+    result = jsonable(result)
     verify_plan(result)
     if canceled():
         raise RuntimeError("Placement preparation canceled")

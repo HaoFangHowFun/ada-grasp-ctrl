@@ -5,6 +5,7 @@ import numpy as np
 from ada_grasp_ctrl.grasp_selection.multi_arm import SEEDS, forbidden_contacts
 from ada_grasp_ctrl.robot_environment.kinematics import rigid
 from ada_grasp_ctrl.robot_environment.model import side_slice
+from .face_coverage import FaceCoverage
 
 
 class PlacementGate:
@@ -13,11 +14,25 @@ class PlacementGate:
     def __init__(self, robot: object, static: object, target: dict, canceled: object = lambda: False) -> None:
         self.robot, self.static, self.target, self.canceled = robot, static, target, canceled
         self.delta = rigid(target["Delta_T"])
+        self.face_coverage = FaceCoverage(static, target) if len(target.get("contact_patch_world_m", [])) >= 3 else None
 
     def __call__(self, row: dict, side: str, held: np.ndarray) -> dict:
         """Test the adjusted terminal squeeze wrist, keeping its fingers and passive arm."""
+        if self.canceled():
+            raise RuntimeError("Placement evaluation canceled")
         source = rigid(row["targets"][side]["squeeze"]["T_world_hand"])
         destination = self.delta @ source
+        coverage = self.face_coverage.check(side, held, destination) if self.face_coverage else None
+        if coverage is not None and not coverage["accepted"]:
+            return dict(
+                accepted=False,
+                reason="placement_face_covered",
+                face_coverage=coverage,
+                attempts=[],
+                collision_checked=False,
+                target_revision=self.target["target_revision"],
+                target_sha256=self.target["target_sha256"],
+            )
         arm = side_slice(side, True)
         mask = np.ones(56, dtype=bool)
         mask[arm] = False
@@ -70,6 +85,7 @@ class PlacementGate:
             collision_policy="existing squeeze contact policy; static robot/table scene without object solid",
             target_revision=self.target["target_revision"],
             target_sha256=self.target["target_sha256"],
+            face_coverage=coverage,
         )
         if valid:
             _, index, q, diagnostic = min(valid, key=lambda item: item[:2])
