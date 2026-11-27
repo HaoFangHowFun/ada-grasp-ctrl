@@ -115,9 +115,16 @@ def check_reference(robot: object, static: object, plan: dict, canceled: object,
                 )
 
 
-def prepare_execution(engine: object, endpoint: dict, destination: Path, canceled: object) -> dict:
+def prepare_execution(engine: object, endpoint: dict, destination: Path, canceled: object, sim: object = None) -> dict:
     """Prepare only the already-selected winner; failures never invoke selection again."""
     from .simulation_plan import verify_plan
+
+    if engine.config.get("simulation", {}).get("placement_planner") == "rrt_connect":
+        from .rrt_placement import prepare_execution as prepare_rrt
+
+        if sim is None:
+            raise ValueError("RRT placement requires the actual settled simulation scene")
+        return prepare_rrt(engine, endpoint, destination, canceled, sim)
 
     began = time.monotonic()
     root, config, robot, static = engine.root, engine.config, engine.robot, engine.static
@@ -233,7 +240,7 @@ def prepare_execution(engine: object, endpoint: dict, destination: Path, cancele
 
 def preview_points(plan: dict, robot: object, points: np.ndarray, q: np.ndarray, phase: str) -> np.ndarray:
     """Compute display-only attachment from immutable points, never from a prior frame."""
-    if phase in PHASES[:4]:
+    if plan.get("placement_planner") == "rrt_connect" or phase in PHASES[:4]:
         return points
     if phase in ("lift", "reorient", "transport", "place"):
         transform = robot.fk(q, plan["active_arms"][0]) @ np.linalg.inv(rigid(plan["T_world_hand_source_held"]))

@@ -493,17 +493,37 @@ class SimulationApp:
                 self.object_handle.wxyz = body.xquat.copy()
                 counter += 1
                 if self.executor and counter % 3 == 0:
+                    if self.executor.result["status"] == "planning":
+                        self.summary.content = (
+                            f"Planning **{self.executor.result.get('planning_segment')}** from measured state. "
+                            "Physics paused; Reset Scene cancels planning."
+                        )
+                        continue
                     if self.executor.result["status"] == "holding" and self.state == "EXECUTING":
                         self.transition("HOLDING")
                     if self.executor.result["status"] == "completed" and self.state == "EXECUTING":
                         self.transition(
-                            "COMPLETED", "Schedule completed; physics continues until Reset. Hold not evaluated."
+                            "COMPLETED",
+                            "Opening and retreat completed after grasp loss; placement incomplete."
+                            if self.executor.result.get("cleanup_completed")
+                            else "Schedule completed; physics continues until Reset. Hold not evaluated.",
                         )
                     latest = self.executor.latest
                     if latest:
                         if self.placement_execute:
+                            evidence = self.executor.result.get("grasp_evidence", {})
+                            outcome = {
+                                "pending": "Grasp not yet evaluated",
+                                "carrying": "Carrying object",
+                                "retained_to_release": "Object held until Release",
+                                "contact_lost_before_release": "No hand contact immediately before Release",
+                                "dropped": "Object dropped; opening and retreating",
+                                "not_acquired": "Object was not grasped; opening and retreating",
+                            }.get(evidence.get("outcome"), "Grasp retention not evaluated")
                             self.summary.content = (
                                 f"**{latest['phase']}** · {self.executor.result['status']}\n\n"
+                                f"{outcome}. "
+                                f"Full pipeline completed: {self.executor.result['pipeline_completed']}.\n\n"
                                 "Actual MuJoCo state. Hold not evaluated; no placement success criterion."
                             )
                             continue

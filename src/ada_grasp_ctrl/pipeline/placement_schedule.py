@@ -3,9 +3,11 @@
 import argparse
 from copy import deepcopy
 
+import numpy as np
+
 from ada_grasp_ctrl.experiments.right_ros_contract import side_names
 from ada_grasp_ctrl.experiments.right_ros_sender import motion_duration
-from .shared_timing import build_stage_schedule, _duration, _named
+from .shared_timing import build_stage_schedule, _duration, _named, _policies
 
 PHASES = (
     "above_object",
@@ -124,3 +126,108 @@ def validate_schedule(schedule: dict) -> None:
         raise ValueError(f"Malformed placement schedule: {error}") from error
     if deepcopy(schedule) != expected:
         raise ValueError("Placement schedule differs from its endpoints or timing policy")
+
+
+def planned_stage(
+    side: str, phase: str, path: list, cursor: float, *, fixed_duration: float | None = None, dwell: float = 0.0
+) -> dict:
+    """Project a checked full-configuration path onto the existing linear reference.
+
+    Each edge retains the existing motion-duration floor and velocity policy.
+    The full frozen state is recorded for audit; passive commands remain unchanged.
+    """
+    from ada_grasp_ctrl.robot_environment.model import side_slice
+
+    points = np.asarray(path, dtype=float)
+    if points.ndim != 2 or points.shape[1] != 56 or not len(points) or not np.isfinite(points).all():
+        raise ValueError("Expected a finite full-configuration path")
+    if len(points) == 1:
+        points = np.repeat(points, 2, axis=0)
+    block = side_slice(side)
+    policy = _policies(None, [side])[side]
+    durations = [
+        _duration(motion_duration(a[block], b[block], argparse.Namespace(**policy)), "edge duration")
+        for a, b in zip(points, points[1:])
+    ]
+    if fixed_duration is not None:
+        if len(durations) != 1:
+            raise ValueError("Fixed duration is only for existing settle/release transitions")
+        durations = [_duration(fixed_duration, phase)]
+    duration = _duration(sum(durations), phase)
+    return dict(
+        phase=phase,
+        stage_start_time=cursor,
+        stage_end_time=cursor + duration,
+        settled_time=cursor + duration + dwell,
+        duration_s=duration,
+        required_durations_s={side: duration},
+        arms={
+            side: dict(
+                joint_names=list(sum(side_names(side), ())),
+                start_positions_rad=points[0, block].tolist(),
+                positions_rad=points[-1, block].tolist(),
+            )
+        },
+        waypoints_rad=[{side: point[block].tolist()} for point in points[1:]],
+        segment_durations_s=durations,
+        fixed_q56=points[0].tolist(),
+    )
+
+
+def validate_rrt_schedule(plan: dict) -> None:
+    """Validate the reviewed prefix without claiming future actual-state paths exist."""
+    from ada_grasp_ctrl.robot_environment.model import side_slice
+    from ada_grasp_ctrl.robot_environment.kinematics import rigid
+
+    schedule, sides = plan["schedule"], plan["active_arms"]
+    if sides not in (["left"], ["right"]) or schedule["active_arms"] != sides:
+        raise ValueError("RRT placement requires exactly one active arm")
+    side, cursor = sides[0], 0.0
+    stages = schedule["stages"]
+    phases = [s["phase"] for s in stages]
+    if phases != ["pregrasp", "pregrasp_fingers", "grasp", "squeeze"]:
+        raise ValueError("RRT review requires approach and nominal grasp/squeeze only")
+    if (
+        plan["pending_segments"]
+        not in (["lift", "carry", "place", "retreat"], ["lift", "carry", "retreat"], ["carry", "retreat"])
+        or plan["execution_phases"] != phases
+    ):
+        raise ValueError("Future paths must remain pending actual-state planning")
+    if plan.get("stage_completion") != "timed":
+        raise ValueError("RRT placement retains timed execution")
+    expected_object = rigid(plan["target"]["Delta_T"]) @ rigid(plan["source_object_pose"])
+    if (
+        not np.allclose(rigid(plan["target_object_pose"]), expected_object, atol=1e-12, rtol=0)
+        or plan["target_revision"] != plan["target"]["target_revision"]
+        or plan["target_sha256"] != plan["target"]["target_sha256"]
+    ):
+        raise ValueError("Confirmed object target changed")
+    previous = np.asarray(plan["initial_q56"])
+    block = side_slice(side)
+    for stage in stages:
+        fixed = np.asarray(stage["fixed_q56"])
+        if not np.array_equal(fixed, previous):
+            raise ValueError("Reviewed path discontinuity or frozen joints changed")
+        points = [fixed.copy()]
+        for row in stage["waypoints_rad"]:
+            q = fixed.copy()
+            if set(row) != {side}:
+                raise ValueError("Waypoint active arm changed")
+            q[block] = row[side]
+            points.append(q)
+        dwell = schedule["settle_time_s"]
+        expected = planned_stage(side, stage["phase"], points, cursor, dwell=dwell)
+        if expected != stage:
+            raise ValueError("Reviewed path timing or endpoints changed")
+        if stage["phase"] == "pregrasp" and any(not np.array_equal(q[block][6:], fixed[block][6:]) for q in points):
+            raise ValueError("Approach must hold fingers fixed")
+        if stage["phase"] in ("pregrasp_fingers", "grasp", "squeeze"):
+            endpoint = "pregrasp" if stage["phase"] == "pregrasp_fingers" else stage["phase"]
+            if points[-1].tolist() != plan["nominal_endpoints"][endpoint]:
+                raise ValueError("Selected grasp endpoints changed")
+        if stage["phase"] == "pregrasp":
+            if not np.array_equal(points[-1][block][:6], np.asarray(plan["nominal_endpoints"]["pregrasp"])[block][:6]):
+                raise ValueError("Selected pregrasp arm endpoint changed")
+        previous, cursor = points[-1], stage["settled_time"]
+    if cursor != schedule["end_time"]:
+        raise ValueError("Reviewed path clock changed")

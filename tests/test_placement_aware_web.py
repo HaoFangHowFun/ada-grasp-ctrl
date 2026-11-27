@@ -44,6 +44,8 @@ class PlacementAwareWebTests(unittest.TestCase):
         config = dual_runner.configuration("src/ada_grasp_ctrl/config/experiments/dual_grasp_pipeline.yaml")
         config["robot_snapshot"] = str(calibrated_snapshot(config["robot_snapshot"], root / "robot"))
         config["grasp_model"] = "right_full"
+        if getattr(self, "rrt_connect", False):
+            config["simulation"]["placement_planner"] = "rrt_connect"
         builder = SceneBuilder(config)
         server = create_server()
         app = SimulationApp(
@@ -89,6 +91,29 @@ class PlacementAwareWebTests(unittest.TestCase):
                 placement=dict(ik={"accepted": True}),
                 target=target,
             )
+            if getattr(self, "rrt_connect", False):
+                from ada_grasp_ctrl.grasp_selection.adapters.dexlearn import file_hash
+
+                result.update(
+                    target_sha256=target["target_sha256"],
+                    source_sha256="synthetic_no_grasp",
+                    references={
+                        str(engine.root / name): file_hash(engine.root / name)
+                        for name in ("robot_state.json", "settled_state.npz", "scene.mjb")
+                    },
+                )
+                write_json(
+                    destination / "placement_selection_report.json",
+                    dict(
+                        selected=dict(
+                            candidate_id=result["candidate_id"],
+                            required_arms=["right"],
+                            effort=0.0,
+                            candidate=dict(execution_mode="right_full"),
+                            stages={p: dict(q56=q) for p in ("pregrasp", "grasp", "squeeze")},
+                        )
+                    ),
+                )
             write_json(destination / "placement_endpoint_preview.json", result)
             return result
 
@@ -279,6 +304,57 @@ class PlacementAwareWebTests(unittest.TestCase):
                 self.reset_scene(root)
                 self.assertTrue(owner.cancel.is_set())
                 self.assertEqual(app.state, "EDITING")
+
+    def test_rrt_pending_review_actual_state_failure_and_reset_during_planning(self):
+        from ada_grasp_ctrl.pipeline.rrt_placement import PlacementPlanner
+
+        self.placement_execute = self.rrt_connect = True
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.viewer(root) as app:
+                self.confirm_scene(root, "PLACEMENT_EDITING")
+                self.wait_for(lambda: "Confirm Placement Target" in self.gui)
+                self.release.set()
+                self.update("Confirm Placement Target", True)
+                self.wait_for(lambda: app.state == "PREVIEW_READY")
+                self.assertEqual(app.plan["pending_segments"], ["lift", "carry", "place", "retreat"])
+                self.assertIn("pending actual-state planning", app.summary.content)
+                self.assertNotIn("place", app.phase.options)
+                clock = app.scene.sim.data.time
+                self.update("Playback (%)", 100.0)
+                self.wait_for(lambda: app.progress.value == 100.0)
+                self.assertEqual(app.scene.sim.data.time, clock)
+                self.update("Execute Grasp-to-Place", True)
+                self.wait_for(lambda: app.state == "COMPLETED")
+                self.assertTrue(app.executor.result["cleanup_completed"])
+                self.assertEqual(app.executor.result["grasp_evidence"]["outcome"], "not_acquired")
+                self.assertFalse(app.executor.result["pipeline_completed"])
+                self.reset_scene(root)
+                self.confirm_scene(root, "PLACEMENT_EDITING")
+                self.wait_for(lambda: "Confirm Placement Target" in self.gui)
+                self.update("Confirm Placement Target", True)
+                self.wait_for(lambda: app.state == "PREVIEW_READY")
+                snapshot = PlacementPlanner.snapshot
+                entered = threading.Event()
+
+                def paused(planner, mode):
+                    result = snapshot(planner, mode)
+                    entered.set()
+                    planner.executor.cancel.wait(10)
+                    return result
+
+                with patch.object(PlacementPlanner, "snapshot", paused):
+                    self.update("Execute Grasp-to-Place", True)
+                    self.wait_for(entered.is_set)
+                    owner = app.executor
+                    clock = app.scene.sim.data.time
+                    self.assertEqual(owner.result["status"], "planning")
+                    self.assertIsNone(owner.force_snapshot)
+                    self.reset_scene(root)
+                    self.assertTrue(owner.cancel.is_set())
+                    self.assertEqual(owner.result["status"], "canceled")
+                    self.assertEqual(owner.sim.data.time, clock)
+                    self.assertFalse(owner.planner.accepted)
 
 
 if __name__ == "__main__":

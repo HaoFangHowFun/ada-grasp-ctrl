@@ -103,6 +103,18 @@ class SimulationExecutor:
         self.hold_min, self.hold_speed, self.hold_contact = float("inf"), 0.0, True
         self.peak_lift = 0.0
         self.ever_retained = False
+        self.planner = None
+        if plan.get("placement_planner") == "rrt_connect":
+            from .dual_scene import live_scene
+            from .rrt_placement import PlacementPlanner
+            from ada_grasp_ctrl.grasp_selection.adapters.dexlearn import read_json
+
+            _, static = live_scene(
+                self.scene.robot.directory,
+                dict(full_joint_names=list(self.scene.robot.joint_names), full_positions_rad=self.sim.configuration()),
+                read_json(Path(config["table_plane"])),
+            )
+            self.planner = PlacementPlanner(self, static)
 
     def tick(self, stage: dict, elapsed: float, stream: object, *, post_hold: bool = False) -> bool:
         """Set every active target before the common step and record actual physical state."""
@@ -140,8 +152,25 @@ class SimulationExecutor:
                 "retreat",
             ):
                 contact_phase = "squeeze"
+            if self.planner and phase == "pregrasp_fingers":
+                contact_phase = "pregrasp"
             if forbidden_contacts(rows, self.plan["active_arms"], phase=contact_phase):
-                raise ValueError("live_collision")
+                if self.planner and self.planner.completion_first:
+                    self.planner.warn("live_collision", rows)
+                else:
+                    raise ValueError("live_collision")
+            if self.planner:
+                try:
+                    self.planner.check_live(actual, q, elapsed)
+                except ValueError:
+                    self.result["collision_failure"] = dict(
+                        time_s=float(self.sim.data.time),
+                        phase=phase,
+                        q56=actual.tolist(),
+                        object_pose=body_pose(self.sim).tolist(),
+                        contacts=rows,
+                    )
+                    raise
             errors = {
                 side: (actual[side_slice(side)] - stage["arms"][side]["positions_rad"]).tolist()
                 for side in self.plan["active_arms"]
@@ -229,12 +258,20 @@ class SimulationExecutor:
 
         try:
             with (self.root / "physics.jsonl").open("w", buffering=1) as stream:
-                for stage in self.plan["schedule"]["stages"][: len(self.plan["execution_phases"])]:
+                stages = (
+                    self.planner.stages()
+                    if self.planner
+                    else iter(self.plan["schedule"]["stages"][: len(self.plan["execution_phases"])])
+                )
+                for stage in stages:
                     if self.cancel.is_set():
                         break
                     if stage["phase"] == "lift":
                         self.pre_lift_pose = body_pose(self.sim)
                     began = float(self.sim.data.time)
+                    if self.planner:
+                        # Paused planning wall time must not cause a physics catch-up burst.
+                        wall = time.monotonic() - (began - start)
                     settled = None
                     # The existing nominal settle interval becomes a fixed endpoint dwell.
                     timed_duration = stage["settled_time"] - stage["stage_start_time"]
@@ -250,6 +287,13 @@ class SimulationExecutor:
                         elapsed = float(self.sim.data.time) - began
                         arrived = self.tick(stage, elapsed, stream)
                         elapsed = float(self.sim.data.time) - began
+                        if (
+                            self.planner
+                            and self.planner.cleanup_requested()
+                            and stage["phase"] in ("lift", "transport", "place")
+                        ):
+                            event["interrupted_for_cleanup"] = True
+                            break
                         if self.stage_completion == "timed":
                             if elapsed >= timed_duration - 1e-9:
                                 break
@@ -268,6 +312,8 @@ class SimulationExecutor:
                 if not self.cancel.is_set():
                     if self.placement:
                         self.result.update(status="completed", pipeline_completed=True)
+                        if self.planner and self.planner.cleanup_requested():
+                            self.result.update(pipeline_completed=False, cleanup_completed=True)
                     else:
                         success = self.hold_min >= 0.03 and self.hold_speed <= 0.02 and self.hold_contact
                         self.result.update(
@@ -290,9 +336,15 @@ class SimulationExecutor:
                     self.result["status"] = "canceled"
         except FloatingPointError as error:
             self.result.update(status="sim_numerical_failure", error=str(error))
-        except (RuntimeError, ValueError) as error:
+        except (RuntimeError, ValueError, TimeoutError, InterruptedError) as error:
+            if self.planner:
+                self.planner.failure(error)
             self.result.update(status="motion_failed", error=str(error))
         finally:
+            if self.planner:
+                self.planner.save()
+            if self.cancel.is_set():
+                self.result["status"] = "canceled"
             with self.lock:
                 self.force_snapshot = None
             self.result.update(

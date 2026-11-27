@@ -171,7 +171,13 @@ def verify_plan(plan: dict) -> None:
     hz = float(plan.get("reference_hz", 100))
     if not np.isfinite(hz) or hz <= 0:
         raise ValueError("Simulation reference_hz must be finite and positive")
-    if plan.get("workflow") == "grasp_to_place":
+    if plan.get("placement_planner") == "rrt_connect":
+        from .placement_schedule import validate_rrt_schedule
+
+        if plan.get("workflow") != "grasp_to_place":
+            raise ValueError("RRT planning requires grasp-to-place simulation")
+        validate_rrt_schedule(plan)
+    elif plan.get("workflow") == "grasp_to_place":
         from .placement_schedule import validate_schedule
 
         validate_schedule(plan["schedule"])
@@ -203,7 +209,7 @@ def verify_plan(plan: dict) -> None:
 
 def reference(plan: dict, stage: dict, elapsed: float) -> np.ndarray:
     """Sample the same pure shared linear reference for preview and physical execution."""
-    q = np.array(plan["initial_q56"], dtype=float)
+    q = np.array(stage.get("fixed_q56", plan["initial_q56"]), dtype=float)
     for side in plan["active_arms"]:
         q[side_slice(side)] = stage_reference(
             stage, side, stage["arms"][side]["start_positions_rad"], elapsed, stage["duration_s"]

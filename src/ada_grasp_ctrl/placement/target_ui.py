@@ -9,7 +9,6 @@ from ada_grasp_ctrl.pipeline.placement_preview import PlacementPreview, LABEL
 from ada_grasp_ctrl.pipeline.simulation_processes import SimulationProcesses
 from ada_grasp_ctrl.pipeline.placement_execution import prepare_execution, preview_points, LABEL as EXECUTION_LABEL
 from ada_grasp_ctrl.pipeline.simulation_plan import preview_stage
-from ada_grasp_ctrl.pipeline.placement_schedule import PHASES
 from .session import write_json
 from .target import TargetGeometry, transform_points
 from .ui import PlacementPanel
@@ -200,6 +199,7 @@ class PlacementTargetPanel(PlacementPanel):
                 self.confirm_button.disabled = True
                 self.edit_button.disabled = False
                 revision = self.revision
+                simulation = self.app.scene.sim
                 self.app.transition("PLACEMENT_PREPARING", "Source inference / grasp feasibility / place endpoint IK")
                 self.refresh()
             except (OSError, ValueError) as error:
@@ -223,8 +223,15 @@ class PlacementTargetPanel(PlacementPanel):
                             self.processes,
                         )
                     result = self.engine.prepare(target, destination, canceled)
+                    if canceled():
+                        return
+                    planner_args = (
+                        {"sim": simulation}
+                        if self.engine.config.get("simulation", {}).get("placement_planner") == "rrt_connect"
+                        else {}
+                    )
                     plan = (
-                        prepare_execution(self.engine, result, destination, canceled)
+                        prepare_execution(self.engine, result, destination, canceled, **planner_args)
                         if result and self.execution_enabled
                         else None
                     )
@@ -255,7 +262,7 @@ class PlacementTargetPanel(PlacementPanel):
                         self.target_cloud.points = transform_points(self.session.points, target)
                         self.target_cloud.visible = True
                         self.endpoint_choice.disabled = False
-                        review_label = EXECUTION_LABEL if plan is not None else LABEL
+                        review_label = plan.get("label", EXECUTION_LABEL) if plan is not None else LABEL
                         self.notice.content = review_label
                         ik = result["placement"]["ik"]
                         residuals = (
@@ -273,11 +280,11 @@ class PlacementTargetPanel(PlacementPanel):
                         if plan is not None:
                             self.app.plan = plan
                             self.app.plan_root = destination
-                            self.app.phase.options = PHASES
-                            self.app.phase.value = PHASES[0]
+                            self.app.phase.options = plan["execution_phases"]
+                            self.app.phase.value = plan["execution_phases"][0]
                             self.app.progress.value = 0
-                            self.app.summary.content += f"\n\nFull schedule preparation: {plan['preparation_s']:.3f} s."
-                            self.app.transition("PREVIEW_READY", EXECUTION_LABEL)
+                            self.app.summary.content += f"\n\nPreview preparation: {plan['preparation_s']:.3f} s."
+                            self.app.transition("PREVIEW_READY", review_label)
                         else:
                             self.app.transition("PLACEMENT_PREVIEW_READY", LABEL)
             except Exception as error:

@@ -277,6 +277,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--placement-execute", action="store_true", help="Enable reviewed simulation grasp-to-place execution"
     )
+    parser.add_argument("--placement-planner", choices=("rrt_connect",), help="Opt-in sampled goal-based placement")
     parser.add_argument("--object-root", help="Placement only: reuse an explicitly selected captured object")
     parser.add_argument("--uop-root", help="Existing UOP-Net checkout (or UOP_NET_ROOT)")
     parser.add_argument("--uop-python", help="Existing UOP Python (defaults to checkout/.venv/bin/python)")
@@ -285,6 +286,10 @@ def main(argv: list[str] | None = None) -> int:
     report = dict(schema_version=1, status="preflight", object_lifted=None, object_held=None)
     try:
         config = configuration(args.config)
+        if args.placement_planner and not (args.placement_execute and args.placement_aware):
+            raise ValueError(
+                "--placement-planner requires --placement-aware --placement-execute --environment simulation"
+            )
         if args.placement_execute and not args.placement_aware:
             raise ValueError("--placement-execute requires --placement-aware --environment simulation")
         if args.placement_aware:
@@ -294,6 +299,9 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("--placement-aware supports single-arm candidates only; both_only is incompatible")
         if (args.environment or config["environment"]) == "simulation":
             from .simulation_ui import run_simulation
+
+            if args.placement_planner:
+                config.setdefault("simulation", {})["placement_planner"] = args.placement_planner
 
             if args.ros_domain_id is not None or args.roi is not None or args.cluster is not None or args.object_root:
                 raise ValueError("Simulation does not accept ROS domain, camera ROI/cluster, or captured --object-root")
