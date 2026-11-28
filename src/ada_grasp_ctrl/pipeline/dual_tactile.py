@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import json
 import os
+from pathlib import Path
 import time
 from typing import Callable
 
@@ -167,6 +169,21 @@ def display_frame(
     if measured is None:
         return previous, None
     return measured, forces
+
+
+def execution_display_locked(root: Path, locked: bool) -> bool:
+    """Latch measured display when execution starts, independently of packet review.
+
+    The runner's report can briefly be incomplete during a write. Retain the
+    previous display policy in that case; this observation never grants motion.
+    """
+    if locked:
+        return True
+    try:
+        report = json.loads((root / "run_report.json").read_text())
+    except (OSError, ValueError):
+        return locked
+    return isinstance(report, dict) and report.get("execution_started") is True
 
 
 def diagnostic_text(report: dict) -> str:

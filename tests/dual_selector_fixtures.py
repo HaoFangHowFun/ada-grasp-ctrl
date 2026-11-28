@@ -123,7 +123,7 @@ class LiveFixture:
     def close(self) -> None:
         self.closed = True
 
-    def invoke(self, options: list[str] | None = None, *, export_only: bool = True) -> int:
+    def invoke(self, options: list[str] | None = None, *, export_only: bool = True, confirm: bool = False) -> int:
         """Exercise argparse, inference adaptation, selector, exporter and cancel gate without devices."""
         with ExitStack() as stack:
             for module, name, value in (
@@ -134,7 +134,7 @@ class LiveFixture:
                 # This analytical robot deliberately has no physical fixed-frame tree.
                 # Real calibrated snapshot geometry is covered by test_unified_calibration.
                 (dual_runner, "calibrated_snapshot", lambda source, *args: Path(source)),
-                (dual_runner, "wait_for_enter", lambda processes: False),
+                (dual_runner, "wait_for_enter", lambda processes: confirm),
                 (dual_artifacts, "SideAdapter", AnalyticalSide),
                 (approach, "HandGeometry", AnalyticalGeometry),
             ):

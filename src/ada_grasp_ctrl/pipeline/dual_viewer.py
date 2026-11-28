@@ -1,4 +1,4 @@
-"""Preview the exact selected-side live cycle in its measured dual-arm scene."""
+"""Review the selected cycle and display optional measured pose/forces during execution."""
 
 from __future__ import annotations
 
@@ -163,7 +163,7 @@ def main() -> None:
         label = server.gui.add_markdown("Start")
         if config.get("tactile"):
             from ada_grasp_ctrl.contact.force_display import ForceOverlay
-            from .dual_tactile import DualTactile, diagnostic_text, display_frame
+            from .dual_tactile import DualTactile, diagnostic_text, display_frame, execution_display_locked
 
             tactile = DualTactile.start(config, robot)
             live = server.gui.add_checkbox("Live measured pose + tactile", initial_value=True)
@@ -173,9 +173,15 @@ def main() -> None:
         last_report = -float("inf")
         duration = sum(plan["durations_s"]) + len(plan["phases"]) * plan["settle_time_s"]
         ready = False
+        execution_live = False
         previous = time.monotonic()
         while True:
             now = time.monotonic()
+            if tactile is not None:
+                execution_live = execution_display_locked(root, execution_live)
+                live.disabled = execution_live
+                if execution_live:
+                    live.value = True
             if playing.value and not (tactile is not None and live.value):
                 progress.value = (progress.value + (now - previous) / duration * 100) % 100
             previous = now
@@ -192,6 +198,7 @@ def main() -> None:
                 )
                 overlay.update(visible_forces)
                 report["display_mode"] = "measured" if live.value else "planned; forces hidden"
+                report["execution_started"] = execution_live
                 if now - last_report >= 1:
                     diagnostics.content = diagnostic_text(report)
                     write_json(root / "tactile_state.json", report)
@@ -200,7 +207,7 @@ def main() -> None:
             mujoco.mj_forward(sim.model, sim.data)
             scene.update_from_mjdata(sim.data)
             label.content = (
-                f"**{report['pose_status']}**"
+                f"{'Execution · ' if execution_live else ''}**{report['pose_status']}**"
                 if tactile is not None and live.value
                 else f"**{phase_at_progress(plan, progress.value)}** · {side_label}"
             )

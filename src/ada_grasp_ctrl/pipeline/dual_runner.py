@@ -302,7 +302,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--tactile",
         action="store_true",
-        help="Read-only dual Sharpa force overlay in hardware preview (provisional geometry and N units)",
+        help="Read-only dual Sharpa force overlay during hardware grasp preview and execution (provisional N units)",
     )
     parser.add_argument("--multi-camera-config", help="Override multi-camera capture/fusion settings")
     mode = parser.add_mutually_exclusive_group()
@@ -325,8 +325,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         config = configuration(args.config)
         if args.tactile:
-            if (args.environment or config["environment"]) != "hardware" or not args.preview_only:
-                raise ValueError("--tactile currently requires --environment hardware --preview-only")
+            if (args.environment or config["environment"]) != "hardware":
+                raise ValueError("--tactile requires --environment hardware")
+            if args.export_only or args.placement_only or args.placement_aware:
+                raise ValueError("--tactile requires the grasp viewer; export-only and placement are unsupported")
             config["tactile"] = True
         if args.multi_camera_config and not args.multi_camera:
             raise ValueError("--multi-camera-config requires --multi-camera")
