@@ -2,8 +2,9 @@
 base_config: src/ada_grasp_ctrl/config/experiments/grasp_pipeline.yaml
 environment: hardware
 robot_snapshot: output/dual_arm/phase1_20261111/commit_snapshot
-# Fresh table-only fit; camera extrinsics remain unchanged. See this run's calibration_review.json.
-table_plane: output/fixed_camera/table_recalibration_20261123T215945_898848Z/fit/table_plane.json
+# Table-only preview fit; extrinsics unchanged. Regional consistency remains unaccepted;
+# see this run's calibration_review.json before physical validation.
+table_plane: output/fixed_camera/table_check_20261127_194608/fit_full_table/table_plane.json
 enabled_arms: [left, right]
 # Preserve endpoint height/orientation; allow up to 10 cm horizontally toward
 # the active base after vertical IK fails. Zero restores strict vertical targets.

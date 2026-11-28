@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 
@@ -20,6 +20,43 @@ from ada_grasp_ctrl.ros_execution.review import check_reviewed_goal
 
 
 class DualLiveContracts(unittest.TestCase):
+    def test_viewer_shows_measured_tilted_table_without_changing_collision_geometry(self):
+        import mujoco
+
+        from ada_grasp_ctrl.pipeline.dual_viewer import add_measured_table
+
+        model = mujoco.MjModel.from_xml_string(
+            "<mujoco><worldbody>"
+            '<geom name="calibration_table_surface_visual_0" type="box" size=".15 .15 .02" group="1"/>'
+            '<geom name="calibration_table_surface_collision_0" type="box" size=".15 .15 .02" group="0"/>'
+            '<geom name="live_table_surface" type="plane" size="2 2 .01" group="3"/>'
+            '<geom name="robot_visual" type="sphere" size=".1" group="1"/>'
+            "</worldbody></mujoco>"
+        )
+        angle = 0.1
+        normal = np.array([0, -np.sin(angle), np.cos(angle)])
+        plane = dict(
+            normal_xyz=normal.tolist(),
+            d=0.135,
+            centroid_world_m=(-0.135 * normal).tolist(),
+            observed_tangent_axes=[[1, 0, 0], [0, np.cos(angle), np.sin(angle)]],
+            observed_span_m=[0.8, 0.4],
+        )
+        unchanged = {
+            key: getattr(model, key).copy() for key in ("geom_contype", "geom_conaffinity", "geom_pos", "geom_size")
+        }
+        server = Mock()
+        add_measured_table(server, model, plane)
+        np.testing.assert_array_equal(model.geom_group, [3, 3, 3, 1])
+        for key, values in unchanged.items():
+            np.testing.assert_array_equal(getattr(model, key), values)
+        call = server.scene.add_mesh_simple.call_args
+        self.assertEqual(call.args, ("/measured_table",))
+        vertices = call.kwargs["vertices"]
+        np.testing.assert_allclose(vertices @ normal + plane["d"], 0, atol=1e-12)
+        spans = np.ptp(vertices @ np.array(plane["observed_tangent_axes"]).T, axis=0)
+        np.testing.assert_allclose(spans, plane["observed_span_m"])
+
     def test_explicit_left_plan_routes_only_to_left_and_retains_right_compatibility(self):
         with tempfile.TemporaryDirectory() as directory:
             _, right = fixtures.PipelineTransportTest().write_packet(Path(directory), lift=True, complete=True)

@@ -16,6 +16,7 @@ from .dual_packet import load_execution_packet as load_packet, preview_identity
 from ada_grasp_ctrl.ros_execution.shared_packet import stage_reference
 from ada_grasp_ctrl.grasp_selection.adapters.dexlearn import read_json
 from ada_grasp_ctrl.grasp_selection.cli import write_json
+from ada_grasp_ctrl.experiments.fixed_camera_preview import plane_mesh
 from ada_grasp_ctrl.paths import resolve_from_root
 from ada_grasp_ctrl.robot_environment.model import side_slice
 from .dual_scene import live_scene
@@ -65,6 +66,26 @@ def create_server() -> viser.ViserServer:
     return server
 
 
+def add_measured_table(server: object, model: mujoco.MjModel, plane: dict) -> None:
+    """Replace the nominal table display with the measured support patch.
+
+    The viewer hides geometry group 3. Keep the collision plane and its physics
+    unchanged; the finite patch depicts observed support, not full table bounds.
+    """
+    for index in range(model.ngeom):
+        if model.geom(index).name.startswith("calibration_table_surface"):
+            model.geom_group[index] = 3
+    vertices, faces = plane_mesh(plane)
+    server.scene.add_mesh_simple(
+        "/measured_table",
+        vertices=vertices,
+        faces=faces,
+        color=(140, 120, 90),
+        opacity=0.35,
+        side="double",
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path, required=True)
@@ -93,9 +114,8 @@ def main() -> None:
         plan = packet["reviewed_plan"]
         side_label = packet["side"]
     state = read_json(root / "state/robot_state.json")
-    _, sim = live_scene(
-        resolve_from_root(config["robot_snapshot"]), state, read_json(resolve_from_root(config["table_plane"]))
-    )
+    plane = read_json(resolve_from_root(config["table_plane"]))
+    _, sim = live_scene(resolve_from_root(config["robot_snapshot"]), state, plane)
     q56 = np.asarray(state["full_positions_rad"])
     block = None if paired else side_slice(packet["side"])
     server = create_server()
@@ -105,6 +125,7 @@ def main() -> None:
         server.initial_camera.position = (1.7, -1.5, 1.1)
         server.initial_camera.look_at = (0.4, -0.4, 0.0)
         server.initial_camera.up = (0, 0, 1)
+        add_measured_table(server, sim.model, plane)
         scene = ViserMujocoScene(server, sim.model, num_envs=1)
         scene.camera_tracking_enabled = False
         scene.geom_groups_visible[0] = False
