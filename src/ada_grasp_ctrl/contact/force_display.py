@@ -34,6 +34,7 @@ class ForceSnapshot:
     timestamp: float
     fingers: tuple[FingerForce, ...]
     errors: tuple[str, ...] = ()
+    timestamp_clock: str = "simulation"
 
 
 def normal_load_totals(snapshot: ForceSnapshot) -> tuple[float | None, float | None]:
@@ -111,7 +112,8 @@ class ForceOverlay:
         if snapshot is None or not self.enabled.value:
             return
         lines = [
-            f"Simulation {snapshot.timestamp:.3f} s · resultant N",
+            f"{'Simulation' if snapshot.timestamp_clock == 'simulation' else snapshot.timestamp_clock} "
+            f"{snapshot.timestamp:.3f} s · resultant N",
             "",
             "| Finger | Left | Right |",
             "|---|---:|---:|",
@@ -151,7 +153,8 @@ class ForceOverlay:
         self.readout.content = "\n".join(lines)
         sides = normal_load_totals(snapshot)
         total = fsum(sides) if all(value is not None for value in sides) else None
-        status = f"Simulation {snapshot.timestamp:.3f} s"
+        clock = "Simulation" if snapshot.timestamp_clock == "simulation" else snapshot.timestamp_clock
+        status = f"{clock} {snapshot.timestamp:.3f} s"
         if total is None:
             status += " · UNAVAILABLE: incomplete fingertip data"
         self.hud.content = force_overlay(total, None, status, sides=sides)

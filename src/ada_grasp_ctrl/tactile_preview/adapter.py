@@ -12,7 +12,7 @@ from typing import Any, Callable
 import numpy as np
 
 from ada_grasp_ctrl.contact.tactile_observation import GeometryProvenance, TactileContactObservation
-from ada_grasp_ctrl.experiments.right_ros_contract import HAND_NAMES
+from ada_grasp_ctrl.experiments.right_ros_contract import side_names
 from .data import FINGERS, Frame, force_to_world, frame_status, select_force
 from .geometry import GeometryCatalog, transform_contact
 from .kinematics import joint_configuration
@@ -71,6 +71,7 @@ class TactileAdapter:
         hand: Any,
         geometry: GeometryCatalog,
         *,
+        side: str = "right",
         stale_after: float = 0.5,
         pose_skew: float = 0.15,
         receipt_clock_synchronized: bool = False,
@@ -78,12 +79,14 @@ class TactileAdapter:
     ) -> None:
         if any(not math.isfinite(x) or x <= 0 for x in (stale_after, pose_skew)):
             raise ValueError("Freshness and skew limits must be finite and positive")
-        if hand.base_link != "right_hand_flange":
-            raise ValueError("Expected right_hand_flange base; laboratory world is unsupported")
-        if set(hand.actuated_joint_names) != set(HAND_NAMES):
-            raise ValueError("Expected all 22 official right-hand joints")
+        names = side_names(side)[1]
+        if hand.base_link != f"{side}_hand_flange":
+            raise ValueError(f"Expected {side}_hand_flange base; use calibrated FK for world conversion")
+        if set(hand.actuated_joint_names) != set(names):
+            raise ValueError(f"Expected all 22 official {side}-hand joints")
         for finger in FINGERS:
-            hand.get_transform(f"right_{finger}_elastomer")
+            hand.get_transform(f"{side}_{finger}_elastomer")
+        self.side = side
         self.hand, self.geometry, self.clock = hand, geometry, clock
         self.stale_after, self.pose_skew = stale_after, pose_skew
         self.synchronized = receipt_clock_synchronized
@@ -156,8 +159,8 @@ class TactileAdapter:
             return FingerObservation("INVALID" if error else "NO_DATA", error)
         try:
             frame = Frame(**payload) if isinstance(payload, dict) else payload
-            if not isinstance(frame, Frame) or frame.finger != finger:
-                raise ValueError("Normalized frame finger does not match snapshot key")
+            if not isinstance(frame, Frame) or frame.finger != finger or frame.side != self.side:
+                raise ValueError("Normalized frame side/finger does not match adapter snapshot key")
             frame = replace(
                 frame,
                 **{n: tuple(getattr(frame, n)) for n in ("raw", "shape", "warnings", "contact_shape", "contact_row")},
@@ -205,7 +208,7 @@ class TactileAdapter:
             )
         )
         pose_ok = skew is not None and math.isfinite(skew) and skew <= self.pose_skew
-        pose = self.hand.get_transform(f"right_{finger}_elastomer")
+        pose = self.hand.get_transform(f"{self.side}_{finger}_elastomer")
         result = replace(
             result, pose_skew=skew, force_base=tuple(force_to_world(pose[:3, :3], force)) if pose_ok else None
         )
@@ -249,7 +252,7 @@ class TactileAdapter:
                 position=contact.p_E,
                 normal=contact.n_E,
                 force=force,
-                frame_id=f"right_{finger}_elastomer",
+                frame_id=f"{self.side}_{finger}_elastomer",
                 timestamp=frame.received,
                 receipt_ros=frame.receipt_ros,
                 subscriber_ros=frame.subscriber_ros,
@@ -273,7 +276,9 @@ class TactileAdapter:
                 pixel_col=contact.col,
                 warnings=frame.warnings,
                 force_convention_quality=(
-                    "provisional; operator-observed direction and reasonable N units"
+                    "provisional; left geometry mapping and force sign pending hardware validation"
+                    if self.side == "left"
+                    else "provisional; operator-observed direction and reasonable N units"
                     if self._indices == (0, 1, 2)
                     else "provisional; diagnostic channel selection not operator-validated"
                 ),
@@ -291,7 +296,7 @@ class TactileAdapter:
                 position=position,
                 normal=normal,
                 force=force_base,
-                frame_id="right_hand_flange",
+                frame_id=f"{self.side}_hand_flange",
                 joint_received=joints["received"],
                 joint_receipt_ros=joints["receipt_ros"],
             )

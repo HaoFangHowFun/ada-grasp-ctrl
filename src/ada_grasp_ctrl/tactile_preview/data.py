@@ -10,7 +10,16 @@ import time
 from typing import Any
 
 FINGERS = ("pinky", "ring", "middle", "index", "thumb")
-TOPICS = {finger: f"/sharpa/right_hand/tactile/{finger}/frame" for finger in FINGERS}
+
+
+def topics(side: str = "right") -> dict[str, str]:
+    """Official side namespaces; force axes are defined by each side's actual URDF."""
+    if side not in ("left", "right"):
+        raise ValueError("Tactile side must be left or right")
+    return {finger: f"/sharpa/{side}_hand/tactile/{finger}/frame" for finger in FINGERS}
+
+
+TOPICS = topics()
 BLOCK_STATUS = {0: "MISSING", 1: "VALID", 2: "EMPTY", 3: "INVALID"}
 
 
@@ -46,6 +55,7 @@ class Frame:
     contact_row: tuple[float, ...] = ()
     contact_count: int = 0
     contact_error: str = ""
+    side: str = "right"
 
 
 def first_contact(block: Any) -> dict[str, Any]:
@@ -87,7 +97,7 @@ def first_contact(block: Any) -> dict[str, Any]:
     return result
 
 
-def normalize_frame(message: Any, expected: str, now: float, ros_now: float) -> Frame:
+def normalize_frame(message: Any, expected: str, now: float, ros_now: float, *, side: str = "right") -> Frame:
     """Validate identity and F6 against the installed Phase 1A wire contract.
 
     Raises:
@@ -97,9 +107,10 @@ def normalize_frame(message: Any, expected: str, now: float, ros_now: float) -> 
         expected not in FINGERS
         or message.schema_version != 1
         or message.source != "sharpa_sdk"
-        or message.side != "right"
+        or side not in ("left", "right")
+        or message.side != side
         or message.finger != expected
-        or message.channel != FINGERS.index(expected)
+        or message.channel != FINGERS.index(expected) + (5 if side == "left" else 0)
     ):
         raise ValueError("Wrong schema/source/side/finger/channel for subscribed topic")
     block = message.f6
@@ -120,6 +131,7 @@ def normalize_frame(message: Any, expected: str, now: float, ros_now: float) -> 
     if sdk_timestamp is not None and not math.isfinite(sdk_timestamp):
         sdk_timestamp = None
     return Frame(
+        side=side,
         finger=expected,
         status=status,
         raw=raw,
@@ -186,7 +198,9 @@ def force_to_world(rotation: Any, force: Any) -> Any:
 class LatestFrames:
     """Bounded, thread-safe latest-per-finger cache with measured arrival rates."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, side: str = "right") -> None:
+        topics(side)
+        self.side = side
         self.lock = threading.Lock()
         self.frames: dict[str, Frame] = {}
         self.times: dict[str, deque] = {f: deque(maxlen=120) for f in FINGERS}
@@ -197,7 +211,7 @@ class LatestFrames:
         """Copy F6 and contact row 0 together, invalidating malformed topic identity."""
         now = time.monotonic()
         try:
-            frame = normalize_frame(message, finger, now, ros_now)
+            frame = normalize_frame(message, finger, now, ros_now, side=self.side)
         except (ValueError, TypeError, AttributeError, OverflowError) as exc:
             with self.lock:
                 self.frames.pop(finger, None)

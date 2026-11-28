@@ -115,10 +115,11 @@ def main() -> None:
         side_label = packet["side"]
     state = read_json(root / "state/robot_state.json")
     plane = read_json(resolve_from_root(config["table_plane"]))
-    _, sim = live_scene(resolve_from_root(config["robot_snapshot"]), state, plane)
+    robot, sim = live_scene(resolve_from_root(config["robot_snapshot"]), state, plane)
     q56 = np.asarray(state["full_positions_rad"])
     block = None if paired else side_slice(packet["side"])
     server = create_server()
+    tactile = None
     try:
         if server.get_port() != 8089:
             raise RuntimeError("Port 8089 is occupied")
@@ -148,8 +149,10 @@ def main() -> None:
             )
         server.gui.add_markdown(
             f"**Selected: {side_label.upper()} · {plan['candidate_id']}**\n\n"
-            "Review the full cycle, then press Enter in the pipeline terminal to execute."
+            "Review the selected cycle. Robot motion is controlled only by the pipeline terminal."
         )
+        if config.get("saved_scene_source"):
+            server.gui.add_markdown("**Saved scene:** object and cameras are historical; joints and tactile are live.")
         server.gui.add_markdown(model_summary(read_json(root / "run_report.json")))
         progress = server.gui.add_slider("Playback (%)", min=0, max=100, step=0.1, initial_value=0.0)
         playing = server.gui.add_checkbox("Play", initial_value=False)
@@ -158,12 +161,22 @@ def main() -> None:
             lambda event: setattr(progress, "value", phase_progress(plan, plan["phases"].index(phase.value) + 1))
         )
         label = server.gui.add_markdown("Start")
+        if config.get("tactile"):
+            from ada_grasp_ctrl.contact.force_display import ForceOverlay
+            from .dual_tactile import DualTactile, diagnostic_text, display_frame
+
+            tactile = DualTactile.start(config, robot)
+            live = server.gui.add_checkbox("Live measured pose + tactile", initial_value=True)
+            overlay = ForceOverlay(server)
+            with server.gui.add_folder("Hardware tactile diagnostics", expand_by_default=True):
+                diagnostics = server.gui.add_markdown("Waiting for both hands")
+        last_report = -float("inf")
         duration = sum(plan["durations_s"]) + len(plan["phases"]) * plan["settle_time_s"]
         ready = False
         previous = time.monotonic()
         while True:
             now = time.monotonic()
-            if playing.value:
+            if playing.value and not (tactile is not None and live.value):
                 progress.value = (progress.value + (now - previous) / duration * 100) % 100
             previous = now
             q = q56.copy()
@@ -171,10 +184,26 @@ def main() -> None:
                 q = sample_shared_preview(packet, float(progress.value))
             else:
                 q[block] = sample_plan(plan, float(progress.value))
+            if tactile is not None:
+                measured_q, forces, report = tactile.sample()
+                progress.disabled = playing.disabled = phase.disabled = bool(live.value)
+                q, visible_forces = display_frame(
+                    q, sim.data.qpos[sim.qpos].copy(), measured_q, forces, live=live.value
+                )
+                overlay.update(visible_forces)
+                report["display_mode"] = "measured" if live.value else "planned; forces hidden"
+                if now - last_report >= 1:
+                    diagnostics.content = diagnostic_text(report)
+                    write_json(root / "tactile_state.json", report)
+                    last_report = now
             sim.data.qpos[sim.qpos] = q
             mujoco.mj_forward(sim.model, sim.data)
             scene.update_from_mjdata(sim.data)
-            label.content = f"**{phase_at_progress(plan, progress.value)}** · {side_label}"
+            label.content = (
+                f"**{report['pose_status']}**"
+                if tactile is not None and live.value
+                else f"**{phase_at_progress(plan, progress.value)}** · {side_label}"
+            )
             if not ready:
                 write_json(
                     root / "viewer_state.json",
@@ -186,6 +215,8 @@ def main() -> None:
     except KeyboardInterrupt:
         pass
     finally:
+        if tactile is not None:
+            tactile.close()
         server.stop()
 
 

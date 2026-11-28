@@ -299,6 +299,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--multi-camera", action="store_true", help="Opt-in stationary D415 + two D405 observation (hardware)"
     )
+    parser.add_argument(
+        "--tactile",
+        action="store_true",
+        help="Read-only dual Sharpa force overlay in hardware preview (provisional geometry and N units)",
+    )
     parser.add_argument("--multi-camera-config", help="Override multi-camera capture/fusion settings")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--export-only", action="store_true")
@@ -319,6 +324,10 @@ def main(argv: list[str] | None = None) -> int:
     report = dict(schema_version=1, status="preflight", object_lifted=None, object_held=None)
     try:
         config = configuration(args.config)
+        if args.tactile:
+            if (args.environment or config["environment"]) != "hardware" or not args.preview_only:
+                raise ValueError("--tactile currently requires --environment hardware --preview-only")
+            config["tactile"] = True
         if args.multi_camera_config and not args.multi_camera:
             raise ValueError("--multi-camera-config requires --multi-camera")
         if args.multi_camera:

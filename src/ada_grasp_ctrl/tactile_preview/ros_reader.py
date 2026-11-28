@@ -10,20 +10,25 @@ import threading
 import time
 from typing import Any
 
-from .data import LatestFrames, TOPICS, stamp_seconds
+from .data import LatestFrames, topics, stamp_seconds
 
 
 class Reader:
     """Keep DDS callbacks independent of browser and pipe I/O."""
 
-    def __init__(self, joint_topic: str) -> None:
+    def __init__(self, joint_topic: str, *, side: str = "right") -> None:
+        self.topics = topics(side)
         import rclpy
         from dual_sharpa_wave.msg import TactileFrame
         from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
         from sensor_msgs.msg import JointState
 
-        self.node = rclpy.create_node("ada_tactile_preview", enable_rosout=False, start_parameter_services=False)
-        self.cache = LatestFrames()
+        self.node = rclpy.create_node(
+            "ada_tactile_preview" if side == "right" else "ada_tactile_preview_left",
+            enable_rosout=False,
+            start_parameter_services=False,
+        )
+        self.cache = LatestFrames(side=side)
         self.lock = threading.Lock()
         self.joints: dict[str, Any] = {}
         qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT, durability=DurabilityPolicy.VOLATILE)
@@ -34,7 +39,7 @@ class Reader:
                 lambda msg, f=finger: self.cache.receive(msg, f, self.node.get_clock().now().nanoseconds * 1e-9),
                 qos,
             )
-            for finger, topic in TOPICS.items()
+            for finger, topic in self.topics.items()
         ]
         self.subscriptions.append(self.node.create_subscription(JointState, joint_topic, self.receive_joints, qos))
 
@@ -73,7 +78,7 @@ class Reader:
                 )
                 for e in self.node.get_publishers_info_by_topic(t)
             ]
-            for f, t in TOPICS.items()
+            for f, t in self.topics.items()
         }
 
 
@@ -83,10 +88,11 @@ def main() -> None:
     from rclpy.executors import SingleThreadedExecutor
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--joint-topic", default="/sharpa/right_hand/joint_states")
+    parser.add_argument("--side", choices=("left", "right"), default="right")
+    parser.add_argument("--joint-topic")
     args = parser.parse_args()
     rclpy.init(args=[])
-    reader = Reader(args.joint_topic)
+    reader = Reader(args.joint_topic or f"/sharpa/{args.side}_hand/joint_states", side=args.side)
     executor = SingleThreadedExecutor()
     executor.add_node(reader.node)
     thread = threading.Thread(target=executor.spin, daemon=True)

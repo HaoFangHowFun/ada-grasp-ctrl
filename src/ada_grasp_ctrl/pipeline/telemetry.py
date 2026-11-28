@@ -1,4 +1,4 @@
-"""Latest-only, read-only full-right telemetry; executable under ROS Python 3.12."""
+"""Latest-only, read-only side-specific telemetry; executable under ROS Python 3.12."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import threading
 import time
 from typing import Any
 
-from ada_grasp_ctrl.experiments.right_ros_contract import ARM_NAMES, HAND_NAMES, check_kinematics, kinematic_contract
+from ada_grasp_ctrl.experiments.right_ros_contract import check_kinematics, kinematic_contract, side_names
 from ada_grasp_ctrl.tactile_preview.ros_reader import Reader
 from ada_grasp_ctrl.tactile_preview.data import stamp_seconds
 
@@ -40,14 +40,15 @@ def measured_positions(packet: dict, names: tuple[str, ...], now: float) -> list
     return [by_name[n] for n in names]
 
 
-def full_feedback(packet: dict, now: float) -> list[float]:
+def full_feedback(packet: dict, now: float, side: str = "right") -> list[float]:
     """Reject missing/mismatched model, ambiguous publishers and incoherent actual state."""
     if packet.get("model_valid") is not True:
         raise ValueError("MODEL UNAVAILABLE: " + packet.get("model_error", "waiting for robot description"))
     if packet.get("joint_sources") != {"arm": 1, "hand": 1, "description": 1}:
         raise ValueError("UNAVAILABLE / AMBIGUOUS joint or model publisher")
     arm, hand = packet.get("arm", {}), packet.get("joints", {})
-    q = measured_positions(arm, ARM_NAMES, now) + measured_positions(hand, HAND_NAMES, now)
+    arm_names, hand_names = side_names(side)
+    q = measured_positions(arm, arm_names, now) + measured_positions(hand, hand_names, now)
     if abs(arm["received"] - hand["received"]) > 0.15:
         raise ValueError("STALE / INCOHERENT arm and hand receipts")
     return q
@@ -56,14 +57,17 @@ def full_feedback(packet: dict, now: float) -> list[float]:
 class RobotReader(Reader):
     """Extend the existing tactile subscriber with arm feedback and model identity only."""
 
-    def __init__(self, model_urdf: Path) -> None:
+    def __init__(self, model_urdf: Path, side: str = "right") -> None:
         from rclpy.qos import QoSProfile, DurabilityPolicy, qos_profile_sensor_data
         from sensor_msgs.msg import JointState
         from std_msgs.msg import String
 
-        super().__init__(HAND_TOPIC)
+        self.side = side
+        self.arm_topic = f"/crx5ia/{side}/joint_states"
+        self.hand_topic = f"/sharpa/{side}_hand/joint_states"
+        super().__init__(self.hand_topic, side=side)
         description = model_urdf.read_text()
-        self.expected = kinematic_contract(description)
+        self.expected = kinematic_contract(description, side)
         self.model_sha256 = hashlib.sha256(description.encode()).hexdigest()
         self.arm: dict[str, Any] = {}
         self.model_valid = False
@@ -72,7 +76,7 @@ class RobotReader(Reader):
         self.world_T_base = None
         self.subscriptions.extend(
             [
-                self.node.create_subscription(JointState, ARM_TOPIC, self.receive_arm, qos_profile_sensor_data),
+                self.node.create_subscription(JointState, self.arm_topic, self.receive_arm, qos_profile_sensor_data),
                 self.node.create_subscription(
                     String,
                     DESCRIPTION,
@@ -104,8 +108,8 @@ class RobotReader(Reader):
                 if self.description is not None and self.description != message.data:
                     raise ValueError("ROS robot model changed during monitoring")
                 if self.description is None:
-                    check_kinematics(self.expected, kinematic_contract(message.data))
-                    self.world_T_base = world_base_from_description(message.data)
+                    check_kinematics(self.expected, kinematic_contract(message.data, self.side))
+                    self.world_T_base = world_base_from_description(message.data) if self.side == "right" else None
                     self.description = message.data
                     self.model_valid, self.model_error = True, ""
             except (ValueError, KeyError, TypeError) as error:
@@ -130,10 +134,11 @@ def main() -> None:
     from rclpy.executors import SingleThreadedExecutor
 
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--side", choices=("left", "right"), default="right")
     parser.add_argument("--model-urdf", type=Path, required=True)
     args = parser.parse_args()
     rclpy.init(args=[])
-    reader = RobotReader(args.model_urdf)
+    reader = RobotReader(args.model_urdf, args.side)
     executor = SingleThreadedExecutor()
     executor.add_node(reader.node)
     thread = threading.Thread(target=executor.spin, daemon=True)
@@ -146,7 +151,7 @@ def main() -> None:
                 endpoints, updated = reader.endpoints(), now
                 sources = {
                     g: reader.node.count_publishers(t)
-                    for g, t in (("arm", ARM_TOPIC), ("hand", HAND_TOPIC), ("description", DESCRIPTION))
+                    for g, t in (("arm", reader.arm_topic), ("hand", reader.hand_topic), ("description", DESCRIPTION))
                 }
             packet = reader.snapshot()
             packet.update(kind="snapshot", endpoints=endpoints, joint_sources=sources, worker_monotonic=now)
