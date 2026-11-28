@@ -28,3 +28,9 @@ cameras:
     min_valid_fraction: 0.01
     min_depth_m: 0.07
     max_depth_m: 0.5
+
+# Operator requested loading these converged results before independent validation.
+# Exact entry hashes prevent this policy from accepting a different result.
+accepted_pending_calibrations:
+  wrist_left: abf96e870aadacb62a0a5de9d184670c66231a2bcab152eff25ae2f08f9abc6a
+  wrist_right: 4cf34e8c6481dbb527cbabe7b8b3564717ff362ec8a5ddff9bf87cd47e9d8af5

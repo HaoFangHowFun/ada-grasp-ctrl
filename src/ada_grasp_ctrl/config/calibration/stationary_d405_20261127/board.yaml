@@ -1,0 +1,10 @@
+# Physical square/marker dimensions confirmed by user measurement on 2026-11-27.
+# rows/cols count squares (not inner corners). Dimensions are in metres.
+# OpenCV 4.6 dictionary enum: DICT_5X5_100 = 5.
+target_finder:
+  type: CharucoGridTargetFinder
+  rows: 7
+  cols: 5
+  chessboard_dim: 0.035
+  aruco_marker_dim: 0.026
+  dictionary: 5

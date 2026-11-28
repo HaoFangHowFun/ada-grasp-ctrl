@@ -84,8 +84,9 @@ sends a robot command.
 
 ## B. Acquire and validate calibration
 
-**No D405 extrinsic has been measured or written by this task.** The authoritative
-file remains `src/ada_grasp_ctrl/config/calibration/dual_system_calibration.json`.
+The initial fusion implementation did not include measured D405 extrinsics.
+The 2026-11-27 installation below adds both measured results with explicit pending-validation status.
+The authoritative file remains `src/ada_grasp_ctrl/config/calibration/dual_system_calibration.json`.
 The existing collector supports topic/frame overrides. Use the existing
 ROS-Industrial static-camera hand-eye solver, detector, measured ChArUco board
 and robot pose workflow. Do not substitute guessed board dimensions or a
@@ -306,3 +307,82 @@ The exact serial-to-physical-left/right mounting assignment still needs operator
 confirmation. A preview cannot establish grasp success. Camera-only drivers
 started during this task were left running; no robot was commanded, authoritative
 calibration changed, commit made or push performed.
+
+
+## Installed stationary D405 results — 2026-11-27
+
+The operator requested installation before independent-pose validation. Both converged
+ROS-Industrial results from `static_fit_20261127_183512/app_inputs_8ee3f0e62f` are now
+normalized into `authoritative.stationary_cameras` in the existing master calibration.
+They map the respective color optical frames into `left_base_link`; the board was attached
+to `right_ee_mount`. D415 geometry, arm bases, hand mounts, and the existing table are unchanged.
+The pre-installation master is retained and hash-verified for existing D415/table compatibility.
+
+Each new entry has `status: pending_independent_validation`, `solver_converged: true`,
+`independent_validation_passed: false`, 20 fit inputs, and zero independent validation samples.
+The default `multi_camera.yaml` explicitly pins the SHA256 of these two complete entries in
+`accepted_pending_calibrations`, per the operator's request. This is an exact-result policy,
+not a general skip-validation flag. Unselected pending results still fail; mismatched serial,
+frame, units, geometry, source hashes, or solver convergence still fail. Calibration status
+is retained in capture reports and snapshot provenance. Independent validation thresholds
+and the validated-entry import path are unchanged.
+
+### Start the calibrated cameras
+
+With the previous camera/calibration launch stopped, run in a desktop terminal:
+
+```bash
+ROS_DOMAIN_ID=87 bash /home/hao-fang/hugs-workspace/ada-grasp-ctrl/script/start_calibrated_cameras.sh
+```
+
+This starts the two D405 RGB-D drivers using the existing `multi_camera_driver.yaml` and
+one extrinsics publisher. It does not start arm/hand drivers or issue motion commands.
+To also start the D415 for three-camera fusion, append `enable_fix_camera:=true`.
+If the camera drivers are already running with internal TF enabled, append
+`start_cameras:=false` to reuse them. The old calibration capture profile disables depth
+and internal TF; restart with the RGB-D profile above when transitioning from capture.
+The same-domain duplicate-driver graph check is bounded, not a cross-domain device lock.
+The launch shuts down its own processes if the extrinsics publisher exits.
+
+The publisher checks the two live serial parameters, reads each RealSense internal
+`<role>_link -> <role>_color_optical_frame` transform, and publishes only:
+
+```
+left_base_link -> wrist_left_link -> [RealSense internal TF] -> wrist_left_color_optical_frame
+left_base_link -> wrist_right_link -> [RealSense internal TF] -> wrist_right_color_optical_frame
+```
+
+The root pose is `T_base_optical @ inverse(T_link_optical)`. No second parent is assigned
+to an optical frame. If either root already has a parent, startup fails instead of
+replacing an existing TF owner. Internal transforms must be available; none are guessed.
+The existing fusion code reads the same master directly and composes color/depth TF once.
+The hardware pipeline remains opt-in via its existing `--multi-camera` option; omitting it
+continues the D415-only path. Starting this camera launch does not run grasp inference or motion.
+
+Installation record and rollback copies:
+
+`output/wrist_calibration_20261127_174104/static_fit_20261127_183512/system_install_20261127/`
+
+Restore both `previous_calibration.json` to the master calibration path and
+`previous_multi_camera.yaml` to its profile path if reverting this installation; stop the
+extrinsics publisher first. Original solver and capture files are retained.
+
+Initial focused regression: 46 tests, 43 passed and 3 optional-dependency skips. Actual ROS TF
+verification used synthetic camera nodes on domain 198/localhost: both optical transforms
+matched solver matrices to 1e-10, duplicate root owners were rejected, and wrong serials
+were rejected. No physical driver was started for these checks. Physical alignment and
+independent-pose accuracy remain unverified.
+
+Final installation validation: full Ada unittest discovery completed with **773 tests: 683 passed,
+90 optional-dependency skips, no failures/errors** (199.618 s). ROS/system-Python focused
+fusion tests: 24 total, 22 passed, 2 optional skips. Full Ruff lint, compileall, changed-file
+formatting, shell syntax, launch argument discovery, and diff whitespace checks passed.
+The whole-tree formatting check retains 8 pre-existing unrelated differences. Logs and
+`validation.json` are retained in `system_install_20261127/`. No domain-87 process or physical
+hardware driver was started during installation.
+
+Commit preparation curated the small source artifacts into
+`config/calibration/stationary_d405_20261127/` under the package. Active provenance paths
+now resolve through Ada's data root; original captures remain untracked. Follow
+[the new-conversation handoff](handoff-2026-11-27.md) for the original dual pipeline's
+actual deployment status, next live preview command, and separate commit scopes.

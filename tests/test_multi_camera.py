@@ -63,6 +63,8 @@ class MultiCameraTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.config = load_config(resolve_from_root(DEFAULT_CONFIG))
         self.master = json.loads(resolve_from_root(DEFAULT_CALIBRATION).read_text())
+        self.master["authoritative"].pop("stationary_cameras", None)
+        self.config.pop("accepted_pending_calibrations", None)
 
     def test_bundle_searches_older_common_window_and_rejects_total_skew(self):
         queues = {
@@ -302,8 +304,15 @@ class MultiCameraTests(unittest.TestCase):
 
     def test_observation_stops_before_ros_without_extrinsics(self):
         root = self.root / "missing"
+        master = self.root / "without_d405.json"
+        master.write_text(json.dumps(self.master))
         with patch("ada_grasp_ctrl.experiments.multi_camera_ros.capture") as capture:
-            self.assertEqual(observe_main(["observe", "--output-root", str(root), "--plane", "unused"]), 2)
+            self.assertEqual(
+                observe_main(
+                    ["observe", "--output-root", str(root), "--plane", "unused", "--calibration", str(master)]
+                ),
+                2,
+            )
         capture.assert_not_called()
         self.assertIn("missing measured", json.loads((root / "run_report.json").read_text())["error"])
 

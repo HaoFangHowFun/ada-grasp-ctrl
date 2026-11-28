@@ -1,0 +1,373 @@
+{
+  "schema_version": 1,
+  "calibration_id": "dual_crx_sharpa_d415_20261122_v1",
+  "status": "configuration_pending_physical_validation",
+  "conventions": {
+    "world_frame": "leftbase",
+    "world_frame_definition": "FANUC left CRX base_link; verify URDF and ROS frame aliases at deployment",
+    "transform": "T_A_B maps a point expressed in B into frame A",
+    "length_unit": "m",
+    "angle_unit": "rad",
+    "rotation_order": "fixed-axis URDF roll-pitch-yaw (Rz(yaw) @ Ry(pitch) @ Rx(roll))",
+    "camera_frame": "D415 color optical frame (x right, y down, z forward)"
+  },
+  "authoritative": {
+    "dual_crx": {
+      "T_leftbase_rightbase": {
+        "xyz_m": [
+          0.03340744,
+          -0.99546257,
+          0.0109306
+        ],
+        "rpy_rad": [
+          0.01335405,
+          -0.02065696,
+          -1.54875984
+        ],
+        "matrix_4x4": [
+          [
+            0.02203000228,
+            0.999661986348,
+            -0.01380550795,
+            0.03340744
+          ],
+          [
+            -0.999543910838,
+            0.022308497917,
+            0.020354390859,
+            -0.99546257
+          ],
+          [
+            0.020655490943,
+            0.01335080413,
+            0.999697507611,
+            0.0109306
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "source": "operator-confirmed current dual_crx.urdf.xacro right_xyz/right_rpy"
+      }
+    },
+    "camera": {
+      "device": "Intel RealSense D415",
+      "serial": "347322060270",
+      "calibrated_resolution_wh": [
+        1280,
+        720
+      ],
+      "T_leftbase_color_optical": {
+        "matrix_4x4": [
+          [
+            0.052445347,
+            -0.752412447,
+            0.656601093,
+            0.109725738
+          ],
+          [
+            -0.998604113,
+            -0.04364229,
+            0.02975191,
+            -0.477626045
+          ],
+          [
+            0.006269868,
+            -0.657244901,
+            -0.753650999,
+            0.474552819
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "source": "camera_hand_calibration_20261117.json:camera_extrinsics.T_leftbase_cam",
+        "method": "industrial_calibration static-camera hand-eye, ChArUco board on left flange, 25 poses",
+        "residual_px_at_calibration": 0.476
+      },
+      "color_intrinsics_at_calibrated_resolution": {
+        "K": [
+          [
+            907.2652587890625,
+            0.0,
+            637.2646484375
+          ],
+          [
+            0.0,
+            905.5222778320312,
+            360.624755859375
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "dist": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "model": "inverse_brown_conrady, all coefficients 0"
+      },
+      "ir_left_intrinsics_at_calibrated_resolution": {
+        "K": [
+          [
+            908.2506713867188,
+            0.0,
+            635.8665161132812
+          ],
+          [
+            0.0,
+            908.2506713867188,
+            357.0548095703125
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "dist": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "note": "IR streams are rectified by the device"
+      },
+      "stereo_baseline_m": 0.0549679659307003,
+      "T_color_from_ir_left": [
+        [
+          0.9999997615814209,
+          -0.0002205386699642986,
+          0.0006982331979088485,
+          0.015008167363703251
+        ],
+        [
+          0.00022557750344276428,
+          0.9999738931655884,
+          -0.007224715780466795,
+          1.5383370737254154e-06
+        ],
+        [
+          -0.0006966216606087983,
+          0.007224871311336756,
+          0.9999736547470093,
+          -0.0003754052158910781
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ]
+    },
+    "hand_mounts": {
+      "frame_from": "FANUC ee_mount/flange",
+      "frame_to": "Sharpa hand mount; confirm exact URDF child link name on deployment",
+      "left": {
+        "xyz_m": [
+          -0.00149,
+          0.0016,
+          0.00239
+        ],
+        "rpy_rad": [
+          2.24123,
+          1.50697,
+          2.24087
+        ],
+        "matrix_4x4": [
+          [
+            -0.039612032,
+            0.00135086,
+            0.999214222,
+            -0.00149
+          ],
+          [
+            0.049991579,
+            0.99874944,
+            0.000631593,
+            0.0016
+          ],
+          [
+            -0.997963791,
+            0.049977315,
+            -0.039630027,
+            0.00239
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "fit_mean_rms_mm": 2.7
+      },
+      "right": {
+        "xyz_m": [
+          0.00396,
+          0.00068,
+          -0.00192
+        ],
+        "rpy_rad": [
+          0.34037,
+          -1.53028,
+          2.78902
+        ],
+        "matrix_4x4": [
+          [
+            -0.038013662,
+            -0.012459469,
+            0.999199541,
+            0.00396
+          ],
+          [
+            0.013987001,
+            -0.999830943,
+            -0.011935219,
+            0.00068
+          ],
+          [
+            0.999179326,
+            0.013522104,
+            0.038181506,
+            -0.00192
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "fit_mean_rms_mm": 2.75
+      }
+    }
+  },
+  "derived": {
+    "T_rightbase_color_optical": {
+      "matrix_4x4": [
+        [
+          0.999433538803,
+          0.013471021202,
+          -0.030840448284,
+          -0.506342708549
+        ],
+        [
+          0.030233969762,
+          -0.761906463196,
+          0.646981026419,
+          0.094034385849
+        ],
+        [
+          -0.014782041672,
+          -0.64754696563,
+          -0.761882154913,
+          0.472968610969
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "formula": "inverse(T_leftbase_rightbase) @ T_leftbase_color_optical",
+      "read_only_derived_value": true
+    }
+  },
+  "non_authoritative_measurements": {
+    "T_leftbase_rightbase_20261117": {
+      "matrix_4x4": [
+        [
+          0.027153826,
+          0.999546847,
+          -0.012991178,
+          0.033414915
+        ],
+        [
+          -0.999631256,
+          0.027149611,
+          -0.000500728,
+          -0.998481655
+        ],
+        [
+          -0.000147796,
+          0.012999984,
+          0.999915486,
+          0.002237088
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "reason": "Original calibration-file result differs from operator-confirmed deployed Xacro; diagnostic only",
+      "difference_from_authoritative": {
+        "translation_m": 0.00920283,
+        "rotation_deg": 1.227717
+      }
+    },
+    "T_rightbase_color_optical_20261117": {
+      "matrix_4x4": [
+        [
+          0.999659049,
+          0.023292459,
+          -0.011800321,
+          -0.518661223
+        ],
+        [
+          0.025391376,
+          -0.761800533,
+          0.647313854,
+          0.096557367
+        ],
+        [
+          0.006088041,
+          -0.647392778,
+          -0.762132224,
+          0.471023639
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "reason": "Measured relative to historical right-base estimate; never use for active frame conversion",
+      "difference_from_derived": {
+        "translation_m": 0.012723763,
+        "rotation_deg": 1.227717
+      }
+    }
+  },
+  "provenance": {
+    "camera_hand_measurement_date": "2026-11-17",
+    "camera_hand_measurement_id": "20261117T004106Z",
+    "camera_source_filename": "camera_hand_calibration_20261117.json",
+    "prior_ada_camera_file": "camera_extrinsics_20261107_640x480.json",
+    "right_base_override": "operator-confirmed latest right_xyz/right_rpy (current dual_crx.urdf.xacro)",
+    "prior_table_plane": "output/fixed_camera/table_recalibration_20261110_213933/fit/table_plane.json",
+    "notes": [
+      "Do not reuse the old table plane or calibration acceptance with a new camera transform without explicit revalidation",
+      "Do not use raw 1280x720 intrinsics for 640x480 captures; use live matching CameraInfo or validated intrinsics",
+      "Generated URDF, robot snapshots, TF and pipeline run artifacts must record this calibration file's SHA256 and reject stale outputs",
+      "This calibration does not authorize robot motion"
+    ]
+  }
+}

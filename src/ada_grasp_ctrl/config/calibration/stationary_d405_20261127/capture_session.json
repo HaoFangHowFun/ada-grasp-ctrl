@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "settings": {
+    "target_config": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/measured_charuco.yaml",
+    "save_path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512",
+    "mounting_mode": "static",
+    "reference_frame": "left_base_link",
+    "camera_mount_frame": "left_base_link",
+    "target_mount_frame": "right_ee_mount",
+    "max_image_age": 0.5,
+    "max_pair_skew_s": 0.1,
+    "tf_wait_timeout": 0.25,
+    "left_image_topic": "/camera/wrist_left/color/image_raw",
+    "left_camera_info_topic": "/camera/wrist_left/color/camera_info",
+    "left_camera_frame": "wrist_left_color_optical_frame",
+    "left_camera_mount_frame": "left_ee_mount",
+    "right_image_topic": "/camera/wrist_right/color/image_raw",
+    "right_camera_info_topic": "/camera/wrist_right/color/camera_info",
+    "right_camera_frame": "wrist_right_color_optical_frame",
+    "right_camera_mount_frame": "right_ee_mount"
+  },
+  "camera_geometry": {
+    "left": {
+      "mounting_mode": "static",
+      "static_camera": true,
+      "pose_parent_frame": "left_base_link",
+      "pose_child_frame": "right_ee_mount",
+      "camera_mount_frame": "left_base_link",
+      "target_mount_frame": "right_ee_mount"
+    },
+    "right": {
+      "mounting_mode": "static",
+      "static_camera": true,
+      "pose_parent_frame": "left_base_link",
+      "pose_child_frame": "right_ee_mount",
+      "camera_mount_frame": "left_base_link",
+      "target_mount_frame": "right_ee_mount"
+    }
+  },
+  "board_sha256": "fc607989f3002e97157231e46ab0185049950e4ed742f257137b00099d3d405f",
+  "robot_commands": false,
+  "collector": "ROS-Industrial 1.2.0 img_cb/save_cb"
+}

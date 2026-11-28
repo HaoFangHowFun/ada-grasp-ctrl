@@ -1,0 +1,15 @@
+{
+  "mounting_mode": "static",
+  "static_camera": true,
+  "pose_parent_frame": "left_base_link",
+  "pose_child_frame": "right_ee_mount",
+  "camera_mount_frame": "left_base_link",
+  "target_mount_frame": "right_ee_mount",
+  "camera_frame": "wrist_left_color_optical_frame",
+  "intrinsics": {
+    "fx": 393.8493957519531,
+    "fy": 393.2814636230469,
+    "cx": 316.47882080078125,
+    "cy": 232.36219787597656
+  }
+}

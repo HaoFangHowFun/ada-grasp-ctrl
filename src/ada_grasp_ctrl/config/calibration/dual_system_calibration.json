@@ -254,6 +254,214 @@
         ],
         "fit_mean_rms_mm": 2.75
       }
+    },
+    "stationary_cameras": {
+      "wrist_left": {
+        "serial": "260522275388",
+        "calibrated_optical_frame": "wrist_left_color_optical_frame",
+        "reference_frame": "left_base_link",
+        "transform_direction": "optical_to_leftbase",
+        "unit": "m",
+        "mounting": "stationary",
+        "status": "pending_independent_validation",
+        "T_leftbase_optical": [
+          [
+            0.5556006259861022,
+            -0.011546528620217378,
+            -0.8313691250465549,
+            0.7526006182905352
+          ],
+          [
+            -0.8312135327803369,
+            0.01609698412505084,
+            -0.5557202084006934,
+            -0.28300949721559665
+          ],
+          [
+            0.019799174899063632,
+            0.9998037631349967,
+            -0.0006541363893935448,
+            -0.10682224363833154
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "target_mount_frame": "right_ee_mount",
+        "T_target_mount_board": [
+          [
+            -0.009495295824502259,
+            0.04241523372517447,
+            0.999054947090121,
+            0.008291053190844416
+          ],
+          [
+            0.016123267313625497,
+            0.9989765989648867,
+            -0.0422586674148832,
+            -0.3328160741670663
+          ],
+          [
+            -0.9998249244784504,
+            0.01570677142468043,
+            -0.010169450480447706,
+            0.09510446957590417
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "quality": {
+          "solver_converged": true,
+          "independent_validation_passed": false,
+          "sample_count": 20,
+          "validation_count": 0,
+          "final_cost_per_obs": 0.045632006276788685
+        },
+        "provenance": {
+          "solver_result": {
+            "path": "src/ada_grasp_ctrl/config/calibration/stationary_d405_20261127/left_result.yaml",
+            "sha256": "07af3f62da4e7f958d4b2777d0ef098ba718c882283ccbc8a108e9b5b505715e"
+          },
+          "board_config": {
+            "path": "src/ada_grasp_ctrl/config/calibration/stationary_d405_20261127/board.yaml",
+            "sha256": "fc607989f3002e97157231e46ab0185049950e4ed742f257137b00099d3d405f"
+          },
+          "session": {
+            "path": "src/ada_grasp_ctrl/config/calibration/stationary_d405_20261127/capture_session.json",
+            "sha256": "219e54071e712bc75dbaa68ee082b456a2a087f746d780f09ccf38d26a14f04f"
+          },
+          "app_config": {
+            "path": "src/ada_grasp_ctrl/config/calibration/stationary_d405_20261127/left_app_config.yaml",
+            "sha256": "da7ac95de98d6df4b6487b7f911d83822f77cba364288b1f5d9f00c73692a380"
+          },
+          "app_manifest": {
+            "path": "src/ada_grasp_ctrl/config/calibration/stationary_d405_20261127/app_manifest.json",
+            "sha256": "50f3dffa8a4d529b21855caafdc78f31bcd66bbe7b413ae680fc5d4fcc568427"
+          },
+          "camera_context": {
+            "path": "src/ada_grasp_ctrl/config/calibration/stationary_d405_20261127/left_context.json",
+            "sha256": "d93954dc39e13fab2e96414b267a4dcaba1b1356975f34576765728aea169e15"
+          },
+          "camera_serial_mapping": {
+            "path": "src/ada_grasp_ctrl/config/calibration/stationary_d405_20261127/camera_serials.yaml",
+            "sha256": "d885cf7f8389b6e20ce4140514199bb2b205f6718610d95357b6ac661b6a3f38"
+          },
+          "previous_calibration": {
+            "path": "src/ada_grasp_ctrl/config/calibration/stationary_d405_20261127/previous_calibration.json",
+            "sha256": "479b031ec8212166e707334b987a646d8470fe1d76d2430dedf05919b600deca"
+          }
+        }
+      },
+      "wrist_right": {
+        "serial": "260522273536",
+        "calibrated_optical_frame": "wrist_right_color_optical_frame",
+        "reference_frame": "left_base_link",
+        "transform_direction": "optical_to_leftbase",
+        "unit": "m",
+        "mounting": "stationary",
+        "status": "pending_independent_validation",
+        "T_leftbase_optical": [
+          [
+            0.5375797290928721,
+            0.01328318028268266,
+            -0.843108291970855,
+            0.7349560321543172
+          ],
+          [
+            0.8432065828591941,
+            -0.012346109872953481,
+            0.5374478878867481,
+            -0.6435681717520658
+          ],
+          [
+            -0.003270090420123606,
+            -0.9998355518246904,
+            -0.017837483456516645,
+            -0.1004749619941321
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "target_mount_frame": "right_ee_mount",
+        "T_target_mount_board": [
+          [
+            -0.019767370960711517,
+            0.03593083405784912,
+            0.9991587592616146,
+            0.010034507882945519
+          ],
+          [
+            0.013587073781351097,
+            0.9992713957306678,
+            -0.03566607772861111,
+            -0.33021370504945435
+          ],
+          [
+            -0.9997122798442369,
+            0.012870619192195747,
+            -0.02024116326320552,
+            0.09628513704140557
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "quality": {
+          "solver_converged": true,
+          "independent_validation_passed": false,
+          "sample_count": 20,
+          "validation_count": 0,
+          "final_cost_per_obs": 0.029742839130047365
+        },
+        "provenance": {
+          "solver_result": {
+            "path": "src/ada_grasp_ctrl/config/calibration/stationary_d405_20261127/right_result.yaml",
+            "sha256": "ffa53d9903e52e6b511974396dc3e7a04f8d54926e171bf46e0438367effe8ae"
+          },
+          "board_config": {
+            "path": "src/ada_grasp_ctrl/config/calibration/stationary_d405_20261127/board.yaml",
+            "sha256": "fc607989f3002e97157231e46ab0185049950e4ed742f257137b00099d3d405f"
+          },
+          "session": {
+            "path": "src/ada_grasp_ctrl/config/calibration/stationary_d405_20261127/capture_session.json",
+            "sha256": "219e54071e712bc75dbaa68ee082b456a2a087f746d780f09ccf38d26a14f04f"
+          },
+          "app_config": {
+            "path": "src/ada_grasp_ctrl/config/calibration/stationary_d405_20261127/right_app_config.yaml",
+            "sha256": "42336d25c5be5e317367b9322e82d199a48618daeaf2245fcf638c44e0c5be6c"
+          },
+          "app_manifest": {
+            "path": "src/ada_grasp_ctrl/config/calibration/stationary_d405_20261127/app_manifest.json",
+            "sha256": "50f3dffa8a4d529b21855caafdc78f31bcd66bbe7b413ae680fc5d4fcc568427"
+          },
+          "camera_context": {
+            "path": "src/ada_grasp_ctrl/config/calibration/stationary_d405_20261127/right_context.json",
+            "sha256": "0940e36960a87a976891128d43b00ce3af6aaa33aba8aaa2c11ecbc66a68d40d"
+          },
+          "camera_serial_mapping": {
+            "path": "src/ada_grasp_ctrl/config/calibration/stationary_d405_20261127/camera_serials.yaml",
+            "sha256": "d885cf7f8389b6e20ce4140514199bb2b205f6718610d95357b6ac661b6a3f38"
+          },
+          "previous_calibration": {
+            "path": "src/ada_grasp_ctrl/config/calibration/stationary_d405_20261127/previous_calibration.json",
+            "sha256": "479b031ec8212166e707334b987a646d8470fe1d76d2430dedf05919b600deca"
+          }
+        }
+      }
     }
   },
   "derived": {

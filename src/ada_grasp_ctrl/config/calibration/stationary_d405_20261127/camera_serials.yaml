@@ -1,0 +1,21 @@
+# Physical roles confirmed by the user: left/right wrist D405, fixed D415.
+# Keep serial numbers quoted when replacing a camera.
+# Disabled roles may stay blank. No model name is hard-coded; use profiles
+# supported by the replacement RealSense. Profiles are WIDTHxHEIGHTxFPS.
+wrist_left:
+  serial_no: "260522275388"
+  color_profile: "640x480x30"
+  enable_depth: false
+  depth_profile: "640x480x30"
+
+wrist_right:
+  serial_no: "260522273536"
+  color_profile: "640x480x30"
+  enable_depth: false
+  depth_profile: "640x480x30"
+
+fixed:
+  serial_no: "347322060270"
+  color_profile: "640x480x30"
+  enable_depth: false
+  depth_profile: "640x480x30"

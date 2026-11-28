@@ -19,7 +19,7 @@ from .multi_camera_geometry import ROLES, SERIALS
 
 
 def load_cameras(path: Path, config: dict) -> dict:
-    """Require explicitly validated stationary-camera metadata before fusion.
+    """Require validated metadata or an explicitly pinned pending solver result.
 
     Returns optical-to-leftbase transforms. The caller composes internal optical
     TF when calibration and depth use different optical frames. Missing D405s
@@ -45,6 +45,18 @@ def load_cameras(path: Path, config: dict) -> dict:
         if entry.get("calibrated_optical_frame") not in (role + "_depth_optical_frame", role + "_color_optical_frame"):
             raise ValueError(f"{role}: unsupported calibrated optical frame")
         quality = entry.get("quality", {})
+        from .stationary_camera_install import pending_entry_allowed
+
+        if pending_entry_allowed(role, entry, config):
+            if entry.get("mounting") != "stationary":
+                raise ValueError(f"{role}: calibration must describe a stationary camera")
+            cameras[role] = dict(
+                matrix=rigid(entry["T_leftbase_optical"], role),
+                calibrated_optical_frame=entry["calibrated_optical_frame"],
+                status=entry["status"],
+                independent_validation_passed=False,
+            )
+            continue
         if entry.get("status") != "validated" or quality.get("independent_validation_passed") is not True:
             raise ValueError(f"{role}: independent calibration validation required")
         for key in (
@@ -77,7 +89,10 @@ def load_cameras(path: Path, config: dict) -> dict:
         if entry.get("mounting") != "stationary":
             raise ValueError(f"{role}: calibration must describe a stationary camera")
         cameras[role] = dict(
-            matrix=rigid(entry["T_leftbase_optical"], role), calibrated_optical_frame=entry["calibrated_optical_frame"]
+            matrix=rigid(entry["T_leftbase_optical"], role),
+            calibrated_optical_frame=entry["calibrated_optical_frame"],
+            status="validated",
+            independent_validation_passed=True,
         )
     return cameras
 

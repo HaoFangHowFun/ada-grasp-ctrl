@@ -32,6 +32,15 @@ DEFAULT_CONFIG = "src/ada_grasp_ctrl/config/experiments/multi_camera.yaml"
 def load_config(path: Path) -> dict:
     """Validate the opt-in configuration before any subscription or inference."""
     config = yaml.safe_load(path.read_text())
+    selected = config.get("accepted_pending_calibrations", {})
+    if not isinstance(selected, dict) or any(
+        role not in ROLES[1:]
+        or not isinstance(value, str)
+        or len(value) != 64
+        or any(char not in "0123456789abcdef" for char in value)
+        for role, value in selected.items()
+    ):
+        raise ValueError("accepted_pending_calibrations must map D405 roles to exact entry SHA256 values")
     for key in (
         "capture_timeout_s",
         "max_age_s",
@@ -164,6 +173,9 @@ def observe(args: argparse.Namespace, root: Path, report: dict) -> Path | None:
     if args.command == "observe":
         master = resolve_from_root(args.calibration)
         cameras = load_cameras(master, config)
+        report["stationary_camera_calibration"] = {
+            role: {key: cameras[role][key] for key in ("status", "independent_validation_passed")} for role in ROLES[1:]
+        }
         if not args.plane:
             raise ValueError("--plane is required for object observation")
         saved = root / "calibration.json"
@@ -173,6 +185,7 @@ def observe(args: argparse.Namespace, root: Path, report: dict) -> Path | None:
             sha256=file_hash(saved),
             source_path=str(master),
             calibration_id=read_json(master)["calibration_id"],
+            stationary_camera_calibration=report["stationary_camera_calibration"],
         )
     raw, metadata = capture(config, report.setdefault("capture", {}), observe_s=args.observe_seconds)
     report["timings"] = dict(capture_s=report["capture"]["capture_s"])

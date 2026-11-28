@@ -1,0 +1,30 @@
+target_finder:
+  type: CharucoGridTargetFinder
+  rows: 7
+  cols: 5
+  chessboard_dim: 0.035
+  aruco_marker_dim: 0.026
+  dictionary: 5
+intrinsics:
+  fx: 393.8493957519531
+  fy: 393.2814636230469
+  cx: 316.47882080078125
+  cy: 232.36219787597656
+static_camera: true
+camera_mount_to_camera_guess:
+  x: 0.7569397294716226
+  y: -0.27743488017924156
+  z: -0.09446092985277488
+  qx: 0.6332115896975159
+  qy: -0.33908131770367533
+  qz: -0.32790735638871904
+  qw: 0.6136315737339837
+target_mount_to_target_guess:
+  x: 0.005929875990910885
+  y: -0.33168593436870103
+  z: 0.09984048718820866
+  qx: 0.0100159910271785
+  qy: 0.7149072179736119
+  qz: -0.02232434679999138
+  qw: 0.6987910797605589
+homography_threshold: 2.0

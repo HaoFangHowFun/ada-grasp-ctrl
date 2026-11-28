@@ -1,0 +1,465 @@
+{
+  "session": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512",
+  "export": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277",
+  "board_sha256": "fc607989f3002e97157231e46ab0185049950e4ed742f257137b00099d3d405f",
+  "cameras": {
+    "left": {
+      "side": "left",
+      "observations": 20,
+      "initial_reprojection_rms_px": 0.8969372291999732,
+      "pose_parent_frame": "left_base_link",
+      "pose_child_frame": "right_ee_mount",
+      "camera_frame": "wrist_left_color_optical_frame",
+      "input_files": [
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/images/0000.png",
+            "sha256": "33761b750417d369e02839021eb1526721b16f479a2a320b9347513820252d23"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/poses/0000.yaml",
+            "sha256": "f42f633a2828ae96b7ef3bd8dd2f5728689b6d1d429db593a5119f0c58c5d520"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/images/0001.png",
+            "sha256": "01e4e06d1020112c9823534603212b529e506a6704ff0387d5f1a52a414d1d7c"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/poses/0001.yaml",
+            "sha256": "68fe73ce85424a52b4c2f8d09f0c9a4b117adb47b353865dbd2c99e597a320d8"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/images/0002.png",
+            "sha256": "605cf721782396008bab31451ce0f21ac5613880addeb1ed6af409d6d99b0ad4"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/poses/0002.yaml",
+            "sha256": "31b04e6130916a0a856ab923b2693c3e716989526bede4abea20a88680d17ae8"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/images/0003.png",
+            "sha256": "8c25e431b3084cbba218d1bd75157b54d178cbac20f8171e4100aae386840937"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/poses/0003.yaml",
+            "sha256": "c01fc0420549fe3b976659404a3a11e37a79e5fd988f832e7f71609419da310d"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/images/0004.png",
+            "sha256": "79fe8f22fc90151c6b378307b04de8c8d1199408430f26dcf3b59780f87c608e"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/poses/0004.yaml",
+            "sha256": "c1fb8ba764a5d61ec69942ffd4e08c89a58cbdc61e09e30c7996a3d8598a4c9c"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/images/0005.png",
+            "sha256": "3887207318d520e3796e954350e1724c05d6effc58a8c473dfb401f761d1c23d"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/poses/0005.yaml",
+            "sha256": "18707416aca11bfb09f46b7ab6a8f8c2a2036cabce5d3315f4aabfeedb434bd8"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/images/0006.png",
+            "sha256": "8d96642bf5289d29869c4aa1097024cf77bbfb66b154891cfd09f1b1995b0d5f"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/poses/0006.yaml",
+            "sha256": "c1bc3aa1e492ee5fa59e5112cc0aeadbafe8a1fb15ca982bd947c283e13a6fe8"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/images/0007.png",
+            "sha256": "044d703547ed5771d4aa0e09722c66f4c0aed9b868b75b9f499e25a7fd211a9f"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/poses/0007.yaml",
+            "sha256": "1bb0e1aae972ed5a32a42a1497f26fb3df20c593f8a324fbc2f2ba6dc244f544"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/images/0008.png",
+            "sha256": "b757973e585afd76833bb3d743aa9f624dfa914ccda5d0bea8a6dedccf85f24f"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/poses/0008.yaml",
+            "sha256": "7cf640f8d6eca5f44127346f7c4eac0c5faccc7dc7b3f1e1f5f1c48403973ba3"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/images/0009.png",
+            "sha256": "16f657e4ddde61b2a9366fe09a215e4d67705241c00b36337f644dddf751b602"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/poses/0009.yaml",
+            "sha256": "d417b0f25208cc87bf07715a9fcc0263860edac4e1a174ab4c97f2dcfe7816d9"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/images/0010.png",
+            "sha256": "629fe152ffd57601f8eb9e41b2a6c3a2588c780eac306230581242fd1ac9fe49"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/poses/0010.yaml",
+            "sha256": "25ded1cb0797e064c9c6bf07873fa11c666487390d02a05ba1c4ba2eade4eadb"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/images/0011.png",
+            "sha256": "835883ad8240324c6acc0bb29a57706c4d66e3c3e1324cf0bcff20304ca54d94"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/poses/0011.yaml",
+            "sha256": "6ca616b7ac60ce423ddf53249dabe650035ca7b94208c543b4e626a6a871477c"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/images/0012.png",
+            "sha256": "abd3657e250481d5cca7004769368fb26ba29e3e37a79a593ec4a37d806495da"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/poses/0012.yaml",
+            "sha256": "cd759e1130b1baf62a922af1bbcfb0ec42cad9aa2b38af58c5f69464583b4b4f"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/images/0013.png",
+            "sha256": "f83ea8e0394803d4564933ebb415b5104f04a3ecce0006a087541867176ff4c4"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/poses/0013.yaml",
+            "sha256": "f774f5a329e3d83addf1ae75b023f2f52a4b672efed34401438a0e7d554666de"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/images/0014.png",
+            "sha256": "6abb5dd2363234cdc3376766031f96e8a8451216ff67b748fb857f3addd917b0"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/poses/0014.yaml",
+            "sha256": "1fdc246ca34abfacf7d2e985b081f654e8bc3f4c0dc4293bb7c339c96cfedf5d"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/images/0015.png",
+            "sha256": "b7c67cebc8e14a5c95c0aba633844fe5d68173f80155015ab36f3da9b351365a"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/poses/0015.yaml",
+            "sha256": "a76d5db7ed21c59d2dcfd80ff8493b46c7b23cd8b6d86d9b147a4282bb41f2ea"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/images/0016.png",
+            "sha256": "dc7c1dc7384de4ad70fa396af5d8ebe9325110df1d3f43774b58117e135e307e"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/poses/0016.yaml",
+            "sha256": "08239874ce80840ccb9410e212356602daeb218523ccb368698912b92e2b7b3b"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/images/0017.png",
+            "sha256": "d00b08717e99af3d46606c8702226f58d26b60ea6fa557766b532141e9c533b7"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/poses/0017.yaml",
+            "sha256": "3f7a32ff044fa856798a8d0db9d2158b36fa6a8ff59e70171a53fe128613e732"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/images/0018.png",
+            "sha256": "bdcea6d86be6e7697ee5d5974a050fdbf98624bee29c65327d7ca68d71e7edfd"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/poses/0018.yaml",
+            "sha256": "8731fa5c41b4df4961359d0bc844a29019c9956c3a8736dae970007fb876cdb2"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/images/0019.png",
+            "sha256": "99c06d022bb89ac3e4710f2adcf2f2f47628360e620ecb2e459a13017682c095"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/poses/0019.yaml",
+            "sha256": "dbde93720dec6f0afa4004d910f5c96a9a8054fedfaa41c456304ae144d4d8e6"
+          }
+        }
+      ],
+      "note": "Initial guess fit on training data, not independent accuracy validation",
+      "config": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/app_inputs_8ee3f0e62f/left_config.yaml",
+      "open_command": [
+        "ros2",
+        "run",
+        "industrial_calibration",
+        "industrial_calibration_extrinsic_hand_eye_calibration_app",
+        "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/app_inputs_8ee3f0e62f/left_config.yaml",
+        "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/cal_data.yaml"
+      ],
+      "solve_command": [
+        "ros2",
+        "run",
+        "industrial_calibration",
+        "industrial_calibration_extrinsic_hand_eye_calibration_app",
+        "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/app_inputs_8ee3f0e62f/left_config.yaml",
+        "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/left/cal_data.yaml",
+        "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/app_inputs_8ee3f0e62f/left_result.yaml"
+      ]
+    },
+    "right": {
+      "side": "right",
+      "observations": 20,
+      "initial_reprojection_rms_px": 0.9582884210004542,
+      "pose_parent_frame": "left_base_link",
+      "pose_child_frame": "right_ee_mount",
+      "camera_frame": "wrist_right_color_optical_frame",
+      "input_files": [
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/images/0000.png",
+            "sha256": "3ea947d1e3d934e7e5caf7a35e6c3e802ab54af091351c701347475f34ccef50"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/poses/0000.yaml",
+            "sha256": "959bd25dd34fdda304aad44a8a4430347e2bf8536db550226b30560eb5286846"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/images/0001.png",
+            "sha256": "45ff7f5b34ccede70649044fa2bc03783ac6c549a245b47e22fe1a5bda1a7af1"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/poses/0001.yaml",
+            "sha256": "e17d10a19fa57ca2312c73fa4e1ceee8c1e2e00028f9c20dec24b24f84cf38e7"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/images/0002.png",
+            "sha256": "3fef133ad2b308ccf986597526d7337d0330f8ce8b8936a2d6095e9c0008906d"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/poses/0002.yaml",
+            "sha256": "3c3f0a79cec255ef3a4b03cea15cc97e7454bd129091038f4e336a5fccc96621"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/images/0003.png",
+            "sha256": "43aac26e5b666b5efc878a0a25e768107351ebaf1a12cbcae795f4a39ca8c1e9"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/poses/0003.yaml",
+            "sha256": "acf120ffb50ee3f3e01d67acbad70e94bc55e8c71500f9cb8944f50bd19e46ee"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/images/0004.png",
+            "sha256": "ba8b565d8183429f3597652cdbed908db6810a81505271bf3a9bbd6433aeb285"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/poses/0004.yaml",
+            "sha256": "ee613e6500f89f787468adb1818109818b5b2177545d73d8821e42a880c14899"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/images/0005.png",
+            "sha256": "e46c7651636317a4e5049d60ea496354a6adf1af7c592f3c0cf981ec317626b1"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/poses/0005.yaml",
+            "sha256": "62241242ced4defea09f89b4247d5973bd68b4e5b97caf228786690adf9ed927"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/images/0006.png",
+            "sha256": "b5d385daaf1b73ecec8dbf4842be58de2ab9e8e69cf6c59ff48626f5bb30c463"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/poses/0006.yaml",
+            "sha256": "2694fc0d7eb03e107b77c438eeb510e1c788b2781f92cdb3051146d47915f69a"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/images/0007.png",
+            "sha256": "04bd5cf192aea811057d2cd35aa3080c9a6f142a328345bb5ca8f996dbacdb74"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/poses/0007.yaml",
+            "sha256": "089015014e945461deaff3030395d4c88f4d3e818fa4064dd62e6d19b8106d78"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/images/0008.png",
+            "sha256": "161afcdde9dc13296b35afaaaf300dfb1b6f9c640e89c6261447fe10e9322d13"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/poses/0008.yaml",
+            "sha256": "b497fe758ed534f061ff94cfba27b176239f51b7ec7f5abdc5b1a359699d158f"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/images/0009.png",
+            "sha256": "74d754a1ca0eca5f5f064384da602b4564dc7eb87072352b43c512ac1fd84e08"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/poses/0009.yaml",
+            "sha256": "59f5563ea77de3662086ca2f60675a5d52b918eedf81f989ca28f6c0cdaf46fd"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/images/0010.png",
+            "sha256": "838fb3055481f0d4029897a56e124e016f5aa0a508810f4cba2637d459cdb38b"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/poses/0010.yaml",
+            "sha256": "35ffca171edf9cbdd4d278849fd66af455cb264887fb10c0ee5a8e7660935f47"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/images/0011.png",
+            "sha256": "276ceaeb5ee7dd1d9f189b555e0ea5c518499607ec3e38a81f2f811b403a4760"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/poses/0011.yaml",
+            "sha256": "ecd55ead02ca07b31f72ad248ff13ea65f4e6e25dfc78ae9793187732cd7f1e7"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/images/0012.png",
+            "sha256": "874ee3809ed831deddda07886e9619838351460959f42a573390075d6ebd860d"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/poses/0012.yaml",
+            "sha256": "898a37bfc79ef119a24073accb78d7827b318f1cf822d07107b873bb40d5dd4d"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/images/0013.png",
+            "sha256": "630c8bea2a863f34b3fddc4dd54375992d180f6fc69ea52f5c7c7d3b926f771b"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/poses/0013.yaml",
+            "sha256": "ec2d95a138f62e0955312af8cdf70b53640b62c77262c16c09656d6ceac0a148"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/images/0014.png",
+            "sha256": "35ee748ae4e614dadb4bf9bfa9456291e91629a29c430e569650c4d153b6c1e4"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/poses/0014.yaml",
+            "sha256": "9941d8df779ca617ef8b609597cfbc6addb8c7233f1dc8f1451256af07386ccd"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/images/0015.png",
+            "sha256": "c3e06130dafc7a6ec2a3d9f2c6cb945ea40d264818fd658d4747a112735421fe"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/poses/0015.yaml",
+            "sha256": "7e9c13de267c246a82c01bf7a71be774e19b06e40857f5095f43a9d13bd5f525"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/images/0016.png",
+            "sha256": "4e2e58e68594aa48d38e225c6c9904196cc87e9b286470c927c8991c0b5815ad"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/poses/0016.yaml",
+            "sha256": "c2bf7a91e934be60adea7a2ba02632620752b4884ae4531bc1429f79be1695d8"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/images/0017.png",
+            "sha256": "504ecf15ca8e834665888fc22e87125ed2636174423d6aff8ee9fbf92e4f3d0b"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/poses/0017.yaml",
+            "sha256": "e7c02c8158e070d73dd5d31d030e1689e242daf49c9289f91098e862c9ed4348"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/images/0018.png",
+            "sha256": "461155fe8c88764bc598181a9254c60e86568b649246cef93f2f64383d2a4721"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/poses/0018.yaml",
+            "sha256": "cb93be8ebeb537974cc8ce1ae04645479babbb442116578ad8f5e88a57f2082b"
+          }
+        },
+        {
+          "image": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/images/0019.png",
+            "sha256": "5c9f2608cfdeb980406e1ad52f5fcd5298a681b02f98c8c79b3abcb74046eb99"
+          },
+          "pose": {
+            "path": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/poses/0019.yaml",
+            "sha256": "8841ca1341d742d3aa168ab3241689c33f44f94755b84e9f111d47da27c04eca"
+          }
+        }
+      ],
+      "note": "Initial guess fit on training data, not independent accuracy validation",
+      "config": "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/app_inputs_8ee3f0e62f/right_config.yaml",
+      "open_command": [
+        "ros2",
+        "run",
+        "industrial_calibration",
+        "industrial_calibration_extrinsic_hand_eye_calibration_app",
+        "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/app_inputs_8ee3f0e62f/right_config.yaml",
+        "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/cal_data.yaml"
+      ],
+      "solve_command": [
+        "ros2",
+        "run",
+        "industrial_calibration",
+        "industrial_calibration_extrinsic_hand_eye_calibration_app",
+        "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/app_inputs_8ee3f0e62f/right_config.yaml",
+        "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/exports/bd84362d8bfe4badbc055f5b0b403277/right/cal_data.yaml",
+        "/home/hao-fang/hugs-workspace/ada-grasp-ctrl/output/wrist_calibration_20261127_174104/static_fit_20261127_183512/app_inputs_8ee3f0e62f/right_result.yaml"
+      ]
+    }
+  }
+}
